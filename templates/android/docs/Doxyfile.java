@@ -1,0 +1,26 @@
+PROJECT_NAME           = "{{PROJECT_TITLE}} Android Java Wrapper"
+PROJECT_BRIEF          = "Vendored SDL2 Android Java glue reference"
+OUTPUT_DIRECTORY       = build/docs/java
+INPUT                  = app/src/main/java
+FILE_PATTERNS          = *.java
+RECURSIVE              = YES
+EXTENSION_MAPPING      = java=Java
+OPTIMIZE_OUTPUT_JAVA   = YES
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_XML           = YES
+XML_OUTPUT             = xml
+GENERATE_LATEX         = NO
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = NO

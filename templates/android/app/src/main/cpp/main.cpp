@@ -72,7 +72,17 @@ int main(int, char**)
         kLogicalWidth,
         kLogicalHeight
     );
-    static_cast<void>(scripts.start("lua/main.lua"));
+    if (!scripts.start("lua/bootstrap.lua")) {
+        SDL_Log("Application scripting bootstrap failed");
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        if (net_ready) SDLNet_Quit();
+        if (mixer_ready) Mix_Quit();
+        if (image_ready) IMG_Quit();
+        if (ttf_ready) TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
 
     bool running = true;
     bool backgrounded = false;

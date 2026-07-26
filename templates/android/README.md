@@ -27,12 +27,15 @@ lua5.4 tools/build.lua --online-once
 
 See [[docs/Building|Building]] and
 [[docs/GitHub-Actions|GitHub Actions]]. The scripting contract is documented
-in [[docs/Scripting|Lua Scripting]].
+in [[docs/Scripting|Lua Scripting]] and [[docs/Plugins|Lua Plug-ins]].
+Generate the Lua, C++, and Java API references with `sdl-pg docs`; see
+[[docs/API|API Reference]].
 
 ## Application boundaries
 
 - C++ host: `app/src/main/cpp/`
 - Public Doxygen API: `include/{{PROJECT_ID}}/`
-- Lua scripts and plug-in logic: `app/src/main/assets/lua/`
+- Trusted Lua runtime: `app/src/main/assets/lua/runtime/`
+- Application plug-ins: `app/src/main/assets/lua/plugins/`
 - Private Lua 5.4.8 source: `third_party/lua-5.4.8/`
 - Offline SDL2 kit: `third_party/SDL2/`

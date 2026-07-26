@@ -12,6 +12,8 @@ extern "C" {
 #include <cstddef>
 #include <initializer_list>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace {{PROJECT_ID}} {
@@ -32,22 +34,69 @@ std::uint8_t color_component(lua_State* state, int index)
     );
 }
 
+constexpr std::size_t kMaximumLuaAssetBytes = 1024U * 1024U;
+
+bool valid_lua_asset_path(std::string_view asset_path)
+{
+    if (!asset_path.starts_with("lua/") ||
+        !asset_path.ends_with(".lua") ||
+        asset_path.size() > 256 ||
+        asset_path.find('\\') != std::string_view::npos) {
+        return false;
+    }
+
+    std::size_t segment_start = 0;
+    while (segment_start <= asset_path.size()) {
+        const std::size_t separator =
+            asset_path.find('/', segment_start);
+        const std::size_t segment_end =
+            separator == std::string_view::npos
+                ? asset_path.size()
+                : separator;
+        const std::string_view segment =
+            asset_path.substr(
+                segment_start,
+                segment_end - segment_start
+            );
+
+        if (segment.empty() || segment == "." || segment == "..") {
+            return false;
+        }
+        if (separator == std::string_view::npos) {
+            break;
+        }
+        segment_start = separator + 1;
+    }
+
+    return true;
+}
+
 bool read_asset(
     const char* asset_path,
-    std::vector<char>& destination
+    std::vector<char>& destination,
+    std::string& error
 )
 {
     SDL_RWops* stream = SDL_RWFromFile(asset_path, "rb");
     if (!stream) {
-        SDL_Log("Cannot open Lua asset %s: %s", asset_path, SDL_GetError());
+        error =
+            "cannot open Lua asset " +
+            std::string(asset_path) +
+            ": " +
+            SDL_GetError();
         return false;
     }
 
     const Sint64 length = SDL_RWsize(stream);
-    if (length < 0 ||
+    if (length <= 0 ||
         static_cast<Uint64>(length) >
-            static_cast<Uint64>(std::numeric_limits<std::size_t>::max())) {
-        SDL_Log("Invalid Lua asset size: %s", asset_path);
+            static_cast<Uint64>(kMaximumLuaAssetBytes) ||
+        static_cast<Uint64>(length) >
+            static_cast<Uint64>(
+                std::numeric_limits<std::size_t>::max()
+            )) {
+        error =
+            "invalid Lua asset size for " + std::string(asset_path);
         SDL_RWclose(stream);
         return false;
     }
@@ -58,7 +107,8 @@ bool read_asset(
     SDL_RWclose(stream);
 
     if (received != destination.size()) {
-        SDL_Log("Short read from Lua asset: %s", asset_path);
+        error =
+            "short read from Lua asset " + std::string(asset_path);
         return false;
     }
 
@@ -104,8 +154,16 @@ bool ScriptRuntime::start(const char* asset_path) noexcept
     open_safe_libraries();
     install_host_api();
 
+    if (!asset_path || !valid_lua_asset_path(asset_path)) {
+        SDL_Log("Invalid Lua bootstrap asset path");
+        shutdown();
+        return false;
+    }
+
     std::vector<char> source;
-    if (!read_asset(asset_path, source)) {
+    std::string read_error;
+    if (!read_asset(asset_path, source, read_error)) {
+        SDL_Log("%s", read_error.c_str());
         shutdown();
         return false;
     }
@@ -229,6 +287,45 @@ bool ScriptRuntime::quit_requested() const noexcept
     return quit_requested_;
 }
 
+int ScriptRuntime::lua_read_asset(lua_State* state)
+{
+    std::size_t asset_path_length = 0;
+    const char* asset_path =
+        luaL_checklstring(state, 1, &asset_path_length);
+    const std::string_view asset_path_view(
+        asset_path,
+        asset_path_length
+    );
+
+    if (asset_path_view.find('\0') != std::string_view::npos ||
+        !valid_lua_asset_path(asset_path_view)) {
+        lua_pushnil(state);
+        lua_pushliteral(state, "invalid Lua asset path");
+        return 2;
+    }
+
+    std::vector<char> source;
+    std::string read_error;
+    if (!read_asset(asset_path, source, read_error)) {
+        lua_pushnil(state);
+        lua_pushlstring(
+            state,
+            read_error.data(),
+            read_error.size()
+        );
+        return 2;
+    }
+
+    lua_pushlstring(state, source.data(), source.size());
+    return 1;
+}
+
+int ScriptRuntime::lua_runtime_version(lua_State* state)
+{
+    lua_pushliteral(state, LUA_VERSION);
+    return 1;
+}
+
 int ScriptRuntime::lua_log(lua_State* state)
 {
     const char* message = luaL_checkstring(state, 1);
@@ -314,6 +411,8 @@ void ScriptRuntime::install_host_api() noexcept
     };
 
     for (const Function& function : {
+             Function{"_read_asset", lua_read_asset},
+             Function{"runtime_version", lua_runtime_version},
              Function{"log", lua_log},
              Function{"set_background", lua_set_background},
              Function{"set_tile", lua_set_tile},

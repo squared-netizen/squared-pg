@@ -7,6 +7,20 @@ tags:
 
 # Changelog
 
+## 0.4.0
+
+- Add deterministic Lua module loading from APK assets.
+- Add versioned plug-in manifests and an explicit runtime API version.
+- Add capability-limited, read-only `host` proxies for plug-ins.
+- Add plug-in-local module caches with missing-module and cycle diagnostics.
+- Add deterministic lifecycle fan-out in registry order.
+- Isolate plug-in load and callback failures from other plug-ins.
+- Replace the single application script with documented example plug-ins.
+- Add pure-Lua plug-in runtime tests and generated-project assertions.
+- Add `sdl-pg docs` for recursive Lua, C++, and Java API generation.
+- Add separate Doxygen references for authored C++ and vendored SDL Java.
+- Add an Obsidian-compatible API index and a manual GitHub docs workflow.
+
 ## 0.3.0
 
 - Publish the first repository-ready SDL Project Generator release.

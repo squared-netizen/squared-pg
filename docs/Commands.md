@@ -14,6 +14,20 @@ sdl-pg version
 sdl-pg doctor
 ```
 
+## Documentation
+
+```sh
+sdl-pg docs
+```
+
+Run this command from a generated Android project or any directory beneath
+it. It recursively generates separate Lua, authored C++, and vendored SDL2
+Java-wrapper API references beneath `build/docs/`.
+
+The generated project keeps an Obsidian-compatible entry point at
+`docs/API.md`. Doxygen emits HTML and XML for C++ and Java; LDoc emits HTML
+for Lua.
+
 ## Dependency registry
 
 ```sh

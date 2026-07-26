@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(sdl_project_generator_toolchain VERSION 0.3.0 LANGUAGES C CXX)
+project(sdl_project_generator_toolchain VERSION 0.4.0 LANGUAGES C CXX)
 
 include(CTest)
 

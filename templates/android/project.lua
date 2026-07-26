@@ -6,5 +6,7 @@ return {
     identifier = "{{PROJECT_ID}}",
     package = "{{PACKAGE_NAME}}",
     profile = "android-sdl2-lua",
+    generator_version = "0.4.0",
+    plugin_api_version = 1,
     offline_first = true
 }

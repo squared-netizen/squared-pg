@@ -27,3 +27,11 @@ The initial generator intentionally has no delete command.
 
 Git operations are outside the generator command set. The generated GitHub
 Actions workflow is manual and never commits, pushes, tags, or releases.
+
+## Generated plug-ins
+
+Generated plug-ins do not receive the raw APK-asset reader. Each plug-in gets
+a read-only host proxy containing only declared capabilities, and its local
+module loader cannot escape the plug-in asset root. This isolates cooperative
+application extensions and ordinary programming mistakes; it is not a
+hardened boundary for hostile scripts.

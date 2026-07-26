@@ -25,6 +25,15 @@ lua5.4 tools/build.lua --online-once
 
 After Gradle dependencies are cached, normal builds are offline.
 
+Generate API documentation separately:
+
+```sh
+sdl-pg docs
+```
+
+This uses the generator's private LDoc toolchain plus the locally installed
+Doxygen executable. See [[API|API Reference]].
+
 Use `--clean` to move the existing native build directory aside before
 configuring:
 

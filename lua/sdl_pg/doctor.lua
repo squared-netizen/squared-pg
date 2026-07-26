@@ -63,7 +63,8 @@ function doctor.inspect(settings, environment)
         {"git", false},
         {"gh", false},
         {"java", true},
-        {"gradle", false}
+        {"gradle", false},
+        {"doxygen", false}
     }) do
         local location = find_on_path(command[1], environment.PATH)
         add(

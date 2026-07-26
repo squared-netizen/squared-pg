@@ -15,7 +15,7 @@ status: experimental
 `sdl-pg` creates offline-first Android ARM64 projects with a C++20 host, a
 private Lua 5.4.8 scripting runtime, and a validated SDL2 dependency kit.
 
-Version 0.3.0 provides:
+Version 0.4.0 provides:
 
 - transactional creation beneath `~/sandbox` or `~/projects`;
 - non-destructive `promote` and `demote` commands;
@@ -25,8 +25,12 @@ Version 0.3.0 provides:
 - protected `init`, `update`, `event`, and `shutdown` Lua callbacks;
 - a deliberately narrow, data-oriented native `host` API;
 - touch, lifecycle, and Android-back event translation;
+- deterministic APK-asset Lua module loading;
+- versioned, capability-limited application plug-ins;
+- per-plug-in load and callback error isolation;
 - Obsidian-compatible Markdown documentation;
 - Doxygen comments for public C++ APIs and LDoc comments for Lua APIs.
+- a local `sdl-pg docs` command and optional manual documentation workflow.
 
 The generator does not initialize Git, commit, push, publish, or contact
 GitHub. Local generation and builds are offline by default.
@@ -95,6 +99,17 @@ Use `--project` to create serious publishing code beneath `~/projects`.
 Use `--online-once` with the generated build command only when the Gradle
 dependency cache is incomplete.
 
+Generate recursive Lua, C++, and SDL Java-wrapper API references from the
+project root or any child directory:
+
+```bash
+sdl-pg docs
+```
+
+Generated projects retain an Obsidian-compatible `docs/API.md` index. LDoc
+and Doxygen write generated HTML beneath `build/docs/`; Doxygen also preserves
+XML for future exporters.
+
 ## Promote and demote
 
 ```bash
@@ -115,9 +130,9 @@ The default runtime omits `io`, `os`, `package`, and `debug`, and removes
 `dofile` and `loadfile`. This is a capability boundary for application
 scripting, not a hardened hostile-code sandbox.
 
-The Lua runtime and C++ bridge currently remain versioned with the generator.
-They may become a separately released runtime after the plug-in API has
-stabilized through real projects.
+The Lua runtime, plug-in manager, and C++ bridge currently remain versioned
+with the generator. They may become a separately released runtime after the
+plug-in API has stabilized through real projects.
 
 ## Documentation
 
@@ -126,6 +141,7 @@ stabilized through real projects.
 - [[docs/Architecture|Architecture]]
 - [[docs/Repository-Model|Repository Model]]
 - [[docs/Safety-Model|Safety Model]]
+- [[docs/Phase-4-Validation|Phase 4 Validation]]
 - [[docs/Releasing|Releasing]]
 - [[PRIVATE-TOOLCHAIN|Private Lua Toolchain]]
 - [[CONTRIBUTING|Contributing]]

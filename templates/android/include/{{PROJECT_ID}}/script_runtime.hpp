@@ -23,9 +23,10 @@ struct VisualState {
 };
 
 /**
- * @brief Protected Lua lifecycle host for one application script.
+ * @brief Protected Lua lifecycle host for the application plug-in manager.
  *
- * The runtime exposes a deliberately small `host` table. Standard filesystem,
+ * The trusted bootstrap receives the native `host` table and constructs
+ * narrower capability proxies for individual plug-ins. Standard filesystem,
  * process, package-loading, and debug libraries are not opened.
  */
 class ScriptRuntime final {
@@ -50,10 +51,13 @@ public:
     ~ScriptRuntime();
 
     /**
-     * @brief Load an APK asset returning the application callback table.
+     * @brief Load the trusted APK bootstrap asset.
      *
-     * @param asset_path Asset path such as `lua/main.lua`.
-     * @return `true` when the script loaded successfully.
+     * The bootstrap returns the aggregate application callback table used by
+     * the native loop.
+     *
+     * @param asset_path Asset path such as `lua/bootstrap.lua`.
+     * @return `true` when the bootstrap and plug-in registry load.
      */
     [[nodiscard]] bool start(const char* asset_path) noexcept;
 
@@ -84,6 +88,8 @@ public:
     [[nodiscard]] bool quit_requested() const noexcept;
 
 private:
+    static int lua_read_asset(lua_State* state);
+    static int lua_runtime_version(lua_State* state);
     static int lua_log(lua_State* state);
     static int lua_set_background(lua_State* state);
     static int lua_set_tile(lua_State* state);

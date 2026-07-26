@@ -13,9 +13,11 @@ package.path = table.concat({
 local lfs = require("lfs")
 local android = require("sdl_pg.android")
 local doctor = require("sdl_pg.doctor")
+local documentation = require("sdl_pg.docs")
 local fs = require("sdl_pg.fs")
 local main = require("sdl_pg.main")
 local path = require("sdl_pg.path")
+local plugin_runtime_test = require("plugin-runtime-test")
 local project = require("sdl_pg.project")
 local state = require("sdl_pg.state")
 local template = require("sdl_pg.template")
@@ -78,6 +80,13 @@ local foundation =
 test.truthy(
     fs.exists(path.join(foundation, "README.md")),
     "foundation project"
+)
+local foundation_marker =
+    assert(loadfile(path.join(foundation, ".sdl-pg.lua")))()
+test.equal(
+    foundation_marker.generator_version,
+    "0.4.0",
+    "foundation generator version"
 )
 
 local promoted = project.promote(settings, "first-hack")
@@ -177,12 +186,26 @@ local android_project = project.create(
 
 for _, filename in ipairs({
     ".github/workflows/android-debug.yml",
+    ".github/workflows/docs.yml",
     "app/build.gradle",
     "app/src/main/AndroidManifest.xml",
     "app/src/main/cpp/CMakeLists.txt",
     "app/src/main/cpp/main.cpp",
-    "app/src/main/assets/lua/main.lua",
+    "app/src/main/assets/lua/bootstrap.lua",
+    "app/src/main/assets/lua/plugins.lua",
+    "app/src/main/assets/lua/runtime/module_loader.lua",
+    "app/src/main/assets/lua/runtime/plugin_manager.lua",
+    "app/src/main/assets/lua/plugins/diagnostics/manifest.lua",
+    "app/src/main/assets/lua/plugins/diagnostics/main.lua",
+    "app/src/main/assets/lua/plugins/orbit/manifest.lua",
+    "app/src/main/assets/lua/plugins/orbit/main.lua",
+    "app/src/main/assets/lua/plugins/orbit/palette.lua",
     "app/src/main/java/org/libsdl/app/SDLActivity.java",
+    "docs/Plugins.md",
+    "docs/API.md",
+    "docs/Doxyfile.cpp",
+    "docs/Doxyfile.java",
+    "docs/ldoc-config.ld",
     "gradle/wrapper/gradle-wrapper.jar",
     "include/lua_rogue/script_runtime.hpp",
     "third_party/SDL2/lib/arm64-v8a/libSDL2_net.so",
@@ -192,6 +215,46 @@ for _, filename in ipairs({
     test.truthy(
         fs.mode(path.join(android_project, filename)) == "file",
         "generated file " .. filename
+    )
+end
+
+local documentation_plan = documentation.plan(
+    settings,
+    path.join(android_project, "app/src/main")
+)
+test.equal(
+    documentation_plan.project_root,
+    android_project,
+    "documentation project-root discovery"
+)
+test.equal(
+    #documentation_plan.commands,
+    3,
+    "documentation command count"
+)
+test.truthy(
+    documentation_plan.outputs.lua:find(
+        "build/docs/lua/index.html",
+        1,
+        true
+    ) ~= nil,
+    "Lua documentation output"
+)
+
+for _, filename in ipairs({
+    "docs/ldoc-config.ld",
+    "docs/Doxyfile.cpp",
+    "docs/Doxyfile.java"
+}) do
+    local contents = fs.read_file(path.join(android_project, filename))
+    test.truthy(
+        contents:find("RECURSIVE", 1, true) ~= nil or
+            contents:find(
+                "app/src/main/assets/lua",
+                1,
+                true
+            ) ~= nil,
+        "recursive documentation configuration " .. filename
     )
 end
 
@@ -214,6 +277,20 @@ test.truthy(
     app_gradle:find("{{", 1, true) == nil,
     "no unresolved template variables"
 )
+local android_marker =
+    assert(loadfile(path.join(android_project, ".sdl-pg.lua")))()
+test.equal(
+    android_marker.generator_version,
+    "0.4.0",
+    "Android generator version"
+)
+local android_metadata =
+    assert(loadfile(path.join(android_project, "project.lua")))()
+test.equal(
+    android_metadata.plugin_api_version,
+    1,
+    "Android plug-in API version"
+)
 
 local runtime_source =
     fs.read_file(path.join(
@@ -223,6 +300,8 @@ local runtime_source =
 for _, required in ipairs({
     "luaopen_base",
     "luaopen_math",
+    "\"_read_asset\"",
+    "\"runtime_version\"",
     "\"dofile\"",
     "\"loadfile\"",
     "lua_pcall"
@@ -244,22 +323,25 @@ for _, forbidden in ipairs({
     )
 end
 
-local application_script =
+local bootstrap_script =
     fs.read_file(path.join(
         android_project,
-        "app/src/main/assets/lua/main.lua"
+        "app/src/main/assets/lua/bootstrap.lua"
     ))
-for _, callback in ipairs({
-    "application.init",
-    "application.update",
-    "application.event",
-    "application.shutdown"
+for _, contract in ipairs({
+    "lua/runtime/module_loader.lua",
+    "lua/runtime/plugin_manager.lua",
+    "api_version = 1",
+    "host = nil",
+    "load = nil"
 }) do
     test.truthy(
-        application_script:find(callback, 1, true) ~= nil,
-        "Lua lifecycle callback " .. callback
+        bootstrap_script:find(contract, 1, true) ~= nil,
+        "Lua bootstrap contract " .. contract
     )
 end
+
+plugin_runtime_test.run(root, test)
 
 local output = {}
 local errors = {}
@@ -283,7 +365,7 @@ test.equal(
     "version command"
 )
 test.truthy(
-    output[1]:find("0.3.0", 1, true) ~= nil,
+    output[1]:find("0.4.0", 1, true) ~= nil,
     "version output"
 )
 test.equal(
@@ -303,5 +385,8 @@ print("Android project generation: OK")
 print("SDL2 and Lua source staging: OK")
 print("Protected Lua library policy: OK")
 print("C++ to Lua lifecycle contract: OK")
+print("Deterministic plug-in lifecycle: OK")
+print("Plug-in capability and module isolation: OK")
 print("Obsidian, Doxygen, and LDoc scaffold: OK")
+print("Local and GitHub documentation workflow: OK")
 print("CLI result handling: OK")

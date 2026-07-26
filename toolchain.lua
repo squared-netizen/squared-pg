@@ -224,9 +224,7 @@ run({
     root .. "/docs/config.ld",
     "-d",
     generator_documentation_output,
-    root .. "/lua/sdl_pg",
-    root .. "/setup.lua",
-    root .. "/sdl-pg.lua"
+    root .. "/lua/sdl_pg"
 })
 
 run({
@@ -234,6 +232,27 @@ run({
     root .. "/tools/private-run.lua",
     root .. "/tests/generator-documentation-output-test.lua",
     generator_documentation_output
+})
+
+local runtime_documentation_output =
+    root .. "/build/generated-runtime-ldoc"
+
+run({
+    private_lua,
+    root .. "/tools/private-run.lua",
+    private_prefix .. "/share/lua/5.4/ldoc.lua",
+    "-c",
+    root .. "/docs/runtime-config.ld",
+    "-d",
+    runtime_documentation_output,
+    root .. "/templates/android/app/src/main/assets/lua"
+})
+
+run({
+    private_lua,
+    root .. "/tools/private-run.lua",
+    root .. "/tests/runtime-documentation-output-test.lua",
+    runtime_documentation_output
 })
 
 print("")
@@ -244,6 +263,7 @@ print("Private package.cpath: OK")
 print("Penlight private modules: OK")
 print("LDoc generation with built-in Markdown: OK")
 print("SDL Project Generator LDoc API: OK")
+print("Generated application runtime LDoc API: OK")
 print("Global LuaRocks isolation: OK")
 print("SDL Project Generator tests: OK")
 print("Offline toolchain test: OK")

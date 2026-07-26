@@ -3,12 +3,13 @@
 
 local config = require("sdl_pg.config")
 local doctor = require("sdl_pg.doctor")
+local docs = require("sdl_pg.docs")
 local kit = require("sdl_pg.kit")
 local project = require("sdl_pg.project")
 local wrapper = require("sdl_pg.wrapper")
 
 local main = {}
-local version = "0.3.0"
+local version = "0.4.0"
 
 local help_text = [[
 SDL Project Generator
@@ -17,6 +18,7 @@ Usage:
   sdl-pg help
   sdl-pg version
   sdl-pg doctor
+  sdl-pg docs
   sdl-pg kit add ARCHIVE
   sdl-pg kit status
   sdl-pg wrapper add EXISTING_PROJECT
@@ -156,6 +158,15 @@ function main.run(arguments, environment, stdout, stderr)
 
             if command == "doctor" then
                 command_doctor(settings, environment, stdout)
+            elseif command == "docs" then
+                if arguments[2] then
+                    error("too many arguments for docs", 0)
+                end
+
+                local outputs = docs.build(settings)
+                stdout("Lua API: " .. outputs.lua)
+                stdout("C++ API: " .. outputs.cpp)
+                stdout("Java wrapper API: " .. outputs.java)
             elseif command == "kit" then
                 command_kit(settings, arguments, stdout)
             elseif command == "wrapper" then
