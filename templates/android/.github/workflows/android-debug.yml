@@ -1,0 +1,127 @@
+name: Build Android Debug APK
+
+'on':
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: 27.0.12077973
+  ANDROID_ABI: arm64-v8a
+  ANDROID_API: 30
+  KIT_NAME: SDL2-2.32.10-TTF-2.24.0-MIXER-2.8.2-IMAGE-2.8.12-NET-2.4.0-android-arm64
+  KIT_RELEASE: https://github.com/squared-netizen/sdl2-android-arm64/releases/download/v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK and pinned NDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            ndk;27.0.12077973
+
+      - name: Fetch and verify SDL2 kit
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -fL \
+            "${KIT_RELEASE}/${KIT_NAME}.zip" \
+            -o "${KIT_NAME}.zip"
+          curl -fL \
+            "${KIT_RELEASE}/${KIT_NAME}.zip.sha256" \
+            -o "${KIT_NAME}.zip.sha256"
+
+          sha256sum -c "${KIT_NAME}.zip.sha256"
+          unzip -q "${KIT_NAME}.zip"
+
+          cmake -E copy_directory \
+            "${KIT_NAME}" \
+            third_party/SDL2
+          cmake -E copy_directory \
+            third_party/SDL2/java/org \
+            app/src/main/java/org
+
+      - name: Build native library
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
+          OUTPUT="${GITHUB_WORKSPACE}/app/src/main/jniLibs/${ANDROID_ABI}"
+
+          cmake \
+            -S app/src/main/cpp \
+            -B native-build \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="${NDK_ROOT}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="${ANDROID_ABI}" \
+            -DANDROID_PLATFORM="android-${ANDROID_API}" \
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="${OUTPUT}" \
+            -DSDL2_ROOT="${GITHUB_WORKSPACE}/third_party/SDL2" \
+            -DLUA_ROOT="${GITHUB_WORKSPACE}/third_party/lua-5.4.8" \
+            -DPROJECT_ROOT="${GITHUB_WORKSPACE}"
+
+          cmake --build native-build --parallel 2
+          cmake -E make_directory "${OUTPUT}"
+
+          for library in \
+            libSDL2.so \
+            libSDL2_ttf.so \
+            libSDL2_mixer.so \
+            libSDL2_image.so \
+            libSDL2_net.so
+          do
+            cmake -E copy \
+              "third_party/SDL2/lib/${ANDROID_ABI}/${library}" \
+              "${OUTPUT}/${library}"
+          done
+
+          CXX_RUNTIME="$(
+            find "${NDK_ROOT}" \
+              -type f \
+              -path "*/aarch64-linux-android/libc++_shared.so" \
+              -print \
+              -quit
+          )"
+          test -n "${CXX_RUNTIME}"
+          cmake -E copy \
+            "${CXX_RUNTIME}" \
+            "${OUTPUT}/libc++_shared.so"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          java \
+            -classpath gradle/wrapper/gradle-wrapper.jar \
+            org.gradle.wrapper.GradleWrapperMain \
+            --no-daemon \
+            assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: {{PROJECT_ID}}-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

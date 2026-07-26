@@ -1,0 +1,14 @@
+{
+  "runtime.version": "Lua 5.4",
+  "runtime.path": [
+    "?.lua",
+    "?/init.lua"
+  ],
+  "workspace.library": [
+    "lua/annotations",
+    "lua",
+    "build/private-lua/share/lua/5.4"
+  ],
+  "workspace.checkThirdParty": false,
+  "diagnostics.globals": []
+}

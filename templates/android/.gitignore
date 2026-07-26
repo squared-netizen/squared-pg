@@ -1,0 +1,7 @@
+/app/build/
+/app/src/main/jniLibs/
+/native-build/
+/local.properties
+/third_party/SDL2/
+/.gradle/
+*.apk

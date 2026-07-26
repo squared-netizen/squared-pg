@@ -1,0 +1,46 @@
+name: Verify SDL Project Generator
+
+'on':
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out generator
+        uses: actions/checkout@v5
+
+      - name: Install host tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes \
+            cmake \
+            ninja-build \
+            lua5.4
+
+      - name: Verify offline toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          lua5.4 toolchain.lua
+
+      - name: Verify repository checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c SHA256SUMS.txt
+
+      - name: Upload generated documentation
+        uses: actions/upload-artifact@v6
+        with:
+          name: sdl-pg-ldoc
+          path: build/generated-sdl-pg-ldoc
+          if-no-files-found: error
+          retention-days: 14
