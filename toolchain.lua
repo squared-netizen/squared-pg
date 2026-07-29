@@ -86,6 +86,14 @@ local dependencies = {
         sha256 =
             "4469cd74c8c7f51d3b9ce802d2239ba2" ..
             "b09d3d3a11273c3a5abdf273a0a53531"
+    },
+    {
+        name = "yyjson 0.12.0",
+        archive = "yyjson-0.12.0.tar.gz",
+        marker = "yyjson-0.12.0/src/yyjson.h",
+        sha256 =
+            "b16246f617b2a136c78d73e5e2647c6f" ..
+            "1de1313e46678062985bdcf1f40bb75d"
     }
 }
 

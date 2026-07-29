@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(sdl_project_generator_toolchain VERSION 0.4.0 LANGUAGES C CXX)
+project(sdl_project_generator_toolchain VERSION 0.5.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -14,6 +14,9 @@ set(PENLIGHT_ROOT
 )
 set(LDOC_ROOT
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ldoc-1.5.0"
+)
+set(YYJSON_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/yyjson-0.12.0"
 )
 
 if(NOT EXISTS "${LUA_SOURCE_DIR}/lua.h")
@@ -118,6 +121,115 @@ set_target_properties(lua_embed_smoke PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
+if(NOT EXISTS "${YYJSON_ROOT}/src/yyjson.c" OR
+   NOT EXISTS "${YYJSON_ROOT}/src/yyjson.h")
+    message(FATAL_ERROR
+        "yyjson 0.12.0 source is missing. Run: lua5.4 toolchain.lua"
+    )
+endif()
+
+add_library(yyjson_0_12_0 STATIC
+    "${YYJSON_ROOT}/src/yyjson.c"
+)
+set_target_properties(yyjson_0_12_0 PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+)
+target_include_directories(yyjson_0_12_0
+    PUBLIC
+        "${YYJSON_ROOT}/src"
+)
+
+add_executable(squared_data_json_test
+    tests/json-test.cpp
+    templates/android/app/src/main/cpp/squared/data/json.cpp
+)
+target_compile_features(squared_data_json_test PRIVATE cxx_std_20)
+target_compile_options(squared_data_json_test
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+target_include_directories(squared_data_json_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/templates/android/include"
+)
+target_link_libraries(squared_data_json_test
+    PRIVATE
+        yyjson_0_12_0
+)
+set_target_properties(squared_data_json_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+add_executable(squared_application_boundary_test
+    tests/application-boundary-test.cpp
+)
+target_compile_features(
+    squared_application_boundary_test
+    PRIVATE
+        cxx_std_20
+)
+target_compile_options(squared_application_boundary_test
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+target_include_directories(squared_application_boundary_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/templates/android/include"
+)
+set_target_properties(
+    squared_application_boundary_test
+    PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+add_executable(squared_time_test
+    tests/time-test.cpp
+    templates/android/app/src/main/cpp/squared/time/timepiece.cpp
+)
+target_compile_features(squared_time_test PRIVATE cxx_std_20)
+target_compile_options(squared_time_test
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+target_include_directories(squared_time_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/templates/android/include"
+)
+set_target_properties(squared_time_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+add_executable(squared_messaging_test
+    tests/messaging-test.cpp
+    templates/android/app/src/main/cpp/squared/messaging/message_dispatcher.cpp
+    templates/android/app/src/main/cpp/squared/time/timepiece.cpp
+    templates/android/app/src/main/cpp/squared/data/json.cpp
+)
+target_compile_features(squared_messaging_test PRIVATE cxx_std_20)
+target_compile_options(squared_messaging_test
+    PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+)
+target_include_directories(squared_messaging_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/templates/android/include"
+)
+target_link_libraries(squared_messaging_test
+    PRIVATE
+        yyjson_0_12_0
+)
+set_target_properties(squared_messaging_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
 install(
     TARGETS
         lua_private
@@ -204,6 +316,30 @@ if(BUILD_TESTING)
         COMMAND
             "$<TARGET_FILE:lua_embed_smoke>"
             "${CMAKE_CURRENT_SOURCE_DIR}/scripts/error-test.lua"
+    )
+
+    add_test(
+        NAME squared_data_strict_json
+        COMMAND
+            "$<TARGET_FILE:squared_data_json_test>"
+    )
+
+    add_test(
+        NAME squared_application_boundary
+        COMMAND
+            "$<TARGET_FILE:squared_application_boundary_test>"
+    )
+
+    add_test(
+        NAME squared_time_domains
+        COMMAND
+            "$<TARGET_FILE:squared_time_test>"
+    )
+
+    add_test(
+        NAME squared_telegram_messaging
+        COMMAND
+            "$<TARGET_FILE:squared_messaging_test>"
     )
 
     set_tests_properties(lua_embedding_error PROPERTIES

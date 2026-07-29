@@ -1,5 +1,7 @@
 #include <{{PROJECT_ID}}/script_runtime.hpp>
 
+#include <squared/application/event.hpp>
+
 #include <SDL.h>
 
 extern "C" {
@@ -210,39 +212,42 @@ void ScriptRuntime::update(double delta_seconds) noexcept
     }
 }
 
-void ScriptRuntime::handle_event(const SDL_Event& event) noexcept
+void ScriptRuntime::handle_event(
+    const squared::application::Event& event
+) noexcept
 {
+    using Event = squared::application::Event;
     const char* kind = nullptr;
     double first = 0.0;
     double second = 0.0;
 
     switch (event.type) {
-    case SDL_FINGERDOWN:
+    case Event::Type::PointerDown:
         kind = "touch_down";
-        first = event.tfinger.x * logical_width_;
-        second = event.tfinger.y * logical_height_;
+        first = event.x;
+        second = event.y;
         break;
-    case SDL_FINGERMOTION:
+    case Event::Type::PointerMove:
         kind = "touch_move";
-        first = event.tfinger.x * logical_width_;
-        second = event.tfinger.y * logical_height_;
+        first = event.x;
+        second = event.y;
         break;
-    case SDL_FINGERUP:
+    case Event::Type::PointerUp:
         kind = "touch_up";
-        first = event.tfinger.x * logical_width_;
-        second = event.tfinger.y * logical_height_;
+        first = event.x;
+        second = event.y;
         break;
-    case SDL_KEYDOWN:
-        if (event.key.keysym.sym == SDLK_AC_BACK) {
-            kind = "back";
-        }
+    case Event::Type::BackRequested:
+        kind = "back";
         break;
-    case SDL_APP_DIDENTERBACKGROUND:
+    case Event::Type::Pause:
         kind = "background";
         break;
-    case SDL_APP_DIDENTERFOREGROUND:
+    case Event::Type::Resume:
         kind = "foreground";
         break;
+    case Event::Type::QuitRequested:
+    case Event::Type::Resize:
     default:
         break;
     }

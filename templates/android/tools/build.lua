@@ -143,17 +143,24 @@ local build = root .. "/native-build"
 local output = root .. "/app/src/main/jniLibs/arm64-v8a"
 local sdl = root .. "/third_party/SDL2"
 local lua = root .. "/third_party/lua-5.4.8"
+local yyjson = root .. "/third_party/yyjson-0.12.0"
 local sdk = prefix .. "/opt/android-sdk"
 local wrapper_jar = root .. "/gradle/wrapper/gradle-wrapper.jar"
 
 for _, required in ipairs({
     sdl .. "/include/SDL2/SDL.h",
+    sdl .. "/include/SDL2/SDL_opengles2_khrplatform.h",
+    sdl .. "/include/SDL2/SDL_opengles2_gl2platform.h",
+    sdl .. "/include/SDL2/SDL_opengles2_gl2.h",
     sdl .. "/lib/arm64-v8a/libSDL2.so",
     lua .. "/src/lua.h",
+    yyjson .. "/src/yyjson.c",
+    yyjson .. "/src/yyjson.h",
     wrapper_jar,
     prefix .. "/bin/clang",
     prefix .. "/bin/clang++",
-    prefix .. "/lib/libc++_shared.so"
+    prefix .. "/lib/libc++_shared.so",
+    "/system/lib64/libGLESv2.so"
 }) do
     if not exists(required) then
         error("required build input is missing: " .. required, 0)
@@ -181,6 +188,7 @@ run({
     "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" .. output,
     "-DSDL2_ROOT=" .. sdl,
     "-DLUA_ROOT=" .. lua,
+    "-DYYJSON_ROOT=" .. yyjson,
     "-DPROJECT_ROOT=" .. root
 })
 run({"cmake", "--build", build, "--parallel", "2"})

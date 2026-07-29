@@ -19,15 +19,30 @@ External processes have a narrow boundary:
 - CTest runs the private-toolchain smoke tests.
 - LDoc documents Lua APIs and Doxygen documents C++ and Java APIs.
 
-Generated applications use five layers:
+Generated applications use six layers:
 
 1. Android and `SDLActivity` provide the platform entry point.
-2. SDL2 and its companion libraries own portable UI, input, media, and basic
-   networking.
-3. C++ owns stable systems, performance-sensitive code, and the Lua host API.
-4. A trusted Lua bootstrap owns asset module loading and plug-in policy.
-5. Capability-limited Lua plug-ins own application behavior through lifecycle
+2. SDL2 and its companion libraries own portable windowing, input, media, and
+   basic networking.
+3. `squared::graphics` owns the OpenGL ES context, while
+   `squared::graphics2d` provides textures, regions, sprites, batching, and an
+   orthographic camera.
+4. A generated SDL adapter owns platform initialization, event translation,
+   and the frame loop. It imports only the developer application factory.
+5. Developer-owned C++ application code owns stable systems,
+   performance-sensitive code, and the Lua host API.
+6. A trusted Lua bootstrap and capability-limited plug-ins own application
+   behavior through lifecycle
    callbacks.
+
+Developer sources live beneath `application/src/` and are discovered by a
+CMake `CONFIGURE_DEPENDS` scan limited to that directory. Framework and
+platform sources remain explicit. This removes routine CMake edits without
+allowing stale generated implementations to compete with developer code.
+
+Scene graph and UI concepts including `Actor`, `Group`, `Stage`, actions, and
+widgets are deliberately reserved for Phase 6. They will depend on the Phase 5
+graphics foundation rather than being coupled directly to OpenGL ES.
 
 The generated script runtime exposes data-oriented commands rather than SDL
 pointers. Its default library profile excludes filesystem, process, package

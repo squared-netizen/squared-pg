@@ -9,7 +9,7 @@ local project = require("sdl_pg.project")
 local wrapper = require("sdl_pg.wrapper")
 
 local main = {}
-local version = "0.4.0"
+local version = "0.5.0"
 
 local help_text = [[
 SDL Project Generator

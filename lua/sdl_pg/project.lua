@@ -23,7 +23,7 @@ local function project_files(name)
             "    format = 1,",
             "    name = " .. quote_lua(name) .. ",",
             "    generator = \"sdl-pg\",",
-            "    generator_version = \"0.4.0\"",
+            "    generator_version = \"0.5.0\"",
             "}",
             ""
         }, "\n"),

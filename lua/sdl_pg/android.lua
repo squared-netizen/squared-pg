@@ -68,12 +68,22 @@ function android.populate(settings, destination, name, options)
     local wrapper_root = wrapper.require_active(settings)
     local lua_root =
         path.join(settings.generator_root, "third_party/lua-5.4.8")
+    local yyjson_root =
+        path.join(settings.generator_root, "third_party/yyjson-0.12.0")
     local template_root =
         path.join(settings.generator_root, "templates/android")
 
     if fs.mode(lua_root) ~= "directory" then
         error(
             "private Lua sources are not extracted; " ..
+            "run lua5.4 toolchain.lua in the generator",
+            0
+        )
+    end
+
+    if fs.mode(yyjson_root) ~= "directory" then
+        error(
+            "yyjson sources are not extracted; " ..
             "run lua5.4 toolchain.lua in the generator",
             0
         )
@@ -109,9 +119,25 @@ function android.populate(settings, destination, name, options)
         path.join(destination, "third_party/lua-5.4.8")
     )
 
+    fs.copy_tree_transactional(
+        yyjson_root,
+        path.join(destination, "third_party/yyjson-0.12.0")
+    )
+
     fs.copy_file(
         path.join(settings.generator_root, "licenses/Lua-LICENSE.txt"),
         path.join(destination, "licenses/Lua-LICENSE.txt")
+    )
+    fs.copy_file(
+        path.join(settings.generator_root, "licenses/yyjson-LICENSE.txt"),
+        path.join(destination, "licenses/yyjson-LICENSE.txt")
+    )
+    fs.copy_file(
+        path.join(
+            settings.generator_root,
+            "licenses/DejaVu-Fonts-LICENSE.txt"
+        ),
+        path.join(destination, "licenses/DejaVu-Fonts-LICENSE.txt")
     )
 
     copy_wrapper(wrapper_root, destination)

@@ -23,6 +23,7 @@ Included dependency archives:
 | LuaFileSystem | 1.8.0 | Native filesystem primitives |
 | Penlight | 1.14.0 | Lua utility modules used by LDoc |
 | LDoc | 1.5.0 | Lua API documentation |
+| yyjson | 0.12.0 | Strict native JSON backend for `squared::data` |
 
 LDoc 1.5.0 contains its own Lua Markdown renderer. The test deliberately uses
 that renderer, so no obsolete external `markdown` rock is required.
@@ -49,10 +50,16 @@ lua toolchain.lua
 No dependency is downloaded. Every source archive is bundled and verified
 before extraction.
 
+The CTest pass also compiles and runs the public `squared::data` JSON wrapper
+against the pinned yyjson source. It checks strict parsing, duplicate-key and
+resource limits, number-type preservation, deterministic writing, and UTF-8
+round trips.
+
 ## Expected completion
 
 ```text
 Private Lua runtime: OK
+Squared strict JSON: OK
 LuaFileSystem native module: OK
 Private package.path: OK
 Private package.cpath: OK

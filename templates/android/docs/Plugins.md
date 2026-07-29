@@ -63,6 +63,14 @@ Every plug-in also receives read-only metadata:
 Unknown and duplicate capabilities reject that plug-in without stopping other
 plug-ins.
 
+The Android process may be granted broad shared-storage access for native
+tools and backups, but the current Lua host intentionally exposes no
+filesystem capability. Plug-ins therefore cannot read or write
+`/sdcard/Download` yet. Useful missing future capabilities include bounded
+project-file reads, atomic writes, directory enumeration, backup export, and
+explicit cartridge-drive access. Their roots and mutation rules must be
+designed before exposure.
+
 ## Entry module
 
 The entry module returns optional callbacks:

@@ -12,7 +12,14 @@ tags:
 - [[GitHub-Actions]]
 - [[Scripting]]
 - [[Plugins]]
+- [[Application]]
+- [[Graphics2D]]
+- [[Data]]
+- [[Time]]
+- [[Messaging]]
 - [[API|API Reference]]
-- Public C++ API: `include/{{PROJECT_ID}}/script_runtime.hpp`
+- Public application API:
+  `app/src/main/cpp/application/include/{{PROJECT_ID}}/application.hpp`
+- Squared framework API: `include/squared/`
 - Trusted Lua entry point: `app/src/main/assets/lua/bootstrap.lua`
 - Plug-in registry: `app/src/main/assets/lua/plugins.lua`

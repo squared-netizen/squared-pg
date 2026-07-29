@@ -4,6 +4,7 @@
 /third_party/luafilesystem-1_8_0/
 /third_party/Penlight-1.14.0/
 /third_party/ldoc-1.5.0/
+/third_party/yyjson-0.12.0/
 
 *.swp
 *.swo

@@ -27,7 +27,9 @@ entry point.
 
 ## Ownership
 
-The C++ reference describes application code generated for this project. The
+The C++ reference describes the generated application interface, its
+platform-neutral event boundary, the application host, and the public
+`squared::` graphics2d, data, time, and messaging frameworks. The
 Lua reference covers both the trusted generated runtime and application
 plug-ins. The Java reference describes vendored SDL2 Android glue copied from
 the registered offline kit. Its original SDL license and upstream ownership

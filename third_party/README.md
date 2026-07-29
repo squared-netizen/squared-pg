@@ -48,8 +48,23 @@ test. It is compiled against the pinned private runtime.
 LDoc contains a built-in Lua Markdown renderer. The private toolchain uses that
 renderer and does not install the obsolete external `markdown` rock.
 
+## yyjson 0.12.0
+
+- Upstream: <https://github.com/ibireme/yyjson>
+- Tag: `0.12.0`
+- Commit: `8b4a38dc994a110abaec8a400615567bd996105f`
+- Source: <https://github.com/ibireme/yyjson/archive/refs/tags/0.12.0.tar.gz>
+- SHA-256: `b16246f617b2a136c78d73e5e2647c6f1de1313e46678062985bdcf1f40bb75d`
+- License: MIT
+
+The pristine tag archive is stored in `third_party/cache/`. The toolchain
+verifies it before extraction. Generated Android projects receive the verified
+source and the upstream license so their native JSON build stays offline and
+auditable.
+
 ## Related
 
 - [Project README](../README.md)
 - [Private Lua Toolchain Test](../PRIVATE-TOOLCHAIN.md)
 - [Lua license](../licenses/Lua-LICENSE.txt)
+- [yyjson license](../licenses/yyjson-LICENSE.txt)

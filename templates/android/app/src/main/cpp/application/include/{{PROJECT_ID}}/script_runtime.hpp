@@ -1,8 +1,9 @@
 #pragma once
 
+#include <squared/application/event.hpp>
+
 #include <cstdint>
 
-union SDL_Event;
 struct lua_State;
 
 namespace {{PROJECT_ID}} {
@@ -69,13 +70,13 @@ public:
     void update(double delta_seconds) noexcept;
 
     /**
-     * @brief Translate and forward one supported SDL event to Lua.
+     * @brief Translate and forward one supported application event to Lua.
      *
      * Lua receives `event(kind, first, second)`.
-     *
-     * @param event SDL event owned by the caller.
      */
-    void handle_event(const SDL_Event& event) noexcept;
+    void handle_event(
+        const squared::application::Event& event
+    ) noexcept;
 
     /** @brief Invoke `shutdown()` once and close the Lua state. */
     void shutdown() noexcept;

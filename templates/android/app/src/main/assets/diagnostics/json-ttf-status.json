@@ -1,0 +1,7 @@
+{
+  "font": "fonts/DejaVuSansMono.ttf",
+  "message": "JSON \u2192 TTF: OK \u2502 round-trip verified",
+  "panelColor": "#16283D",
+  "pointSize": 30,
+  "textColor": "#B8FFD0"
+}

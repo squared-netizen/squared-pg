@@ -15,7 +15,7 @@ status: experimental
 `sdl-pg` creates offline-first Android ARM64 projects with a C++20 host, a
 private Lua 5.4.8 scripting runtime, and a validated SDL2 dependency kit.
 
-Version 0.4.0 provides:
+Version 0.5.0 provides:
 
 - transactional creation beneath `~/sandbox` or `~/projects`;
 - non-destructive `promote` and `demote` commands;
@@ -31,6 +31,26 @@ Version 0.4.0 provides:
 - Obsidian-compatible Markdown documentation;
 - Doxygen comments for public C++ APIs and LDoc comments for Lua APIs.
 - a local `sdl-pg docs` command and optional manual documentation workflow.
+- an OpenGL ES 2 graphics context under the `squared::` namespace;
+- `Texture`, `TextureRegion`, `Sprite`, `SpriteBatch`, and
+  `OrthographicCamera` graphics2d foundations;
+- a transactionally loaded, libGDX-compatible multi-page `TextureAtlas`;
+- a strict, deterministic native JSON API under `squared::data`, backed by
+  pinned yyjson 0.12.0;
+- JSON-provided text rendered through SDL_ttf with stage-colored fallbacks;
+- a touch-driven blue/green atlas sentinel for visible lifecycle testing.
+- a thin generated SDL adapter around a developer-owned C++ application;
+- automatic developer source discovery restricted to `application/src/`.
+- pausable, scaled `squared::time` domains and a bounded deterministic
+  deadline queue.
+- libGDX-AI-inspired Telegram/Telegraph messaging with bounded queued,
+  immediate, delayed, broadcast, cancellation, and receipt behavior;
+- authoritative provider-generated state for each new Telegram subscriber,
+  with bounded queued delivery and no retained-message replay;
+- ordered pending-message inspection and deterministic JSON snapshot/restore
+  using remaining delays and stable identifiers.
+- on-screen SDL_ttf `PASS`/`FAIL` diagnostics with a compact JSON Telegram
+  dump and bounded native logging to `/sdcard/Download`.
 
 The generator does not initialize Git, commit, push, publish, or contact
 GitHub. Local generation and builds are offline by default.
@@ -60,8 +80,8 @@ sdl-pg doctor
 ```
 
 No LuaRocks installation or network download is required. The pinned source
-archives for Lua, LuaFileSystem, Penlight, and LDoc are included and verified
-before use.
+archives for Lua, LuaFileSystem, Penlight, LDoc, and yyjson are included and
+verified before use.
 
 ## Register offline dependencies
 
@@ -142,6 +162,8 @@ plug-in API has stabilized through real projects.
 - [[docs/Repository-Model|Repository Model]]
 - [[docs/Safety-Model|Safety Model]]
 - [[docs/Phase-4-Validation|Phase 4 Validation]]
+- [[docs/Phase-5-Design|Phase 5 Design]]
+- [[docs/Phase-5-MVP-Validation|Phase 5 MVP Validation]]
 - [[docs/Releasing|Releasing]]
 - [[PRIVATE-TOOLCHAIN|Private Lua Toolchain]]
 - [[CONTRIBUTING|Contributing]]
