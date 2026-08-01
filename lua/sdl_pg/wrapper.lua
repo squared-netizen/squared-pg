@@ -106,7 +106,7 @@ function wrapper.require_active(settings)
     if not values.wrapper_root then
         error(
             "no Gradle Wrapper is registered; " ..
-            "run sdl-pg wrapper add PROJECT_DIRECTORY",
+            "run squared-pg wrapper add PROJECT_DIRECTORY",
             0
         )
     end
@@ -120,8 +120,20 @@ end
 -- @return Status table.
 function wrapper.status(settings)
     local values = state.load(settings)
+    local configured = values.wrapper_root ~= nil
+    local valid = false
+    local status_error
+    if configured then
+        local ok, message = pcall(verify, values.wrapper_root)
+        valid = ok
+        if not ok then
+            status_error = tostring(message):gsub("[\r\n]+", " ")
+        end
+    end
     return {
-        configured = values.wrapper_root ~= nil,
+        configured = configured,
+        valid = valid,
+        error = status_error,
         root = values.wrapper_root
     }
 end

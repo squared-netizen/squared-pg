@@ -1,19 +1,20 @@
 ---
-title: SDL Project Generator Safety Model
+title: Squared Project Generator Safety Model
 tags:
   - filesystem
   - safety
   - testing
 ---
 
-# SDL Project Generator Safety Model
+# Squared Project Generator Safety Model
 
-`sdl-pg` treats filesystem changes as explicit operations:
+`squared-pg` treats filesystem changes as explicit operations:
 
 1. Project names cannot contain paths or `..`.
 2. Creation is restricted to the configured sandbox or projects root.
 3. Existing destinations are never overwritten.
-4. Promotion and demotion require `.sdl-pg.lua`.
+4. Promotion and demotion require `.squared-pg.lua`; the legacy
+   `.sdl-pg.lua` marker remains accepted during migration.
 5. Promotion rejects `.git`; demotion deliberately omits it.
 6. Symlinks and special files are rejected while copying project trees.
 7. Copies are assembled in a temporary sibling directory.
@@ -22,6 +23,15 @@ tags:
 10. Source directories are preserved.
 
 The initial generator intentionally has no delete command.
+
+## Android broad storage access
+
+Unrestricted shared-storage access is disabled by default. The Android-only
+`--manage-all-files` generation option must be selected explicitly. When it is
+selected, the generated project declares `MANAGE_EXTERNAL_STORAGE`, opens the
+app-specific special-access settings once on first startup if access is
+missing, and records the security implications in a prominent README warning.
+The setting remains a user-controlled Android grant and can be revoked.
 
 ## Git policy
 

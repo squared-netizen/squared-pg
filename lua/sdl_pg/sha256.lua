@@ -1,7 +1,8 @@
 --- Load the generator's bundled pure-Lua SHA-256 module.
 -- @module sdl_pg.sha256
 
-local generator_root = rawget(_G, "SDL_PG_ROOT")
+local generator_root =
+    rawget(_G, "SQUARED_PG_ROOT") or rawget(_G, "SDL_PG_ROOT")
 
 if not generator_root then
     local source = debug.getinfo(1, "S").source

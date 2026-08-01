@@ -7,14 +7,16 @@ local path = require("sdl_pg.path")
 local process = require("sdl_pg.process")
 
 local docs = {}
-local marker_name = ".sdl-pg.lua"
+local marker_names = {".squared-pg.lua", ".sdl-pg.lua"}
 
 local function find_project_root(start)
     local current = start
 
     while true do
-        if fs.mode(path.join(current, marker_name)) == "file" then
-            return current
+        for _, marker_name in ipairs(marker_names) do
+            if fs.mode(path.join(current, marker_name)) == "file" then
+                return current
+            end
         end
 
         local parent = path.dirname(current)
@@ -25,7 +27,7 @@ local function find_project_root(start)
     end
 
     error(
-        "current directory is not inside an sdl-pg project",
+        "current directory is not inside a squared-pg project",
         0
     )
 end

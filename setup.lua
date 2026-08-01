@@ -12,7 +12,9 @@ local absolute_root = root
 
 if root:sub(1, 1) ~= "/" then
     local lfs = require("lfs")
-    absolute_root = lfs.currentdir() .. "/" .. root:gsub("^%./", "")
+    local relative_root = root:gsub("^%./", "")
+    absolute_root = relative_root == "." and lfs.currentdir() or
+        lfs.currentdir() .. "/" .. relative_root
 end
 
 package.path = table.concat({
@@ -21,10 +23,13 @@ package.path = table.concat({
     package.path
 }, ";")
 
+_G.SQUARED_PG_ROOT = absolute_root
 _G.SDL_PG_ROOT = absolute_root
 
 local fs = require("sdl_pg.fs")
 local path = require("sdl_pg.path")
+local package_registry = require("sdl_pg.package_registry")
+local config = require("sdl_pg.config")
 
 local action = arg[1] or "install"
 if action ~= "install" then
@@ -48,9 +53,18 @@ if fs.mode(private_lua) ~= "file" then
 end
 
 local bin_directory =
-    os.getenv("SDL_PG_BIN_DIR") or path.join(home, ".bin")
-local config_directory = path.join(home, ".config/sdl-pg")
+    os.getenv("SQUARED_PG_BIN_DIR") or
+    os.getenv("SDL_PG_BIN_DIR") or
+    path.join(home, ".bin")
+local config_directory = path.join(home, ".config/squared-pg")
 local config_file = path.join(config_directory, "config.lua")
+local legacy_config_file =
+    path.join(home, ".config/sdl-pg/config.lua")
+local primary_cache_root = path.join(home, ".local/share/squared-pg")
+local legacy_cache_root = path.join(home, ".local/share/sdl-pg")
+local default_cache_root =
+    fs.mode(legacy_cache_root) == "directory" and
+    legacy_cache_root or primary_cache_root
 
 fs.mkdir_p(bin_directory)
 fs.mkdir_p(config_directory)
@@ -58,21 +72,76 @@ fs.mkdir_p(path.join(home, "sandbox"))
 fs.mkdir_p(path.join(home, "projects"))
 
 if not fs.exists(config_file) then
-    fs.write_file(config_file, table.concat({
-        "--- User configuration for SDL Project Generator.",
-        "",
-        "return {",
-        "    sandbox_root = " ..
-            string.format("%q", path.join(home, "sandbox")) ..
-            ",",
-        "    projects_root = " ..
-            string.format("%q", path.join(home, "projects")) ..
-            ",",
-        "    cache_root = " ..
-            string.format("%q", path.join(home, ".local/share/sdl-pg")),
-        "}",
-        ""
-    }, "\n"))
+    if fs.mode(legacy_config_file) == "file" then
+        fs.copy_file(legacy_config_file, config_file)
+    else
+        fs.write_file(config_file, table.concat({
+            "--- User configuration for Squared Project Generator.",
+            "",
+            "return {",
+            "    sandbox_root = " ..
+                string.format("%q", path.join(home, "sandbox")) ..
+                ",",
+            "    projects_root = " ..
+                string.format("%q", path.join(home, "projects")) ..
+                ",",
+            "    cache_root = " ..
+                string.format("%q", default_cache_root),
+            "}",
+            ""
+        }, "\n"))
+    end
+end
+
+local settings = config.load({
+    HOME = home,
+    SQUARED_PG_ROOT = absolute_root,
+    SQUARED_PG_CONFIG = os.getenv("SQUARED_PG_CONFIG"),
+    SQUARED_PG_CACHE_ROOT = os.getenv("SQUARED_PG_CACHE_ROOT"),
+    SQUARED_PG_SANDBOX_ROOT = os.getenv("SQUARED_PG_SANDBOX_ROOT"),
+    SQUARED_PG_PROJECTS_ROOT = os.getenv("SQUARED_PG_PROJECTS_ROOT"),
+    SDL_PG_ROOT = absolute_root,
+    SDL_PG_CONFIG = os.getenv("SDL_PG_CONFIG"),
+    SDL_PG_CACHE_ROOT = os.getenv("SDL_PG_CACHE_ROOT"),
+    SDL_PG_SANDBOX_ROOT = os.getenv("SDL_PG_SANDBOX_ROOT"),
+    SDL_PG_PROJECTS_ROOT = os.getenv("SDL_PG_PROJECTS_ROOT")
+})
+for _, built_in in ipairs({
+    package_registry.defaults.application,
+    package_registry.defaults.graphics,
+    package_registry.defaults.math,
+    package_registry.defaults.graphics2d,
+    package_registry.defaults.scene2d,
+    package_registry.defaults.time,
+    package_registry.defaults.data,
+    package_registry.defaults.messaging,
+    package_registry.defaults.template
+}) do
+    if not package_registry.find(
+            settings,
+            built_in.id,
+            built_in.version
+        ) then
+        local archive = path.join(
+            absolute_root,
+            "build/packages/" .. built_in.archive
+        )
+        if fs.mode(archive) ~= "file" then
+            io.stderr:write(
+                "ERROR: built-in SQ package is missing: ",
+                built_in.archive,
+                "; run lua5.4 toolchain.lua first\n"
+            )
+            os.exit(1)
+        end
+        local record = package_registry.add(settings, archive)
+        print(
+            "Registered: " ..
+            record.id ..
+            " " ..
+            record.version
+        )
+    end
 end
 
 local launcher = table.concat({
@@ -106,6 +175,7 @@ local launcher = table.concat({
             absolute_root .. "/build/private-lua/lib/lua/5.4/?.so"
         ),
     "",
+    "_G.SQUARED_PG_ROOT = " .. string.format("%q", absolute_root),
     "_G.SDL_PG_ROOT = " .. string.format("%q", absolute_root),
     "",
     "local arguments = {}",
@@ -118,22 +188,25 @@ local launcher = table.concat({
     ""
 }, "\n")
 
-local short_launcher = path.join(bin_directory, "sdl-pg")
-local long_launcher =
+local launchers = {
+    path.join(bin_directory, "squared-pg"),
+    path.join(bin_directory, "squared-project-generator"),
+    path.join(bin_directory, "sdl-pg"),
     path.join(bin_directory, "sdl-project-generator")
+}
 
-fs.write_file(short_launcher, launcher)
-fs.write_file(long_launcher, launcher)
+for _, filename in ipairs(launchers) do
+    fs.write_file(filename, launcher)
+end
 
 local function shell_quote(value)
     return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
 end
 
-local chmod_command =
-    "chmod 755 " ..
-    shell_quote(short_launcher) ..
-    " " ..
-    shell_quote(long_launcher)
+local chmod_command = "chmod 755"
+for _, filename in ipairs(launchers) do
+    chmod_command = chmod_command .. " " .. shell_quote(filename)
+end
 local succeeded, reason, code = os.execute(chmod_command)
 
 if not succeeded then
@@ -147,8 +220,9 @@ if not succeeded then
     os.exit(1)
 end
 
-print("Installed: " .. short_launcher)
-print("Installed: " .. long_launcher)
+for _, filename in ipairs(launchers) do
+    print("Installed: " .. filename)
+end
 print("Configuration: " .. config_file)
 
 local path_value = os.getenv("PATH") or ""

@@ -46,13 +46,15 @@ function state.save(settings, values)
     local temporary = filename .. ".new"
 
     fs.write_file(temporary, table.concat({
-        "--- Managed by sdl-pg. Do not edit while a command is running.",
+        "--- Managed by squared-pg. Do not edit while a command is running.",
         "",
         "return {",
         "    kit_root = " .. quote(values.kit_root) .. ",",
         "    kit_archive = " .. quote(values.kit_archive) .. ",",
         "    kit_sha256 = " .. quote(values.kit_sha256) .. ",",
-        "    wrapper_root = " .. quote(values.wrapper_root),
+        "    wrapper_root = " .. quote(values.wrapper_root) .. ",",
+        "    template_id = " .. quote(values.template_id) .. ",",
+        "    template_version = " .. quote(values.template_version),
         "}",
         ""
     }, "\n"))

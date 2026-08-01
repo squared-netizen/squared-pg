@@ -7,7 +7,7 @@ tags:
 
 # Contributing
 
-SDL Project Generator is offline-first. Changes must not make ordinary project
+Squared Project Generator is offline-first. Changes must not make ordinary project
 generation or local builds depend on a network connection.
 
 ## Development checkout
@@ -15,7 +15,7 @@ generation or local builds depend on a network connection.
 Keep experimental work beneath `~/sandbox`:
 
 ```bash
-cd "$HOME/sandbox/sdl-project-generator"
+cd "$HOME/sandbox/squared-pg"
 lua5.4 toolchain.lua
 ```
 

@@ -204,21 +204,29 @@ message history into memory.
 
 ## Builder direction after Phase 5
 
-After Phase 5 validation, the SDL-specific generator core will be refactored
-into a general offline project builder. SDL Android becomes one declarative,
-versioned, locally registered template package. Manual template registration
-validates and copies a self-contained archive into an immutable local store.
-Executable template hooks remain disabled by default and require explicit
-trust if introduced later.
+The development `.sq` proof begins that refactor without replacing the proven
+project lifecycle. SDL Android is now one declarative, versioned, locally
+registered template package. Manual template registration validates and copies
+a self-contained archive into an immutable local store. The template directly
+requires Squared Application, Squared Scene2D, and Squared Messaging. Scene2D
+requires Graphics2D, preserving dependency-first composition.
+Application is a header-only lifecycle contract represented by a CMake
+`INTERFACE` module. Graphics owns color and the SDL/OpenGL ES context, while
+Math owns the platform-neutral vector and matrix layer. Graphics2D owns
+textures, sprites, atlases, batching, and cameras and requires exact Graphics
+and Math versions. Messaging independently owns the Telegram and Telegraph
+layer and declares exact Squared Data and Squared Time dependencies; Data owns
+the strict JSON layer and its private yyjson source. The builder resolves the graph in
+deterministic dependency-first order and rejects missing versions, cycles, and
+version conflicts before rendering. Executable template hooks remain disabled
+and require an explicit future format decision if introduced later.
 
-## Explicit Phase 6 boundary
+## Phase 6 handoff
 
-The scene graph and UI layer begins in Phase 6. The following types are not
-part of the Phase 5 graphics MVP:
+The scene graph and UI layer begins in Phase 6. The first independent Scene2D
+slice now supplies `Actor`, `Group`, and `Stage` hierarchy semantics. The
+following higher-level behavior remains outside the Phase 5 graphics MVP:
 
-- `Actor`;
-- `Group`;
-- `Stage`;
 - actions and action composition;
 - input routing, hit testing, focus, and event propagation;
 - widgets, layout containers, and skin-backed UI controls.

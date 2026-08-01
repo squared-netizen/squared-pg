@@ -28,7 +28,9 @@ end
 -- @tparam table test Test assertion helpers.
 function plugin_runtime_test.run(root, test)
     local template_root =
-        root .. "/templates/android/app/src/main/assets/lua"
+        root ..
+        "/packages/squared-android-template/content/template/" ..
+        "app/src/main/assets/lua"
     local module_loader =
         load_module(template_root .. "/runtime/module_loader.lua")
     local plugin_manager =

@@ -1,6 +1,8 @@
-name: Verify SDL Project Generator
+name: Verify Squared Project Generator
 
 'on':
+  push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -22,6 +24,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes \
             cmake \
+            doxygen \
             ninja-build \
             lua5.4
 
@@ -40,7 +43,9 @@ jobs:
       - name: Upload generated documentation
         uses: actions/upload-artifact@v6
         with:
-          name: sdl-pg-ldoc
-          path: build/generated-sdl-pg-ldoc
+          name: squared-pg-docs
+          path: |
+            build/generated-squared-pg-ldoc
+            build/generated-sq-doxygen
           if-no-files-found: error
           retention-days: 14

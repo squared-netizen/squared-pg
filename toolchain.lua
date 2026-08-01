@@ -94,6 +94,14 @@ local dependencies = {
         sha256 =
             "b16246f617b2a136c78d73e5e2647c6f" ..
             "1de1313e46678062985bdcf1f40bb75d"
+    },
+    {
+        name = "miniz 3.1.2",
+        archive = "miniz-3.1.2.tar.gz",
+        marker = "miniz-3.1.2/miniz.h",
+        sha256 =
+            "98468f8924934b723276680f85238b6c" ..
+            "78bf1f8b49b4459cc9b7214a20e2e9fb"
     }
 }
 
@@ -172,6 +180,11 @@ run({
 })
 
 run({
+    "doxygen",
+    root .. "/docs/Doxyfile.sq"
+})
+
+run({
     "cmake",
     "--install",
     root .. "/build",
@@ -190,6 +203,27 @@ run({
     private_lua,
     root .. "/tools/private-run.lua",
     root .. "/tests/private-environment-test.lua",
+    root
+})
+
+run({
+    private_lua,
+    root .. "/tools/private-run.lua",
+    root .. "/tests/sq-lua-binding-test.lua",
+    root
+})
+
+run({
+    private_lua,
+    root .. "/tools/private-run.lua",
+    root .. "/tools/build-packages.lua",
+    root
+})
+
+run({
+    private_lua,
+    root .. "/tools/private-run.lua",
+    root .. "/tests/sq-registry-test.lua",
     root
 })
 
@@ -222,7 +256,7 @@ run({
 })
 
 local generator_documentation_output =
-    root .. "/build/generated-sdl-pg-ldoc"
+    root .. "/build/generated-squared-pg-ldoc"
 
 run({
     private_lua,
@@ -253,7 +287,9 @@ run({
     root .. "/docs/runtime-config.ld",
     "-d",
     runtime_documentation_output,
-    root .. "/templates/android/app/src/main/assets/lua"
+    root ..
+    "/packages/squared-android-template/content/template/" ..
+    "app/src/main/assets/lua"
 })
 
 run({
@@ -270,8 +306,10 @@ print("Private package.path: OK")
 print("Private package.cpath: OK")
 print("Penlight private modules: OK")
 print("LDoc generation with built-in Markdown: OK")
-print("SDL Project Generator LDoc API: OK")
+print("Squared Project Generator LDoc API: OK")
 print("Generated application runtime LDoc API: OK")
 print("Global LuaRocks isolation: OK")
-print("SDL Project Generator tests: OK")
+print("Squared Project Generator tests: OK")
+print("Squared SQ Core Doxygen API: OK")
+print("Squared SQ private Lua binding: OK")
 print("Offline toolchain test: OK")

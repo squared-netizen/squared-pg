@@ -1,4 +1,4 @@
---- SDL Project Generator command entry point.
+--- Legacy SDL Project Generator command entry point.
 -- @script sdl-pg
 
 local script_path = arg[0] or "sdl-pg.lua"
@@ -9,6 +9,7 @@ if root:sub(1, 1) ~= "/" then
     root = lfs.currentdir() .. "/" .. root:gsub("^%./", "")
 end
 
+_G.SQUARED_PG_ROOT = root
 _G.SDL_PG_ROOT = root
 
 package.path = table.concat({

@@ -1,10 +1,15 @@
 /build/
+/*.zip
+/*.zip.sha256
+/*.o
+/*.s
 
 /third_party/lua-5.4.8/
 /third_party/luafilesystem-1_8_0/
 /third_party/Penlight-1.14.0/
 /third_party/ldoc-1.5.0/
 /third_party/yyjson-0.12.0/
+/third_party/miniz-3.1.2/
 
 *.swp
 *.swo

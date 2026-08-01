@@ -62,9 +62,23 @@ verifies it before extraction. Generated Android projects receive the verified
 source and the upstream license so their native JSON build stays offline and
 auditable.
 
+## miniz 3.1.2
+
+- Upstream: <https://github.com/richgel999/miniz>
+- Tag: `3.1.2`
+- Source: <https://github.com/richgel999/miniz/archive/refs/tags/3.1.2.tar.gz>
+- SHA-256: `98468f8924934b723276680f85238b6c78bf1f8b49b4459cc9b7214a20e2e9fb`
+- License: MIT
+
+The pristine tag archive is stored in `third_party/cache/`. The toolchain
+verifies and extracts it without network access. miniz remains a private
+static implementation dependency of `squared_sq_core`; no miniz types appear
+in the public Squared API.
+
 ## Related
 
 - [Project README](../README.md)
 - [Private Lua Toolchain Test](../PRIVATE-TOOLCHAIN.md)
 - [Lua license](../licenses/Lua-LICENSE.txt)
 - [yyjson license](../licenses/yyjson-LICENSE.txt)
+- [miniz license](../licenses/miniz-LICENSE.txt)

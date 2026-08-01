@@ -1,4 +1,4 @@
---- Native filesystem operations used by SDL Project Generator.
+--- Native filesystem operations used by Squared Project Generator.
 -- @module sdl_pg.fs
 
 local lfs = require("lfs")
@@ -24,7 +24,10 @@ end
 
 --- Create a directory and all missing parents.
 -- @param value Directory path.
-function fs.mkdir_p(value)
+-- @param[opt] options Creation policy. `follow_directory_links` permits an
+-- existing symbolic-link component only when it resolves to a directory.
+function fs.mkdir_p(value, options)
+    options = options or {}
     local current = value:sub(1, 1) == "/" and "/" or ""
 
     for component in value:gmatch("[^/]+") do
@@ -46,6 +49,11 @@ function fs.mkdir_p(value)
                         0
                     )
                 end
+            elseif mode == "link" and options.follow_directory_links and
+                lfs.attributes(current, "mode") == "directory" then
+                -- Explicitly permitted for user-selected output roots such
+                -- as Android's /sdcard. Managed project trees keep the
+                -- stricter default and continue to reject link traversal.
             elseif mode ~= "directory" then
                 error(current .. " exists and is not a directory", 0)
             end
@@ -204,6 +212,68 @@ local function copy_tree(source, destination, excluded_names)
     end
 end
 
+local function verify_merge(source, destination)
+    for _, entry in ipairs(sorted_entries(source)) do
+        local source_entry = path.join(source, entry)
+        local destination_entry = path.join(destination, entry)
+        local source_mode = fs.mode(source_entry)
+        local destination_mode = fs.mode(destination_entry)
+
+        if source_mode == "directory" then
+            if destination_mode and destination_mode ~= "directory" then
+                error(
+                    "module directory collides with project file: " ..
+                    destination_entry,
+                    0
+                )
+            end
+            verify_merge(source_entry, destination_entry)
+        elseif source_mode == "file" then
+            if destination_mode then
+                error(
+                    "module file already exists in project: " ..
+                    destination_entry,
+                    0
+                )
+            end
+        else
+            error(
+                "module contains a symbolic link or special entry: " ..
+                source_entry,
+                0
+            )
+        end
+    end
+end
+
+local function merge_tree(source, destination)
+    fs.mkdir_p(destination)
+    for _, entry in ipairs(sorted_entries(source)) do
+        local source_entry = path.join(source, entry)
+        local destination_entry = path.join(destination, entry)
+        local mode = fs.mode(source_entry)
+
+        if mode == "directory" then
+            merge_tree(source_entry, destination_entry)
+        else
+            fs.copy_file(source_entry, destination_entry)
+        end
+    end
+end
+
+--- Merge a source tree into an existing project after a collision preflight.
+-- Existing directories may be shared, but existing files are never replaced.
+-- @param source Source directory.
+-- @param destination Existing or new destination directory.
+function fs.merge_tree(source, destination)
+    if fs.mode(source) ~= "directory" then
+        error("source directory not found: " .. source, 0)
+    end
+
+    verify_merge(source, destination)
+    merge_tree(source, destination)
+end
+
 --- Remove a tree.
 -- This is intended for transaction rollback and isolated tests.
 -- @param value Directory or regular-file path.
@@ -248,7 +318,7 @@ local function temporary_sibling(destination)
         temporary_counter = temporary_counter + 1
         local candidate =
             destination ..
-            ".sdl-pg-tmp-" ..
+            ".squared-pg-tmp-" ..
             tostring(os.time()) ..
             "-" ..
             tostring(temporary_counter)

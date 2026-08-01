@@ -12,7 +12,7 @@ status: experimental
 
 # Private Lua Toolchain Test
 
-This private toolchain supplies the modules used by SDL Project Generator and
+This private toolchain supplies the modules used by Squared Project Generator and
 its documentation command.
 
 Included dependency archives:
@@ -24,6 +24,7 @@ Included dependency archives:
 | Penlight | 1.14.0 | Lua utility modules used by LDoc |
 | LDoc | 1.5.0 | Lua API documentation |
 | yyjson | 0.12.0 | Strict native JSON backend for `squared::data` |
+| miniz | 3.1.2 | Private Stored, Deflate, and ZIP64 backend for `.sq` |
 
 LDoc 1.5.0 contains its own Lua Markdown renderer. The test deliberately uses
 that renderer, so no obsolete external `markdown` rock is required.
@@ -37,7 +38,7 @@ pkg install lua54 clang cmake ninja
 ## Run the complete test
 
 ```bash
-cd "$HOME/sandbox/sdl-project-generator"
+cd "$HOME/sandbox/squared-pg"
 lua5.4 toolchain.lua
 ```
 
@@ -51,9 +52,31 @@ No dependency is downloaded. Every source archive is bundled and verified
 before extraction.
 
 The CTest pass also compiles and runs the public `squared::data` JSON wrapper
-against the pinned yyjson source. It checks strict parsing, duplicate-key and
-resource limits, number-type preservation, deterministic writing, and UTF-8
-round trips.
+from the Squared Data package source against pinned yyjson. It checks strict
+parsing, duplicate-key and resource limits, number-type preservation,
+deterministic writing, and UTF-8 round trips.
+
+The native `.sq` pass creates, validates, deterministically rewrites, and
+transactionally extracts a module archive. Doxygen checks the public C++ API,
+and the private Lua test verifies the thin `squared.sq` binding. The toolchain
+then builds `build/packages/squared-application-0.6.0-dev.1.sq`,
+`build/packages/squared-graphics-0.6.0-dev.1.sq`,
+`build/packages/squared-graphics2d-0.6.0-dev.1.sq`,
+`build/packages/squared-scene2d-0.6.0-dev.1.sq`,
+`build/packages/squared-math-0.6.0-dev.1.sq`,
+`build/packages/squared-time-0.6.0-dev.1.sq`,
+`build/packages/squared-data-0.6.0-dev.1.sq`, and
+`build/packages/squared-messaging-0.6.0-dev.1.sq`, followed by
+`build/packages/squared-android-template-0.6.0-dev.14.sq` entirely offline.
+The Data archive contains its private yyjson source and license. Messaging
+requires exact Data and Time versions. Application proves header-only
+`INTERFACE` module composition. Math proves a small compiled module can export
+headers and implementation to a template-owned consumer. Graphics proves a
+compiled module can consume SDL and OpenGL ES targets supplied by its selected
+template. The registry test verifies idempotent import, recursive exact
+dependencies, disabled hooks, and collision-safe module composition.
+Scene2D proves a compiled Phase 6 module can consume Graphics2D transitively
+while keeping hierarchy behavior independently testable without a GPU.
 
 ## Expected completion
 

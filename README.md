@@ -1,6 +1,7 @@
 ---
-title: SDL Project Generator
+title: Squared Project Generator
 aliases:
+  - squared-pg
   - sdl-pg
 tags:
   - android
@@ -10,16 +11,24 @@ tags:
 status: experimental
 ---
 
-# SDL Project Generator
+# Squared Project Generator
 
-`sdl-pg` creates offline-first Android ARM64 projects with a C++20 host, a
-private Lua 5.4.8 scripting runtime, and a validated SDL2 dependency kit.
+`squared-pg` is an offline-first project generator for applications built on
+the Squared framework. Its first frontend is an Android ARM64 C++20 host using
+SDL2 and a private Lua 5.4.8 scripting runtime. SDL2 is a selected frontend,
+not part of the generator's permanent identity; later templates may target
+SFML, PDCurses, or other libraries without shipping unused frontends in a
+generated application.
 
-Version 0.5.0 provides:
+The 0.6.0 development line provides:
 
 - transactional creation beneath `~/sandbox` or `~/projects`;
 - non-destructive `promote` and `demote` commands;
 - offline SDL2-kit and Gradle-Wrapper registration;
+- generator-only template-provider selection with no generated runtime
+  dispatcher;
+- generator-only external dependency dispatch with `android-sdl2` as the
+  first stable provider ID;
 - a Lua-driven local Android build command;
 - an optional, manually dispatched GitHub Actions build;
 - protected `init`, `update`, `event`, and `shutdown` Lua callbacks;
@@ -30,7 +39,7 @@ Version 0.5.0 provides:
 - per-plug-in load and callback error isolation;
 - Obsidian-compatible Markdown documentation;
 - Doxygen comments for public C++ APIs and LDoc comments for Lua APIs.
-- a local `sdl-pg docs` command and optional manual documentation workflow.
+- a local `squared-pg docs` command and optional manual documentation workflow.
 - an OpenGL ES 2 graphics context under the `squared::` namespace;
 - `Texture`, `TextureRegion`, `Sprite`, `SpriteBatch`, and
   `OrthographicCamera` graphics2d foundations;
@@ -55,6 +64,12 @@ Version 0.5.0 provides:
 The generator does not initialize Git, commit, push, publish, or contact
 GitHub. Local generation and builds are offline by default.
 
+RAM efficiency is the primary runtime engineering constraint. Frontend
+selection happens during generation and compilation so an application does
+not carry SDL2, SFML, PDCurses, or their adapter state unless its chosen
+template needs them. Startup and screen-transition work may be staged behind
+loading screens, but active execution paths must remain fast and bounded.
+
 ## Install
 
 Install the host tools once:
@@ -66,7 +81,7 @@ pkg install lua54 clang cmake ninja
 Build the bundled private toolchain and install the commands:
 
 ```bash
-cd "$HOME/sandbox/sdl-project-generator"
+cd "$HOME/sandbox/squared-pg"
 lua5.4 toolchain.lua
 ./build/private-lua/bin/lua-5.4.8 tools/private-run.lua setup.lua install
 hash -r
@@ -75,40 +90,100 @@ hash -r
 Verify the installation:
 
 ```bash
-sdl-pg version
-sdl-pg doctor
+squared-pg version
+squared-pg doctor
+squared-pg self-test
 ```
 
 No LuaRocks installation or network download is required. The pinned source
-archives for Lua, LuaFileSystem, Penlight, LDoc, and yyjson are included and
-verified before use.
+archives for Lua, LuaFileSystem, Penlight, LDoc, yyjson, and miniz are
+included and verified before use.
+
+The unreleased `.sq` version 0 proof builds and locally registers Squared
+Application, Graphics, Graphics2D, Scene2D, Math, Time, Data, Messaging, and
+the Android SDL2 Lua project template as independent packages. Application
+proves source-free, header-only `INTERFACE` modules. Graphics owns color and the
+SDL/OpenGL ES context boundary. Graphics2D owns textures, sprites, atlases,
+batching, and cameras while requiring exact Graphics and Math versions.
+Scene2D begins Phase 6 with owned actor hierarchy, ordered traversal, bounds
+hit testing, and a root stage while requiring exact Graphics2D. Data
+owns its pinned yyjson source and license. Messaging declares exact Data and
+Time dependencies, proving recursive composition.
+Backed-up templates and modules use the same native validation path:
+
+```bash
+squared-pg package build /path/to/package-source /path/to/package.sq
+squared-pg package verify /path/to/package.sq
+squared-pg package add /path/to/package.sq
+squared-pg package status
+squared-pg package resolve \
+  dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14
+```
+
+Importing a local package does not contact a network. Project composition
+refuses file collisions instead of overwriting template or developer files.
+Repeated imports of the same ID, version, and content are harmless; conflicting
+content under an existing ID and version is rejected.
+Exact module dependencies are resolved recursively before project mutation.
+The resolver produces dependency-first deterministic order, suppresses
+diamonds, and rejects missing packages, cycles, and conflicting versions.
+Broad Android shared-storage access is opt-in through `squared-pg new
+--manage-all-files`; enabled projects document the risk and open their
+app-specific special-access settings once on first startup when needed.
+
+The packages currently stored in this repository are a frozen offline
+bootstrap catalog and integration fixture for the 0.6 transition. Ongoing
+Squared framework development belongs in the separate `squared` repository:
+it builds new immutable package versions with the installed `squared-pg`, adds
+them to the local registry, and selects a template with `squared-pg template
+use ID@VERSION`. Generator source and its private toolchain do not need to be
+rebuilt for those framework changes.
+
+## Diagnostics for people and agents
+
+```bash
+squared-pg verbose
+squared-pg agent-feedback
+squared-pg project verify .
+```
+
+`verbose` is the complete human-readable status report. `agent-feedback` is a
+stable, allowlisted subset designed for an AI coding agent: at most 32 lines
+and 4 KiB, package counts instead of inventories, actionable issues and a next
+command, no arbitrary environment dump, and an explicit `truncated` field.
+These commands run only in the generator process and add no runtime code or
+memory use to generated applications.
 
 ## Register offline dependencies
 
-Existing registrations beneath `~/.local/share/sdl-pg` are reused. On a clean
-installation:
+Existing `sdl-pg` configuration and registrations are reused during the
+naming transition. Clean installations use `~/.config/squared-pg` and
+`~/.local/share/squared-pg`:
 
 ```bash
-sdl-pg kit add \
+squared-pg dependency add android-sdl2 \
   /sdcard/Download/offline-deps/SDL2-2.32.10-TTF-2.24.0-MIXER-2.8.2-IMAGE-2.8.12-NET-2.4.0-android-arm64.zip
 
-sdl-pg wrapper add \
+squared-pg wrapper add \
   "$HOME/sandbox/sdl2-smoke-test/phone-project"
 ```
 
 Check the registered inputs:
 
 ```bash
-sdl-pg kit status
-sdl-pg wrapper status
+squared-pg dependency status android-sdl2
+squared-pg wrapper status
 ```
+
+The older `squared-pg kit add` and `kit status` forms remain aliases for the
+same `android-sdl2` provider and reuse existing cached state.
 
 ## Create and build
 
 Create disposable code beneath `~/sandbox`:
 
 ```bash
-sdl-pg new lua-rogue \
+squared-pg new lua-rogue \
   --package dev.example.luarogue
 
 cd "$HOME/sandbox/lua-rogue"
@@ -123,7 +198,7 @@ Generate recursive Lua, C++, and SDL Java-wrapper API references from the
 project root or any child directory:
 
 ```bash
-sdl-pg docs
+squared-pg docs
 ```
 
 Generated projects retain an Obsidian-compatible `docs/API.md` index. LDoc
@@ -133,8 +208,8 @@ XML for future exporters.
 ## Promote and demote
 
 ```bash
-sdl-pg promote lua-rogue
-sdl-pg demote published-project
+squared-pg promote lua-rogue
+squared-pg demote published-project
 ```
 
 Both operations preserve their source directory. Promotion refuses source Git
@@ -170,5 +245,5 @@ plug-in API has stabilized through real projects.
 
 ## License
 
-SDL Project Generator is available under the MIT License. Bundled third-party
+Squared Project Generator is available under the MIT License. Bundled third-party
 components retain their own licenses and notices.

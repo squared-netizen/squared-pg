@@ -30,16 +30,20 @@ device before publishing a stable release.
 Keep these values synchronized:
 
 - `CMakeLists.txt`
-- `lua/sdl_pg/main.lua`
+- `lua/sdl_pg/version.lua`
 - `CHANGELOG.md`
-- generated project metadata in `lua/sdl_pg/project.lua`
+- the bundled template manifest and generated project metadata
 
 ## Suggested Git sequence
 
-Review the complete diff before committing:
+Review the complete diff and explicitly stage the intended source paths. Do
+not use a blind `git add .` in an incubation worktree that contains historical
+archives or compiler scratch files:
 
 ```bash
-git add .
+git diff --check
+git status --short
+# git add only the reviewed source paths
 git diff --cached --check
 git diff --cached --stat
 git status --short
@@ -48,11 +52,16 @@ git status --short
 After the local and Android tests pass:
 
 ```bash
-git commit -m "Release SDL Project Generator VERSION"
-git tag -a vVERSION -m "SDL Project Generator vVERSION"
+git commit -m "Release Squared Project Generator VERSION"
+git tag -a vVERSION -m "Squared Project Generator vVERSION"
 git push
 git push origin vVERSION
 ```
 
 Creating the public release and attaching its checksummed archive remains an
 explicit manual operation.
+
+The first public `squared-pg` publication should preserve the incubation
+history. Confirm the final GitHub owner/repository and whether the existing
+remote will be renamed or a new remote added before changing `origin`,
+committing, tagging, or pushing.

@@ -1,4 +1,4 @@
---- Safe path helpers for SDL Project Generator.
+--- Safe path helpers for Squared Project Generator.
 -- @module sdl_pg.path
 
 local path = {}

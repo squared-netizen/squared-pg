@@ -47,7 +47,7 @@ collect_html(output_directory)
 local generated_documentation = table.concat(documentation)
 
 assert(
-    contents:find("SDL Project Generator Lua API", 1, true),
+    contents:find("Squared Project Generator Lua API", 1, true),
     "generated LDoc index does not contain the project title"
 )
 
@@ -67,8 +67,18 @@ assert(
 )
 
 assert(
+    generated_documentation:find("sdl_pg.provider", 1, true),
+    "generated LDoc output does not contain sdl_pg.provider"
+)
+
+assert(
+    generated_documentation:find("sdl_pg.dependency", 1, true),
+    "generated LDoc output does not contain sdl_pg.dependency"
+)
+
+assert(
     generated_documentation:find("sdl_pg.docs", 1, true),
     "generated LDoc output does not contain sdl_pg.docs"
 )
 
-print("Generated SDL Project Generator LDoc output: OK")
+print("Generated Squared Project Generator LDoc output: OK")

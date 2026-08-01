@@ -193,7 +193,10 @@ function kit.require_active(settings)
     local values = state.load(settings)
 
     if not values.kit_root then
-        error("no SDL2 kit is registered; run sdl-pg kit add ARCHIVE", 0)
+        error(
+            "no SDL2 kit is registered; run squared-pg kit add ARCHIVE",
+            0
+        )
     end
 
     verify_root(values.kit_root)
@@ -205,9 +208,21 @@ end
 -- @return Status table.
 function kit.status(settings)
     local values = state.load(settings)
+    local configured = values.kit_root ~= nil
+    local valid = false
+    local status_error
+    if configured then
+        local ok, message = pcall(verify_root, values.kit_root)
+        valid = ok
+        if not ok then
+            status_error = tostring(message):gsub("[\r\n]+", " ")
+        end
+    end
 
     return {
-        configured = values.kit_root ~= nil,
+        configured = configured,
+        valid = valid,
+        error = status_error,
         root = values.kit_root,
         archive = values.kit_archive,
         sha256 = values.kit_sha256

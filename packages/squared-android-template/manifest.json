@@ -1,0 +1,54 @@
+{
+  "format": "dev.squarednetizen.sq",
+  "format_version": 0,
+  "kind": "template",
+  "id": "dev.squarednetizen.template.android-sdl2-lua",
+  "version": "0.6.0-dev.14",
+  "name": "Squared Android SDL2 Lua",
+  "description": "Offline ARM64 Android project template using SDL2, C++20, Lua, and the Squared framework.",
+  "template": {
+    "profile": "android_sdl2_lua",
+    "directory": "template",
+    "executable_hooks": false,
+    "fields": [
+      {
+        "name": "project_name",
+        "variable": "PROJECT_NAME",
+        "required": true
+      },
+      {
+        "name": "package_name",
+        "variable": "PACKAGE_NAME",
+        "required": true
+      },
+      {
+        "name": "application_name",
+        "variable": "PROJECT_TITLE",
+        "required": false
+      },
+      {
+        "name": "base_version",
+        "variable": "BASE_VERSION",
+        "required": false,
+        "default": "0.1.0"
+      }
+    ],
+    "requires": [
+      {
+        "kind": "module",
+        "id": "dev.squarednetizen.squared.application",
+        "version": "0.6.0-dev.1"
+      },
+      {
+        "kind": "module",
+        "id": "dev.squarednetizen.squared.scene2d",
+        "version": "0.6.0-dev.1"
+      },
+      {
+        "kind": "module",
+        "id": "dev.squarednetizen.squared.messaging",
+        "version": "0.6.0-dev.1"
+      }
+    ]
+  }
+}

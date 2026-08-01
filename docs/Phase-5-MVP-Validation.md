@@ -31,10 +31,13 @@ atlas API, indexed lookups, relative-path safety, rotation path, and
 transactional commit structure.
 
 The same run verifies and extracts yyjson 0.12.0, compiles the
-`squared::data` wrapper, and runs native strict-JSON tests. Generated projects
-must contain the yyjson source, its MIT license, the public JSON header, and
-the wrapper implementation. It also verifies the JSON-driven SDL_ttf
-diagnostic, bundled DejaVu Sans Mono font, and font license.
+`squared::data` wrapper, and runs native strict-JSON tests. It builds and
+validates an independent Squared Data `.sq` package containing the yyjson
+source, its MIT license, the public JSON header, and the wrapper
+implementation. Generated projects must receive those files through exact
+module dependency composition rather than template ownership. The run also
+verifies the JSON-driven SDL_ttf diagnostic, bundled DejaVu Sans Mono font,
+and font license.
 
 Generator tests also verify the platform/application boundary: the SDL entry
 point imports only `create_application()`, developer `.c` and `.cpp` files are
@@ -56,6 +59,37 @@ ordered inspection, relative delays, deterministic JSON, strict round-trip
 parsing, atomic restoration, delivery order, nonempty-queue rejection,
 capacity rejection without partial mutation, and explicit refusal to persist
 process-local provider targets.
+
+The toolchain also builds Messaging as an independent `.sq` package with
+exact Data and Time requirements. The Android template directly requires
+Application, Scene2D, and Messaging, so registry and generator tests must
+resolve Graphics and Math before Graphics2D, Graphics2D before Scene2D, and
+Data and Time before Messaging, without template-owned framework files.
+
+Squared Application is built as a separate header-only `.sq` module. Tests
+verify its `INTERFACE` target, exported C++20 headers, lack of source
+discovery, exact template requirement, and absence of template-owned copies.
+
+Squared Math is built as a separate compiled `.sq` module. Native tests verify
+identity, orthographic projection, and degenerate-bound behavior. Registry and
+generator tests verify its exact Graphics2D requirement, exported CMake target,
+headers and source, Graphics2D linkage, and absence of template-owned copies.
+
+Squared Graphics is built as a separate compiled `.sq` module. Native tests
+verify color conversion and clamping. Registry and generator tests verify its
+platform-target checks, exact Graphics2D requirement, context implementation,
+exported headers, Graphics2D linkage, and absence of template-owned copies.
+
+Squared Graphics2D is built as a separate compiled `.sq` module with exact
+Graphics and Math requirements. Registry and generator tests verify its
+platform-target checks, CMake target, complete public API and implementation,
+dependency-first composition, and absence of template-owned copies.
+
+Squared Scene2D is built as the first Phase 6 `.sq` module with an exact
+Graphics2D requirement. Native tests verify ownership transfer, parent links,
+insertion-order frame traversal, reverse-order topmost hit testing, visibility,
+touchability, removal, clearing, and stage resize behavior. The generated
+Android diagnostic reports `SCENE2D: PASS` after exercising the composed API.
 
 The Termux-native build resolves `/system/lib64/libGLESv2.so`; the GitHub NDK
 build resolves the NDK linker stub. Neither path packages an OpenGL
