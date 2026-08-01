@@ -66,7 +66,7 @@ local definitions = {
     },
     {
         source = "packages/squared-android-template",
-        archive = "squared-android-template-0.6.0-dev.14.sq",
+        archive = "squared-android-template-0.6.0-dev.15.sq",
         kind = "template",
         label = "Squared Android template"
     }

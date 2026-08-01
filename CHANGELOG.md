@@ -9,6 +9,15 @@ tags:
 
 ## Unreleased
 
+- Move the canonical generator checkout and private runtime to
+  `~/.squared/squared-pg`, outside the end-user `~/sandbox` and `~/projects`
+  trees. Installation now refuses every non-canonical source root.
+- Add a dry-run-first `squared-pg uninstall` command with explicit
+  `--confirm`, canonical-root validation, legacy-state cleanup, and tests
+  proving that end-user projects remain untouched.
+- Advance the generator identity to `0.6.0-dev.6` and the frozen bootstrap
+  Android template to `0.6.0-dev.15`, keeping generated project metadata and
+  immutable template coordinates aligned with the generator release.
 - Add supported `package build` and `package verify` commands so external
   repositories can produce and validate immutable `.sq` archives with an
   installed generator instead of rebuilding the generator toolchain.

@@ -165,7 +165,7 @@ local android_template_package = package_registry.add(
     settings,
     path.join(
         root,
-        "build/packages/squared-android-template-0.6.0-dev.14.sq"
+        "build/packages/squared-android-template-0.6.0-dev.15.sq"
     )
 )
 test.equal(
@@ -280,7 +280,7 @@ test.equal(
 )
 test.equal(
     foundation_marker.generator_version,
-    "0.6.0-dev.5",
+    "0.6.0-dev.6",
     "foundation generator version"
 )
 
@@ -729,7 +729,7 @@ test.equal(
 )
 test.equal(
     android_marker.generator_version,
-    "0.6.0-dev.5",
+    "0.6.0-dev.6",
     "Android generator version"
 )
 local android_metadata =
@@ -1359,7 +1359,7 @@ test.equal(
     "version command"
 )
 test.truthy(
-    output[1]:find("squared-pg 0.6.0-dev.5", 1, true) ~= nil,
+    output[1]:find("squared-pg 0.6.0-dev.6", 1, true) ~= nil,
     "version output"
 )
 output = {}
@@ -1477,7 +1477,7 @@ test.equal(
         {
             "package",
             "resolve",
-            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14"
+            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15"
         },
         environment,
         collect(output),
@@ -1553,7 +1553,7 @@ test.truthy(
 )
 test.truthy(
     output[9]:find(
-        "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14",
+        "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15",
         1,
         true
     ) ~= nil and
@@ -1564,11 +1564,11 @@ test.truthy(
 local selected_template, selected_dependencies = template_selection.use(
     settings,
     "dev.squarednetizen.template.android-sdl2-lua",
-    "0.6.0-dev.14"
+    "0.6.0-dev.15"
 )
 test.equal(
     selected_template.version,
-    "0.6.0-dev.14",
+    "0.6.0-dev.15",
     "active template selection"
 )
 test.equal(#selected_dependencies, 8, "selected template dependency count")
@@ -1639,7 +1639,7 @@ test.equal(
     main.run(
         {
             "template", "use",
-            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14"
+            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15"
         },
         environment,
         collect(output),
@@ -1663,7 +1663,7 @@ test.equal(
             "--package",
             "dev.example.clitemplatehack",
             "--template",
-            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14",
+            "dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15",
             "--app-name",
             "CLI Template Proof",
             "--base-version",
@@ -1829,6 +1829,128 @@ test.truthy(
     errors[1]:find("only valid for Android", 1, true) ~= nil,
     "broad storage profile error"
 )
+
+local uninstall_test_root = test_root
+if uninstall_test_root:sub(1, 1) ~= "/" then
+    uninstall_test_root = path.join(
+        lfs.currentdir(),
+        uninstall_test_root:gsub("^%./", "")
+    )
+end
+local uninstall_home = path.join(uninstall_test_root, "uninstall-home")
+local uninstall_root = path.join(
+    uninstall_home,
+    ".squared/squared-pg"
+)
+local uninstall_bin = path.join(uninstall_home, ".bin")
+local uninstall_sandbox = path.join(uninstall_home, "sandbox")
+local uninstall_projects = path.join(uninstall_home, "projects")
+
+for _, value in ipairs({
+    path.join(uninstall_root, "build/private-lua/bin/lua-5.4.8"),
+    path.join(uninstall_bin, "squared-pg"),
+    path.join(uninstall_bin, "squared-project-generator"),
+    path.join(uninstall_bin, "sdl-pg"),
+    path.join(uninstall_bin, "sdl-project-generator"),
+    path.join(uninstall_home, ".config/squared-pg/config.lua"),
+    path.join(uninstall_home, ".config/sdl-pg/config.lua"),
+    path.join(uninstall_home, ".local/share/squared-pg/state.lua"),
+    path.join(uninstall_home, ".local/share/sdl-pg/state.lua"),
+    path.join(uninstall_sandbox, "keep.txt"),
+    path.join(uninstall_projects, "keep.txt")
+}) do
+    fs.write_file(value, "sentinel")
+end
+
+local uninstall_environment = {
+    HOME = uninstall_home,
+    PWD = uninstall_test_root,
+    SQUARED_PG_ROOT = uninstall_root,
+    SQUARED_PG_BIN_DIR = uninstall_bin
+}
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {"uninstall"},
+        uninstall_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "uninstall dry run"
+)
+test.truthy(fs.exists(uninstall_root), "uninstall dry run preserves root")
+test.truthy(
+    table.concat(output, "\n"):find(
+        "No files were removed.",
+        1,
+        true
+    ) ~= nil,
+    "uninstall dry run output"
+)
+
+local inside_environment = {}
+for key, value in pairs(uninstall_environment) do
+    inside_environment[key] = value
+end
+inside_environment.PWD = uninstall_root
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {"uninstall", "--confirm"},
+        inside_environment,
+        collect(output),
+        collect(errors)
+    ),
+    1,
+    "uninstall refuses generator working directory"
+)
+test.truthy(
+    errors[1]:find("change directory outside", 1, true) ~= nil,
+    "uninstall working-directory error"
+)
+test.truthy(fs.exists(uninstall_root), "refused uninstall preserves root")
+
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {"uninstall", "--confirm"},
+        uninstall_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "confirmed uninstall"
+)
+test.truthy(not fs.exists(uninstall_root), "uninstall removes generator root")
+test.truthy(
+    not fs.exists(path.join(uninstall_home, ".config/squared-pg")),
+    "uninstall removes primary configuration"
+)
+test.truthy(
+    not fs.exists(path.join(uninstall_home, ".config/sdl-pg")),
+    "uninstall removes legacy configuration"
+)
+test.truthy(
+    not fs.exists(path.join(uninstall_home, ".local/share/squared-pg")),
+    "uninstall removes primary cache"
+)
+test.truthy(
+    not fs.exists(path.join(uninstall_home, ".local/share/sdl-pg")),
+    "uninstall removes legacy cache"
+)
+test.truthy(
+    fs.mode(path.join(uninstall_sandbox, "keep.txt")) == "file",
+    "uninstall preserves sandbox projects"
+)
+test.truthy(
+    fs.mode(path.join(uninstall_projects, "keep.txt")) == "file",
+    "uninstall preserves serious projects"
+)
+
 test.equal(
     main.run({"unknown"}, environment, collect(output), collect(errors)),
     1,

@@ -78,10 +78,14 @@ Install the host tools once:
 pkg install lua54 clang cmake ninja
 ```
 
-Build the bundled private toolchain and install the commands:
+Clone the generator into its protected user-local tool root. Generator-only
+code never belongs beneath the end-user `~/sandbox` or `~/projects` trees:
 
 ```bash
-cd "$HOME/sandbox/squared-pg"
+mkdir -p "$HOME/.squared"
+git clone https://github.com/squared-netizen/sdl-project-generator.git \
+  "$HOME/.squared/squared-pg"
+cd "$HOME/.squared/squared-pg"
 lua5.4 toolchain.lua
 ./build/private-lua/bin/lua-5.4.8 tools/private-run.lua setup.lua install
 hash -r
@@ -98,6 +102,26 @@ squared-pg self-test
 No LuaRocks installation or network download is required. The pinned source
 archives for Lua, LuaFileSystem, Penlight, LDoc, yyjson, and miniz are
 included and verified before use.
+
+### Uninstall
+
+Preview the complete generator-owned cleanup plan without changing anything:
+
+```bash
+squared-pg uninstall
+```
+
+To uninstall, first leave the generator repository and explicitly confirm:
+
+```bash
+cd "$HOME"
+squared-pg uninstall --confirm
+```
+
+Uninstall removes the generator beneath `~/.squared`, its launchers,
+configuration, local registry, and legacy `sdl-pg` state. It never removes or
+traverses `~/sandbox` or `~/projects`; all generated end-user code is
+preserved.
 
 The unreleased `.sq` version 0 proof builds and locally registers Squared
 Application, Graphics, Graphics2D, Scene2D, Math, Time, Data, Messaging, and
@@ -117,7 +141,7 @@ squared-pg package verify /path/to/package.sq
 squared-pg package add /path/to/package.sq
 squared-pg package status
 squared-pg package resolve \
-  dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14
+  dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15
 ```
 
 Importing a local package does not contact a network. Project composition

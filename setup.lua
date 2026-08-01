@@ -43,6 +43,18 @@ if not home or home == "" then
     os.exit(1)
 end
 
+local canonical_root = path.join(home, ".squared/squared-pg")
+if absolute_root ~= canonical_root then
+    io.stderr:write(
+        "ERROR: Squared Project Generator must be installed from ",
+        canonical_root,
+        "\n",
+        "Move or clone the repository there, rebuild the private ",
+        "toolchain, and run setup again.\n"
+    )
+    os.exit(1)
+end
+
 local private_lua =
     path.join(absolute_root, "build/private-lua/bin/lua-5.4.8")
 if fs.mode(private_lua) ~= "file" then

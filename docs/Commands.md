@@ -25,6 +25,28 @@ inventory, never dumps arbitrary environment variables, and always ends with
 `truncated=true` or `truncated=false`. `self-test` performs non-mutating checks
 of the installed generator and its registered inputs.
 
+## Uninstall
+
+```sh
+squared-pg uninstall
+squared-pg uninstall --confirm
+```
+
+The command without `--confirm` is a dry run: it prints every generator-owned
+path that would be removed and the end-user roots that will be preserved.
+Confirmed uninstall removes the canonical `~/.squared/squared-pg` tool tree,
+installed launchers, configuration, package registry, cached registered
+inputs, and corresponding legacy `sdl-pg` state.
+
+Run the confirmed command from outside the generator tree:
+
+```sh
+cd "$HOME"
+squared-pg uninstall --confirm
+```
+
+The command never traverses or removes `~/sandbox` or `~/projects`.
+
 ## Documentation
 
 ```sh
@@ -93,7 +115,7 @@ changes the active selection.
 ```sh
 squared-pg new NAME --package JAVA.PACKAGE
 squared-pg new NAME --package JAVA.PACKAGE \
-  --template dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.14 \
+  --template dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15 \
   --app-name "Application Name" \
   --base-version 0.1.0
 squared-pg new NAME --package JAVA.PACKAGE --project

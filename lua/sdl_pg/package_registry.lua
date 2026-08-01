@@ -52,8 +52,8 @@ registry.defaults = {
     },
     template = {
         id = "dev.squarednetizen.template.android-sdl2-lua",
-        version = "0.6.0-dev.14",
-        archive = "squared-android-template-0.6.0-dev.14.sq"
+        version = "0.6.0-dev.15",
+        archive = "squared-android-template-0.6.0-dev.15.sq"
     }
 }
 

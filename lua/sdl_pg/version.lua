@@ -3,6 +3,6 @@
 
 return {
     name = "squared-pg",
-    version = "0.6.0-dev.5",
+    version = "0.6.0-dev.6",
     private_lua = "5.4.8"
 }

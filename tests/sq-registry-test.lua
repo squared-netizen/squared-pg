@@ -172,7 +172,7 @@ assert(
 
 local template_archive = path.join(
     root,
-    "build/packages/squared-android-template-0.6.0-dev.14.sq"
+    "build/packages/squared-android-template-0.6.0-dev.15.sq"
 )
 local template_record =
     package_registry.add(settings, template_archive)

@@ -12,6 +12,7 @@ local report = require("sdl_pg.report")
 local self_test = require("sdl_pg.self_test")
 local template_selection = require("sdl_pg.template_selection")
 local release = require("sdl_pg.version")
+local uninstall = require("sdl_pg.uninstall")
 local wrapper = require("sdl_pg.wrapper")
 
 local main = {}
@@ -27,6 +28,7 @@ Usage:
   squared-pg agent-feedback
   squared-pg self-test
   squared-pg docs
+  squared-pg uninstall [--confirm]
   squared-pg dependency add ID ARCHIVE
   squared-pg dependency status [ID]
   squared-pg kit add ARCHIVE
@@ -64,6 +66,8 @@ local function default_environment()
         SQUARED_PG_CACHE_ROOT = os.getenv("SQUARED_PG_CACHE_ROOT"),
         SQUARED_PG_SANDBOX_ROOT = os.getenv("SQUARED_PG_SANDBOX_ROOT"),
         SQUARED_PG_PROJECTS_ROOT = os.getenv("SQUARED_PG_PROJECTS_ROOT"),
+        SQUARED_PG_BIN_DIR = os.getenv("SQUARED_PG_BIN_DIR"),
+        SDL_PG_BIN_DIR = os.getenv("SDL_PG_BIN_DIR"),
         SDL_PG_CONFIG = os.getenv("SDL_PG_CONFIG"),
         SDL_PG_ROOT = rawget(_G, "SDL_PG_ROOT"),
         SDL_PG_CACHE_ROOT = os.getenv("SDL_PG_CACHE_ROOT"),
@@ -393,6 +397,12 @@ function main.run(arguments, environment, stdout, stderr)
         elseif command == "version" or command == "--version" then
             stdout("squared-pg " .. release.version ..
                 " (private Lua " .. release.private_lua .. ")")
+        elseif command == "uninstall" then
+            if arguments[2] and arguments[2] ~= "--confirm" or
+                arguments[3] then
+                error("Usage: squared-pg uninstall [--confirm]", 0)
+            end
+            uninstall.run(environment, arguments[2] == "--confirm", stdout)
         else
             local settings = config.load(environment)
 
