@@ -2,6 +2,8 @@
 #include <squared/sq/package.hpp>
 #include <squared/sq/writer.hpp>
 
+#include "sha256.hpp"
+
 extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
@@ -53,6 +55,27 @@ int return_error(lua_State* state, const squared::sq::Error& error)
     lua_pushnil(state);
     push_error(state, error);
     return 2;
+}
+
+int module_sha256_file(lua_State* state)
+{
+    const char* filename = luaL_checkstring(state, 1);
+    std::string digest;
+    std::string message;
+    if (!squared::sq::internal::sha256_file(
+            std::filesystem::path(filename),
+            digest,
+            message
+        )) {
+        return luaL_error(
+            state,
+            "cannot calculate SHA-256 for %s: %s",
+            filename,
+            message.c_str()
+        );
+    }
+    lua_pushlstring(state, digest.data(), digest.size());
+    return 1;
 }
 
 LuaPackage* check_package(lua_State* state, int index)
@@ -538,6 +561,7 @@ extern "C" int luaopen_squared_sq(lua_State* state)
     static const luaL_Reg functions[] = {
         {"open", module_open},
         {"create_from_directory", module_create},
+        {"sha256_file", module_sha256_file},
         {nullptr, nullptr}
     };
     luaL_newlib(state, functions);

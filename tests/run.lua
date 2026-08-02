@@ -24,11 +24,19 @@ local path = require("sdl_pg.path")
 local plugin_runtime_test = require("plugin-runtime-test")
 local provider = require("sdl_pg.provider")
 local project = require("sdl_pg.project")
+local generator_sha256 = require("sdl_pg.sha256")
+local sq = require("squared.sq")
 local state = require("sdl_pg.state")
 local template = require("sdl_pg.template")
 local template_selection = require("sdl_pg.template_selection")
 local wrapper = require("sdl_pg.wrapper")
 local test = require("testlib")
+
+test.equal(
+    generator_sha256.file,
+    sq.sha256_file,
+    "generator uses native streaming SHA-256"
+)
 
 local test_root = path.join(root, "build/generator-tests")
 if fs.exists(test_root) then

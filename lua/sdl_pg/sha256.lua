@@ -11,4 +11,13 @@ if not generator_root then
         source:match("^(.*)/lua/sdl_pg/[^/]+%.lua$") or "."
 end
 
-return dofile(generator_root .. "/tools/sha256.lua")
+local sha256 = dofile(generator_root .. "/tools/sha256.lua")
+local loaded, sq = pcall(require, "squared.sq")
+
+if loaded and type(sq.sha256_file) == "function" then
+    -- Installed commands use the private native binding so large dependency
+    -- archives are hashed incrementally instead of being loaded into Lua.
+    sha256.file = sq.sha256_file
+end
+
+return sha256

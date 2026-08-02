@@ -38,6 +38,18 @@ local function write(path, value)
 end
 
 remove_tree(work)
+write(work .. "/sha256.txt", "abc")
+assert(
+    sq.sha256_file(work .. "/sha256.txt") ==
+        "ba7816bf8f01cfea414140de5dae2223" ..
+        "b00361a396177a9cb410ff61f20015ad"
+)
+local missing_hash_ok, missing_hash_error = pcall(function()
+    sq.sha256_file(work .. "/missing-sha256.txt")
+end)
+assert(not missing_hash_ok)
+assert(tostring(missing_hash_error):find("cannot open file", 1, true))
+
 mkdir_p(
     work ..
         "/content/modules/squared-time/include/squared/time"

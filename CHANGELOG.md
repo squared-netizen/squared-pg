@@ -9,6 +9,8 @@ tags:
 
 ## Unreleased
 
+- Hash large dependency archives through the private native streaming SHA-256
+  implementation instead of loading the complete archive into Lua memory.
 - Move the canonical generator checkout and private runtime to
   `~/.squared/squared-pg`, outside the end-user `~/sandbox` and `~/projects`
   trees. Installation now refuses every non-canonical source root.
