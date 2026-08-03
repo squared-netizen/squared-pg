@@ -9,6 +9,12 @@ tags:
 
 ## Unreleased
 
+- Add `package sync` as the repository-wide composition of existing package
+  build, verification, and registration operations. Add `project build` as
+  the generator-owned entry point to a generated project's checked-in build
+  script, including `--clean` and `--online-once` forwarding.
+- Register the portable Android template during installation while preserving
+  the self-contained `dev.15` template as the clean-install default.
 - Add Android template `0.6.0-dev.16` as an opt-in portable-framework
   integration target. It consumes Graphics, Graphics2D, and Scene2D `dev.2`
   from the independent `squared` repository and links the separately packaged

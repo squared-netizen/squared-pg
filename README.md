@@ -139,6 +139,7 @@ Backed-up templates and modules use the same native validation path:
 squared-pg package build /path/to/package-source /path/to/package.sq
 squared-pg package verify /path/to/package.sq
 squared-pg package add /path/to/package.sq
+squared-pg package sync /path/to/framework-repository
 squared-pg package status
 squared-pg package resolve \
   dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.15
@@ -163,6 +164,12 @@ them to the local registry, and selects a template with `squared-pg template
 use ID@VERSION`. Generator source and its private toolchain do not need to be
 rebuilt for those framework changes.
 
+From a framework repository whose package sources live beneath `packages/`,
+`squared-pg package sync` builds deterministic archives beneath `dist/`,
+verifies them, and registers them. Repeated synchronization reuses identical
+archives and registrations. Changed content under an existing package version
+is rejected and requires a version bump.
+
 The self-contained Android template `0.6.0-dev.15` remains the default for a
 clean generator installation. Android template `0.6.0-dev.16` is the portable
 framework integration target. It requires Graphics, Graphics2D, and Scene2D
@@ -177,7 +184,13 @@ framework implementations.
 squared-pg verbose
 squared-pg agent-feedback
 squared-pg project verify .
+squared-pg project build .
 ```
+
+`project build` locates the generated project root and dispatches its existing
+`tools/build.lua` through the generator's private Lua. Add `--clean` for a
+clean rebuild or `--online-once` for the project's explicit Gradle bootstrap
+path.
 
 `verbose` is the complete human-readable status report. `agent-feedback` is a
 stable, allowlisted subset designed for an AI coding agent: at most 32 lines
@@ -219,11 +232,11 @@ squared-pg new lua-rogue \
   --package dev.example.luarogue
 
 cd "$HOME/sandbox/lua-rogue"
-lua5.4 tools/build.lua
+squared-pg project build
 ```
 
 Use `--project` to create serious publishing code beneath `~/projects`.
-Use `--online-once` with the generated build command only when the Gradle
+Use `--online-once` with `squared-pg project build` only when the Gradle
 dependency cache is incomplete.
 
 Generate recursive Lua, C++, and SDL Java-wrapper API references from the

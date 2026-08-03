@@ -74,6 +74,7 @@ squared-pg wrapper status
 squared-pg package add BACKUP.sq
 squared-pg package build SOURCE_DIRECTORY OUTPUT.sq
 squared-pg package verify ARCHIVE.sq
+squared-pg package sync [REPOSITORY]
 squared-pg package status
 squared-pg package resolve ID@VERSION
 squared-pg template status
@@ -110,6 +111,13 @@ Package registration remains immutable: changed contents require a new
 version. `template use` performs the complete recursive preflight before it
 changes the active selection.
 
+`package sync` scans `REPOSITORY/packages` (or the current directory when the
+argument is omitted), builds and verifies each package through the same
+single-package APIs, writes versioned archives beneath `dist/`, and registers
+them. It reuses byte-independent content matches and refuses changed content
+under an existing ID/version rather than overwriting an archive or registry
+record.
+
 The self-contained Android template `0.6.0-dev.15` is the clean-install
 default. After registering the portable framework packages built by the
 independent `squared` repository, select the link-time SDL2/OpenGL integration
@@ -132,6 +140,7 @@ squared-pg new NAME --package JAVA.PACKAGE --project
 squared-pg new NAME --package JAVA.PACKAGE --manage-all-files
 squared-pg new NAME --foundation
 squared-pg project verify [DIRECTORY]
+squared-pg project build [DIRECTORY] [--clean] [--online-once]
 squared-pg promote NAME
 squared-pg demote NAME
 ```
@@ -153,6 +162,11 @@ without the switch do none of these things.
 `project verify` locates the nearest generated-project marker, safely reads
 its metadata, checks `project.lua` agreement, and rejects leaked
 generator-only dispatch modules.
+`project build` performs that verification and then runs the generated
+project's checked-in `tools/build.lua` with the generator's private Lua.
+`--clean` and `--online-once` are forwarded directly to that build entry
+point; without them, the existing offline incremental build remains the
+default.
 
 ## Naming compatibility
 

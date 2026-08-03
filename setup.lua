@@ -118,17 +118,7 @@ local settings = config.load({
     SDL_PG_SANDBOX_ROOT = os.getenv("SDL_PG_SANDBOX_ROOT"),
     SDL_PG_PROJECTS_ROOT = os.getenv("SDL_PG_PROJECTS_ROOT")
 })
-for _, built_in in ipairs({
-    package_registry.defaults.application,
-    package_registry.defaults.graphics,
-    package_registry.defaults.math,
-    package_registry.defaults.graphics2d,
-    package_registry.defaults.scene2d,
-    package_registry.defaults.time,
-    package_registry.defaults.data,
-    package_registry.defaults.messaging,
-    package_registry.defaults.template
-}) do
+for _, built_in in ipairs(package_registry.builtins) do
     if not package_registry.find(
             settings,
             built_in.id,
@@ -188,6 +178,7 @@ local launcher = table.concat({
         ),
     "",
     "_G.SQUARED_PG_ROOT = " .. string.format("%q", absolute_root),
+    "_G.SQUARED_PG_PRIVATE_LUA = " .. string.format("%q", private_lua),
     "_G.SDL_PG_ROOT = " .. string.format("%q", absolute_root),
     "",
     "local arguments = {}",

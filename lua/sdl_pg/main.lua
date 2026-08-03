@@ -7,6 +7,7 @@ local doctor = require("sdl_pg.doctor")
 local docs = require("sdl_pg.docs")
 local package_builder = require("sdl_pg.package_builder")
 local package_registry = require("sdl_pg.package_registry")
+local package_sync = require("sdl_pg.package_sync")
 local project = require("sdl_pg.project")
 local report = require("sdl_pg.report")
 local self_test = require("sdl_pg.self_test")
@@ -36,11 +37,13 @@ Usage:
   squared-pg package add ARCHIVE.sq
   squared-pg package build SOURCE_DIRECTORY OUTPUT.sq
   squared-pg package verify ARCHIVE.sq
+  squared-pg package sync [REPOSITORY]
   squared-pg package status
   squared-pg package resolve ID@VERSION
   squared-pg template status
   squared-pg template use ID@VERSION
   squared-pg project verify [DIRECTORY]
+  squared-pg project build [DIRECTORY] [--clean] [--online-once]
   squared-pg wrapper add EXISTING_PROJECT
   squared-pg wrapper status
   squared-pg new PROJECT_NAME --package JAVA.PACKAGE
@@ -63,6 +66,7 @@ local function default_environment()
         PWD = os.getenv("PWD"),
         SQUARED_PG_CONFIG = os.getenv("SQUARED_PG_CONFIG"),
         SQUARED_PG_ROOT = rawget(_G, "SQUARED_PG_ROOT"),
+        SQUARED_PG_PRIVATE_LUA = rawget(_G, "SQUARED_PG_PRIVATE_LUA"),
         SQUARED_PG_CACHE_ROOT = os.getenv("SQUARED_PG_CACHE_ROOT"),
         SQUARED_PG_SANDBOX_ROOT = os.getenv("SQUARED_PG_SANDBOX_ROOT"),
         SQUARED_PG_PROJECTS_ROOT = os.getenv("SQUARED_PG_PROJECTS_ROOT"),
@@ -220,7 +224,7 @@ local function command_wrapper(settings, arguments, out)
     end
 end
 
-local function command_package(settings, arguments, out)
+local function command_package(settings, arguments, environment, out)
     if arguments[2] == "add" and arguments[3] and not arguments[4] then
         local record = package_registry.add(settings, arguments[3])
         out(string.format(
@@ -247,6 +251,20 @@ local function command_package(settings, arguments, out)
         out("Coordinate: " .. record.id .. "@" .. record.version)
         out("Kind: " .. record.kind)
         out("Content digest: " .. record.content_digest)
+    elseif arguments[2] == "sync" and not arguments[4] then
+        local repository = arguments[3] or environment.PWD or "."
+        local records = package_sync.sync(settings, repository)
+        for _, record in ipairs(records) do
+            out(string.format(
+                "%s  %s@%s  %s",
+                record.archive_reused and "REUSED" or "BUILT ",
+                record.id,
+                record.version,
+                record.already_registered and
+                    "already registered" or "registered"
+            ))
+        end
+        out("Synchronized SQ packages: " .. tostring(#records))
     elseif arguments[2] == "status" and not arguments[3] then
         local records = package_registry.list(settings)
         if #records == 0 then
@@ -291,6 +309,7 @@ local function command_package(settings, arguments, out)
             "Usage: squared-pg package add ARCHIVE.sq | " ..
             "squared-pg package build SOURCE_DIRECTORY OUTPUT.sq | " ..
             "squared-pg package verify ARCHIVE.sq | " ..
+            "squared-pg package sync [REPOSITORY] | " ..
             "squared-pg package status | " ..
             "squared-pg package resolve ID@VERSION",
             0
@@ -332,15 +351,50 @@ local function write_lines(lines, out)
 end
 
 local function command_project(arguments, environment, out)
-    if arguments[2] ~= "verify" or arguments[4] then
-        error("Usage: squared-pg project verify [DIRECTORY]", 0)
+    if arguments[2] == "verify" and not arguments[4] then
+        local value = project.verify(arguments[3] or environment.PWD or ".")
+        out("Project: " .. value.root)
+        out("Marker: " .. value.marker)
+        out("Verification: " .. (value.valid and "OK" or "FAILED"))
+        for _, issue in ipairs(value.issues) do out("Issue: " .. issue) end
+        if not value.valid then error("project verification failed", 0) end
+        return
     end
-    local value = project.verify(arguments[3] or environment.PWD or ".")
-    out("Project: " .. value.root)
-    out("Marker: " .. value.marker)
-    out("Verification: " .. (value.valid and "OK" or "FAILED"))
-    for _, issue in ipairs(value.issues) do out("Issue: " .. issue) end
-    if not value.valid then error("project verification failed", 0) end
+
+    if arguments[2] == "build" then
+        local directory
+        local options = {
+            lua = environment.SQUARED_PG_PRIVATE_LUA or "lua5.4"
+        }
+        for index = 3, #arguments do
+            local argument = arguments[index]
+            if argument == "--clean" then
+                options.clean = true
+            elseif argument == "--online-once" then
+                options.online_once = true
+            elseif argument:sub(1, 2) == "--" then
+                error("unknown project build option: " .. argument, 0)
+            elseif directory then
+                error("project build accepts at most one directory", 0)
+            else
+                directory = argument
+            end
+        end
+        local result = project.build(
+            directory or environment.PWD or ".",
+            options
+        )
+        out("Project: " .. result.root)
+        out("Build: OK")
+        return
+    end
+
+    error(
+        "Usage: squared-pg project verify [DIRECTORY] | " ..
+        "squared-pg project build [DIRECTORY] " ..
+        "[--clean] [--online-once]",
+        0
+    )
 end
 
 local function command_self_test(settings, environment, out)
@@ -441,7 +495,7 @@ function main.run(arguments, environment, stdout, stderr)
             elseif command == "wrapper" then
                 command_wrapper(settings, arguments, stdout)
             elseif command == "package" then
-                command_package(settings, arguments, stdout)
+                command_package(settings, arguments, environment, stdout)
             elseif command == "template" then
                 command_template(settings, arguments, stdout)
             elseif command == "project" then

@@ -3,6 +3,7 @@
 
 local fs = require("sdl_pg.fs")
 local path = require("sdl_pg.path")
+local process = require("sdl_pg.process")
 local provider = require("sdl_pg.provider")
 local release = require("sdl_pg.version")
 
@@ -254,6 +255,30 @@ function project.verify(start)
         metadata = metadata,
         valid = #issues == 0,
         issues = issues
+    }
+end
+
+--- Build a generated project through its checked-in build entry point.
+-- @param start Project directory or a child directory.
+-- @param[opt] options Build options: clean, online_once, and lua.
+-- @return Build summary.
+function project.build(start, options)
+    options = options or {}
+    local verification = project.verify(start or ".")
+    if not verification.valid then error("project verification failed", 0) end
+    local builder = path.join(verification.root, "tools/build.lua")
+    if fs.mode(builder) ~= "file" then
+        error("generated project build entry point is missing: " .. builder, 0)
+    end
+    local arguments = {options.lua or "lua5.4", builder}
+    if options.clean then arguments[#arguments + 1] = "--clean" end
+    if options.online_once then arguments[#arguments + 1] = "--online-once" end
+    process.run(arguments, verification.root)
+    return {
+        root = verification.root,
+        builder = builder,
+        clean = options.clean == true,
+        online_once = options.online_once == true
     }
 end
 

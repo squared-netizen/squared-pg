@@ -20,10 +20,12 @@ local fs = require("sdl_pg.fs")
 local main = require("sdl_pg.main")
 local package_builder = require("sdl_pg.package_builder")
 local package_registry = require("sdl_pg.package_registry")
+local package_sync = require("sdl_pg.package_sync")
 local path = require("sdl_pg.path")
 local plugin_runtime_test = require("plugin-runtime-test")
 local provider = require("sdl_pg.provider")
 local project = require("sdl_pg.project")
+local process = require("sdl_pg.process")
 local generator_sha256 = require("sdl_pg.sha256")
 local sq = require("squared.sq")
 local state = require("sdl_pg.state")
@@ -37,6 +39,17 @@ test.equal(
     sq.sha256_file,
     "generator uses native streaming SHA-256"
 )
+test.equal(
+    package_registry.defaults.template.version,
+    "0.6.0-dev.15",
+    "self-contained template remains default"
+)
+test.equal(
+    package_registry.portable_template.version,
+    "0.6.0-dev.16",
+    "portable template is a built-in opt-in"
+)
+test.equal(#package_registry.builtins, 10, "complete built-in package catalog")
 
 local test_root = path.join(root, "build/generator-tests")
 if fs.exists(test_root) then
@@ -1606,6 +1619,73 @@ test.fails(function()
     )
 end, "already exists")
 
+local sync_repository = path.join(test_root, "sync-repository")
+fs.copy_tree_transactional(
+    path.join(root, "packages/squared-time"),
+    path.join(sync_repository, "packages/squared-time")
+)
+local sync_settings = {
+    cache_root = path.join(test_root, "sync-cache")
+}
+local synchronized = package_sync.sync(sync_settings, sync_repository)
+test.equal(#synchronized, 1, "repository package synchronization count")
+test.truthy(
+    fs.mode(path.join(
+        sync_repository,
+        "dist/squared-time-0.6.0-dev.1.sq"
+    )) == "file",
+    "repository package synchronization archive"
+)
+test.truthy(
+    package_registry.find(
+        sync_settings,
+        "dev.squarednetizen.squared.time",
+        "0.6.0-dev.1"
+    ) ~= nil,
+    "repository package synchronization registration"
+)
+local synchronized_again = package_sync.sync(sync_settings, sync_repository)
+test.truthy(
+    synchronized_again[1].archive_reused,
+    "repository package synchronization reuses archive"
+)
+test.truthy(
+    synchronized_again[1].already_registered,
+    "repository package synchronization reuses registration"
+)
+local sync_environment = {}
+for key, value in pairs(environment) do sync_environment[key] = value end
+sync_environment.SQUARED_PG_CACHE_ROOT = sync_settings.cache_root
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {"package", "sync", sync_repository},
+        sync_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "repository package sync command"
+)
+test.truthy(
+    table.concat(output, "\n"):find(
+        "Synchronized SQ packages: 1",
+        1,
+        true
+    ) ~= nil,
+    "repository package sync command output"
+)
+local changed_document = path.join(
+    sync_repository,
+    "packages/squared-time/content/docs/Time.md"
+)
+fs.write_file(changed_document, fs.read_file(changed_document) .. "changed\n")
+test.fails(function()
+    package_sync.sync(sync_settings, sync_repository)
+end, "bump the package version")
+fs.remove_tree(sync_repository)
+
 output = {}
 errors = {}
 local cli_package_output =
@@ -1747,6 +1827,51 @@ test.truthy(
     table.concat(output, "\n"):find("Verification: OK", 1, true) ~= nil,
     "generated project verification output"
 )
+local original_process_run = process.run
+local captured_build
+process.run = function(arguments, working_directory)
+    captured_build = {
+        arguments = arguments,
+        working_directory = working_directory
+    }
+end
+local build_environment = {}
+for key, value in pairs(environment) do build_environment[key] = value end
+build_environment.SQUARED_PG_PRIVATE_LUA = "/private/lua-5.4.8"
+output = {}
+errors = {}
+local build_result = main.run(
+    {
+        "project", "build", cli_project,
+        "--clean", "--online-once"
+    },
+    build_environment,
+    collect(output),
+    collect(errors)
+)
+process.run = original_process_run
+test.equal(
+    build_result,
+    0,
+    "generated project build command"
+)
+test.equal(
+    captured_build.working_directory,
+    cli_project,
+    "generated project build working directory"
+)
+test.equal(
+    captured_build.arguments[1],
+    "/private/lua-5.4.8",
+    "generated project build private Lua"
+)
+test.equal(captured_build.arguments[3], "--clean", "project clean forwarding")
+test.equal(
+    captured_build.arguments[4],
+    "--online-once",
+    "project online-once forwarding"
+)
+test.equal(output[2], "Build: OK", "generated project build output")
 output = {}
 errors = {}
 test.equal(

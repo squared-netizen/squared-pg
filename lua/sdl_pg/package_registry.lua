@@ -61,6 +61,28 @@ registry.defaults = {
 -- frontend-neutral `template` coordinate.
 registry.defaults.android_template = registry.defaults.template
 
+--- Portable integration template installed alongside the default template.
+-- It remains opt-in until selected with `squared-pg template use`.
+registry.portable_template = {
+    id = "dev.squarednetizen.template.android-sdl2-lua",
+    version = "0.6.0-dev.16",
+    archive = "squared-android-template-0.6.0-dev.16.sq"
+}
+
+--- Complete clean-install package catalog in deterministic order.
+registry.builtins = {
+    registry.defaults.application,
+    registry.defaults.graphics,
+    registry.defaults.math,
+    registry.defaults.graphics2d,
+    registry.defaults.scene2d,
+    registry.defaults.time,
+    registry.defaults.data,
+    registry.defaults.messaging,
+    registry.defaults.template,
+    registry.portable_template
+}
+
 local function fail(error_value)
     if type(error_value) == "table" then
         error(
