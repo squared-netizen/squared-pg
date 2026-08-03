@@ -9,6 +9,11 @@ tags:
 
 ## Unreleased
 
+- Add Android template `0.6.0-dev.16` as an opt-in portable-framework
+  integration target. It consumes Graphics, Graphics2D, and Scene2D `dev.2`
+  from the independent `squared` repository and links the separately packaged
+  SDL2/OpenGL backend. The self-contained `dev.15` bootstrap remains the
+  clean-install default until those external framework packages are present.
 - Hash large dependency archives through the private native streaming SHA-256
   implementation instead of loading the complete archive into Lua memory.
 - Move the canonical generator checkout and private runtime to

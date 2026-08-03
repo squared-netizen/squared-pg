@@ -110,6 +110,16 @@ Package registration remains immutable: changed contents require a new
 version. `template use` performs the complete recursive preflight before it
 changes the active selection.
 
+The self-contained Android template `0.6.0-dev.15` is the clean-install
+default. After registering the portable framework packages built by the
+independent `squared` repository, select the link-time SDL2/OpenGL integration
+template with:
+
+```sh
+squared-pg template use \
+  dev.squarednetizen.template.android-sdl2-lua@0.6.0-dev.16
+```
+
 ## Projects
 
 ```sh

@@ -163,6 +163,14 @@ them to the local registry, and selects a template with `squared-pg template
 use ID@VERSION`. Generator source and its private toolchain do not need to be
 rebuilt for those framework changes.
 
+The self-contained Android template `0.6.0-dev.15` remains the default for a
+clean generator installation. Android template `0.6.0-dev.16` is the portable
+framework integration target. It requires Graphics, Graphics2D, and Scene2D
+`dev.2` plus `dev.squarednetizen.squared.backend.sdl2-opengl@0.6.0-dev.1`, all
+built and registered from the independent `squared` repository. The generator
+contains the template and compile-time wiring, but does not duplicate those
+framework implementations.
+
 ## Diagnostics for people and agents
 
 ```bash

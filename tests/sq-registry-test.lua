@@ -201,6 +201,89 @@ assert(
     )).id == template_record.id
 )
 
+local portable_settings = {
+    cache_root = path.join(work, "portable-cache")
+}
+for _, portable_archive in ipairs({
+    application_archive,
+    math_archive,
+    archive,
+    data_archive,
+    messaging_archive,
+    build_module(
+        "squared-graphics",
+        "dev.squarednetizen.squared.graphics",
+        "0.6.0-dev.2"
+    ),
+    build_module(
+        "squared-graphics2d",
+        "dev.squarednetizen.squared.graphics2d",
+        "0.6.0-dev.2",
+        {
+            {
+                kind = "module",
+                id = "dev.squarednetizen.squared.graphics",
+                version = "0.6.0-dev.2"
+            },
+            {
+                kind = "module",
+                id = "dev.squarednetizen.squared.math",
+                version = "0.6.0-dev.1"
+            }
+        }
+    ),
+    build_module(
+        "squared-scene2d",
+        "dev.squarednetizen.squared.scene2d",
+        "0.6.0-dev.2",
+        {
+            {
+                kind = "module",
+                id = "dev.squarednetizen.squared.graphics2d",
+                version = "0.6.0-dev.2"
+            }
+        }
+    ),
+    build_module(
+        "squared-backend-sdl2-opengl",
+        "dev.squarednetizen.squared.backend.sdl2-opengl",
+        "0.6.0-dev.1",
+        {
+            {
+                kind = "module",
+                id = "dev.squarednetizen.squared.graphics2d",
+                version = "0.6.0-dev.2"
+            }
+        }
+    )
+}) do
+    package_registry.add(portable_settings, portable_archive)
+end
+local portable_template_archive = path.join(
+    root,
+    "build/packages/squared-android-template-0.6.0-dev.16.sq"
+)
+local portable_template = package_registry.add(
+    portable_settings,
+    portable_template_archive
+)
+assert(portable_template.version == "0.6.0-dev.16")
+assert(#portable_template.template.requires == 4)
+assert(portable_template.template.requires[2].version == "0.6.0-dev.2")
+assert(
+    portable_template.template.requires[4].id ==
+        "dev.squarednetizen.squared.backend.sdl2-opengl"
+)
+local portable_root, portable_dependencies =
+    package_registry.require_template(
+        portable_settings,
+        portable_template.id,
+        portable_template.version
+    )
+assert(portable_root.id == portable_template.id)
+assert(#portable_dependencies == 9)
+assert(#package_registry.list(portable_settings) == 10)
+
 local records = package_registry.list(settings)
 assert(#records == 9)
 

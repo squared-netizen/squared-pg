@@ -68,7 +68,13 @@ local definitions = {
         source = "packages/squared-android-template",
         archive = "squared-android-template-0.6.0-dev.15.sq",
         kind = "template",
-        label = "Squared Android template"
+        label = "Squared bootstrap Android template"
+    },
+    {
+        source = "packages/squared-android-template-portable",
+        archive = "squared-android-template-0.6.0-dev.16.sq",
+        kind = "template",
+        label = "Squared portable Android template"
     }
 }
 

@@ -67,7 +67,12 @@ then builds `build/packages/squared-application-0.6.0-dev.1.sq`,
 `build/packages/squared-time-0.6.0-dev.1.sq`,
 `build/packages/squared-data-0.6.0-dev.1.sq`, and
 `build/packages/squared-messaging-0.6.0-dev.1.sq`, followed by
-`build/packages/squared-android-template-0.6.0-dev.15.sq` entirely offline.
+the self-contained
+`build/packages/squared-android-template-0.6.0-dev.15.sq` and portable
+`build/packages/squared-android-template-0.6.0-dev.16.sq` templates entirely
+offline. The portable template package is structurally verified here; its
+external `dev.2` framework graph is built and owned by the independent
+`squared` repository.
 The Data archive contains its private yyjson source and license. Messaging
 requires exact Data and Time versions. Application proves header-only
 `INTERFACE` module composition. Math proves a small compiled module can export

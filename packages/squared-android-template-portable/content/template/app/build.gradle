@@ -1,0 +1,52 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "{{PACKAGE_NAME}}"
+    compileSdk 34
+    buildToolsVersion providers.gradleProperty(
+        "sdlBuildToolsVersion"
+    ).getOrElse("34.0.0")
+
+    defaultConfig {
+        applicationId "{{PACKAGE_NAME}}"
+        minSdk 30
+        targetSdk 34
+        versionCode 1
+        versionName "{{BASE_VERSION}}"
+        buildConfigField "boolean",
+            "MANAGE_ALL_FILES_ON_FIRST_START",
+            "{{MANAGE_ALL_FILES_ENABLED}}"
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/jniLibs"]
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

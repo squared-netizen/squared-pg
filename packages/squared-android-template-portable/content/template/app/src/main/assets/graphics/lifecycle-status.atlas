@@ -1,0 +1,19 @@
+lifecycle-status.png
+size: 2, 1
+format: RGB888
+filter: Nearest, Nearest
+repeat: none
+lifecycle-status
+  rotate: false
+  xy: 0, 0
+  size: 1, 1
+  orig: 1, 1
+  offset: 0, 0
+  index: 0
+lifecycle-status
+  rotate: false
+  xy: 1, 0
+  size: 1, 1
+  orig: 1, 1
+  offset: 0, 0
+  index: 1
