@@ -224,11 +224,12 @@ function project.verify(start)
         fs.exists(path.join(root, marker_name)) then
         issue("both primary and legacy project markers exist")
     end
+    local project_metadata
     local project_filename = path.join(root, "project.lua")
     if fs.mode(project_filename) ~= "file" then
         issue("project.lua is missing")
     else
-        local project_metadata = load_table(project_filename, "project.lua")
+        project_metadata = load_table(project_filename, "project.lua")
         if project_metadata.name ~= metadata.name then
             issue("project.lua name does not match the project marker")
         end
@@ -253,6 +254,7 @@ function project.verify(start)
         root = root,
         marker = marker,
         metadata = metadata,
+        project_metadata = project_metadata,
         valid = #issues == 0,
         issues = issues
     }

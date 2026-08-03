@@ -185,6 +185,9 @@ squared-pg verbose
 squared-pg agent-feedback
 squared-pg project verify .
 squared-pg project build .
+squared-pg project module add \
+  dev.squarednetizen.squared.holodisk@0.6.0-dev.1 .
+squared-pg project module status .
 ```
 
 `project build` locates the generated project root and dispatches its existing
@@ -198,6 +201,11 @@ and 4 KiB, package counts instead of inventories, actionable issues and a next
 command, no arbitrary environment dump, and an explicit `truncated` field.
 These commands run only in the generator process and add no runtime code or
 memory use to generated applications.
+
+Optional modules are exact, project-level choices. `project module add`
+resolves a registered module, composes only missing package content, records
+the immutable coordinate in the project, and generates the CMake link bridge.
+It does not change the selected template or the defaults for future projects.
 
 ## Register offline dependencies
 

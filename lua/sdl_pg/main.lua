@@ -9,6 +9,7 @@ local package_builder = require("sdl_pg.package_builder")
 local package_registry = require("sdl_pg.package_registry")
 local package_sync = require("sdl_pg.package_sync")
 local project = require("sdl_pg.project")
+local project_module = require("sdl_pg.project_module")
 local report = require("sdl_pg.report")
 local self_test = require("sdl_pg.self_test")
 local template_selection = require("sdl_pg.template_selection")
@@ -44,6 +45,8 @@ Usage:
   squared-pg template use ID@VERSION
   squared-pg project verify [DIRECTORY]
   squared-pg project build [DIRECTORY] [--clean] [--online-once]
+  squared-pg project module add ID@VERSION [DIRECTORY]
+  squared-pg project module status [DIRECTORY]
   squared-pg wrapper add EXISTING_PROJECT
   squared-pg wrapper status
   squared-pg new PROJECT_NAME --package JAVA.PACKAGE
@@ -350,7 +353,7 @@ local function write_lines(lines, out)
     for _, line in ipairs(lines) do out(line) end
 end
 
-local function command_project(arguments, environment, out)
+local function command_project(settings, arguments, environment, out)
     if arguments[2] == "verify" and not arguments[4] then
         local value = project.verify(arguments[3] or environment.PWD or ".")
         out("Project: " .. value.root)
@@ -389,10 +392,47 @@ local function command_project(arguments, environment, out)
         return
     end
 
+    if arguments[2] == "module" and arguments[3] == "add" and
+        arguments[4] and not arguments[6] then
+        local identifier, version = arguments[4]:match("^([^@]+)@([^@]+)$")
+        if not identifier then
+            error("project module add requires ID@VERSION", 0)
+        end
+        local result = project_module.add(
+            settings,
+            arguments[5] or environment.PWD or ".",
+            identifier,
+            version
+        )
+        out("Project: " .. result.root)
+        out((result.already_enabled and "Already enabled: " or "Enabled module: ") ..
+            result.coordinate)
+        out("Added modules: " .. tostring(#result.added))
+        return
+    end
+
+    if arguments[2] == "module" and arguments[3] == "status" and
+        not arguments[5] then
+        local root, modules = project_module.status(
+            arguments[4] or environment.PWD or "."
+        )
+        out("Project: " .. root)
+        if #modules == 0 then
+            out("Optional modules: none enabled")
+        else
+            for _, record in ipairs(modules) do
+                out(record.id .. "@" .. record.version .. "  " .. record.target)
+            end
+        end
+        return
+    end
+
     error(
         "Usage: squared-pg project verify [DIRECTORY] | " ..
         "squared-pg project build [DIRECTORY] " ..
-        "[--clean] [--online-once]",
+        "[--clean] [--online-once] | " ..
+        "squared-pg project module add ID@VERSION [DIRECTORY] | " ..
+        "squared-pg project module status [DIRECTORY]",
         0
     )
 end
@@ -499,7 +539,7 @@ function main.run(arguments, environment, stdout, stderr)
             elseif command == "template" then
                 command_template(settings, arguments, stdout)
             elseif command == "project" then
-                command_project(arguments, environment, stdout)
+                command_project(settings, arguments, environment, stdout)
             elseif command == "new" then
                 command_new(settings, arguments, stdout)
             elseif command == "promote" then

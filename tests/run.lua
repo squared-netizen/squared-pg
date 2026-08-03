@@ -1827,6 +1827,158 @@ test.truthy(
     table.concat(output, "\n"):find("Verification: OK", 1, true) ~= nil,
     "generated project verification output"
 )
+
+local optional_source = path.join(test_root, "optional-module-source")
+fs.write_file(path.join(optional_source, "manifest.json"), [[{
+  "format": "dev.squarednetizen.sq",
+  "format_version": 0,
+  "kind": "module",
+  "id": "dev.example.optional",
+  "version": "1.0.0",
+  "name": "Example Optional Module",
+  "description": "Independent optional-module composition fixture.",
+  "module": {
+    "directory": "modules/example-optional",
+    "cmake_target": "example_optional"
+  }
+}
+]])
+fs.write_file(path.join(
+    optional_source,
+    "content/modules/example-optional/CMakeLists.txt"
+), table.concat({
+    "add_library(example_optional INTERFACE)",
+    "target_include_directories(example_optional INTERFACE include)",
+    "squared_register_module(example_optional)",
+    ""
+}, "\n"))
+fs.write_file(path.join(
+    optional_source,
+    "content/modules/example-optional/include/example/optional.hpp"
+), table.concat({
+    "#pragma once",
+    "namespace example { inline constexpr int optional_value = 7; }",
+    ""
+}, "\n"))
+local optional_archive = path.join(test_root, "external/example-optional.sq")
+package_builder.build(optional_source, optional_archive)
+local optional_settings = {}
+for key, value in pairs(settings) do optional_settings[key] = value end
+optional_settings.cache_root = path.join(test_root, "optional-module-cache")
+package_registry.add(optional_settings, optional_archive)
+local optional_environment = {}
+for key, value in pairs(environment) do optional_environment[key] = value end
+optional_environment.SQUARED_PG_CACHE_ROOT = optional_settings.cache_root
+
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {
+            "project", "module", "add",
+            "dev.example.optional@1.0.0", cli_project
+        },
+        optional_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "Android project optional-module add command"
+)
+test.truthy(
+    fs.mode(path.join(
+        cli_project,
+        "modules/example-optional/include/example/optional.hpp"
+    )) == "file",
+    "optional module content composed into project"
+)
+test.truthy(
+    fs.read_file(path.join(
+        cli_project,
+        "app/src/main/cpp/application/CMakeLists.txt"
+    )):find(".squared-pg/modules.cmake", 1, true) ~= nil,
+    "Android optional-module CMake anchor"
+)
+test.truthy(
+    fs.read_file(path.join(cli_project, ".squared-pg/modules.cmake")):find(
+        "example_optional", 1, true
+    ) ~= nil,
+    "Android optional-module target link"
+)
+test.truthy(
+    fs.read_file(path.join(cli_project, ".squared-pg/modules.lua")):find(
+        "dev.example.optional", 1, true
+    ) ~= nil,
+    "optional-module project ledger"
+)
+test.equal(output[2], "Enabled module: dev.example.optional@1.0.0",
+    "optional-module add output")
+
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {
+            "project", "module", "add",
+            "dev.example.optional@1.0.0", cli_project
+        },
+        optional_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "optional-module add is idempotent"
+)
+test.equal(output[2], "Already enabled: dev.example.optional@1.0.0",
+    "optional-module idempotent output")
+
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {"project", "module", "status", cli_project},
+        optional_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "project optional-module status command"
+)
+test.truthy(
+    output[2]:find("dev.example.optional@1.0.0", 1, true) ~= nil,
+    "project optional-module status output"
+)
+
+output = {}
+errors = {}
+test.equal(
+    main.run(
+        {
+            "project", "module", "add",
+            "dev.example.optional@1.0.0", foundation
+        },
+        optional_environment,
+        collect(output),
+        collect(errors)
+    ),
+    0,
+    "foundation optional-module add command"
+)
+test.truthy(
+    fs.read_file(path.join(foundation, "CMakeLists.txt")):find(
+        ".squared-pg/modules.cmake", 1, true
+    ) ~= nil,
+    "foundation optional-module CMake anchor"
+)
+local foundation_modules_cmake =
+    fs.read_file(path.join(foundation, ".squared-pg/modules.cmake"))
+test.truthy(
+    foundation_modules_cmake:find("enable_language(C)", 1, true) ~= nil and
+        foundation_modules_cmake:find("add_subdirectory", 1, true) ~= nil and
+        foundation_modules_cmake:find("example_optional", 1, true) ~= nil,
+    "foundation optional-module CMake composition"
+)
+
 local original_process_run = process.run
 local captured_build
 process.run = function(arguments, working_directory)

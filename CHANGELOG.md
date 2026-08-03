@@ -9,6 +9,10 @@ tags:
 
 ## Unreleased
 
+- Add explicit `project module add ID@VERSION` and `project module status`
+  workflows. Optional modules are transactionally composed, recorded in a
+  project-owned ledger, and linked through generated Android or foundation
+  CMake integration without changing template dependency graphs.
 - Add `package sync` as the repository-wide composition of existing package
   build, verification, and registration operations. Add `project build` as
   the generator-owned entry point to a generated project's checked-in build

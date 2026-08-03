@@ -141,6 +141,8 @@ squared-pg new NAME --package JAVA.PACKAGE --manage-all-files
 squared-pg new NAME --foundation
 squared-pg project verify [DIRECTORY]
 squared-pg project build [DIRECTORY] [--clean] [--online-once]
+squared-pg project module add ID@VERSION [DIRECTORY]
+squared-pg project module status [DIRECTORY]
 squared-pg promote NAME
 squared-pg demote NAME
 ```
@@ -167,6 +169,17 @@ project's checked-in `tools/build.lua` with the generator's private Lua.
 `--clean` and `--online-once` are forwarded directly to that build entry
 point; without them, the existing offline incremental build remains the
 default.
+
+`project module add` is the explicit opt-in path for optional framework
+extensions. The exact registered module and any missing transitive modules are
+composed into the project, recorded under `.squared-pg`, and linked through a
+generated CMake bridge. Android modules link into `project_application`;
+foundation modules link into the generated foundation library. The command is
+idempotent for the same immutable coordinate and rejects version, unmanaged
+source, and file collisions before mutation. Template dependency graphs are
+unchanged, so optional modules never enter new projects automatically.
+`project module status` lists only modules explicitly enabled through this
+workflow.
 
 ## Naming compatibility
 
