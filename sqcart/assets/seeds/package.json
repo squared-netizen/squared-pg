@@ -1,0 +1,21 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 1,
+
+  "kind": "package",
+  "id": "{{id}}",
+  "version": "{{version}}",
+
+  "title": "{{title}}",
+  "description": "Created by sqcart from a plain directory.",
+
+  "package": {
+    "provides": [],
+    "platforms": ["all"],
+    "requires": {
+      "packages": []
+    },
+    "build_system": "none",
+    "build_targets": []
+  }
+}

@@ -1,0 +1,22 @@
+# Build trees (anchored — do NOT use bare build/)
+/build/
+/sqcart/build/
+
+# Object and archive files
+*.o
+*.a
+*.so
+
+# CMake scratch
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Editor / OS
+*.swp
+*~
+.DS_Store
+
+# Belt and braces: test fixtures live in build/ dirs
+!sqcart/tests/**/build/
+!sqcart/tests/**/build/**

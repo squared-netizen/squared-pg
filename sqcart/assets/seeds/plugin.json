@@ -1,0 +1,21 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 1,
+
+  "kind": "plugin",
+  "id": "{{id}}",
+  "version": "{{version}}",
+
+  "title": "{{title}}",
+  "description": "Created by sqcart from a plain directory.",
+
+  "plugin": {
+    "extends": "squared-pg",
+    "api_version": 1,
+    "entry": "{{entry_module}}",
+    "provides_services": [],
+    "requires": {
+      "engine_capabilities": []
+    }
+  }
+}

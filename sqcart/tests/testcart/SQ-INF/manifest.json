@@ -1,0 +1,58 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 1,
+
+  "kind": "kit",
+  "id": "kit.testcart",
+  "version": "1.0.0",
+
+  "title": "Testcart Integration Kit",
+  "description": "Minimal conforming kit fixture for the sqcart reader, writer and CLI round-trip tests.",
+
+  "engine": { "id": "squared-pg", "version": ">=0.1.0 <0.2.0" },
+  "requires_features": [],
+
+  "authors": [
+    { "name": "sqcart maintainers" }
+  ],
+  "license": "MIT",
+
+  "presentation": {
+    "thumbnail": "SQ-INF/thumbnail.png",
+    "icon": "SQ-INF/icon.png"
+  },
+
+  "kit": {
+    "external": {
+      "id": "testcart",
+      "version": ">=1.0.0 <2.0.0"
+    },
+    "provides": [
+      "testcart.bridge"
+    ],
+    "platforms": [
+      "desktop",
+      "android"
+    ],
+    "compatible_templates": [
+      "template.terminal.cpp",
+      "template.headless"
+    ],
+    "requires": {
+      "framework": ">=1.0.0 <2.0.0",
+      "packages": [
+        "package.squared.core"
+      ],
+      "kits": []
+    },
+    "integration_areas": [
+      "build.cmake.targets",
+      "app.entrypoint"
+    ],
+    "ownership": {
+      "generated": [
+        "sq_bridge/**"
+      ]
+    }
+  }
+}

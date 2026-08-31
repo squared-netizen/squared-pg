@@ -1,0 +1,18 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 1,
+
+  "kind": "asset-bundle",
+  "id": "asset.test_cartridge_img",
+  "version": "0.1.0",
+
+  "title": "test-cartridge_img",
+  "description": "Created by sqcart from a plain directory.",
+
+  "assets": {
+    "entries": [
+      { "id": "asset.tree.readme", "path": "tree/README.md", "type": "data" },
+      { "id": "asset.tree.src.hello", "path": "tree/src/hello.lua", "type": "script" }
+    ]
+  }
+}

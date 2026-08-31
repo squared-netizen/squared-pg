@@ -1,0 +1,27 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 1,
+
+  "kind": "kit",
+  "id": "{{id}}",
+  "version": "{{version}}",
+
+  "title": "{{title}}",
+  "description": "Created by sqcart from a plain directory.",
+
+  "kit": {
+    "external": {
+      "id": "{{external_id}}",
+      "version": ">=0.0.0"
+    },
+    "provides": [],
+    "platforms": ["all"],
+    "compatible_templates": [],
+    "requires": {
+      "packages": [],
+      "kits": []
+    },
+    "integration_areas": ["TODO.declare.integration.area"],
+    "ownership": {}
+  }
+}
