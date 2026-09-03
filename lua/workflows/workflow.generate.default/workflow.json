@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "workflow.generate.default",
+  "version": "0.1.0",
+  "entry": "init.lua",
+  "description": "Reference generation workflow: new, plan, list, show, inspect, describe.",
+
+  "requires_engine": "^0.1",
+  "requires_capabilities": [
+    "capability.project.plan@^1.0",
+    "capability.project.generate@^1.0",
+    "capability.template.substitute@^1.0"
+  ],
+
+  "trust": "trusted"
+}

@@ -236,3 +236,121 @@ follows the repository's current `third-party/`; see [[1.6 Third-party dependenc
 order, which a workflow SHOULD follow (Lua may legitimately reorder within the
 resolve-before-mutate and transaction constraints). §2.3 links rather than
 restates.
+
+---
+
+## Decisions recorded during the first implementation pass
+
+> [!note] Stance
+> These record where the implementation diverged from Item 2 as written. Per the
+> repository `AGENTS.md`, the repository is ground truth during initial
+> implementation and the specification is amended to match. Each entry names the
+> sections that need amending.
+
+## D-028 — The CLI host lives at `app/`; the Lua binding at `engine/lua/`
+[[1.1 Repository identity]] · [[2.1 Architectural model]] · [[2.6 Engine-Lua boundary]]
+
+§1.1 divides the repository into `engine/`, `lua/`, `third-party/`, `tools/` and
+`docs/`, which leaves the CLI host and the binding layer without a home.
+
+- **`app/`** — the `sqpg` host. It is a *consumer* of the engine (§2.1.6), not
+  part of it; placing it under `engine/` would blur the line §2.2.5 draws.
+- **`engine/lua/`** — the binding layer. §2.6.3 requires it to be generated from
+  or validated against the operation registry, which makes it engine-side. It
+  builds as a separate target so an embedder may link the engine alone and never
+  pay for a Lua runtime.
+
+Rejected: putting the binding in `lua/`, which is Lua source by §1.4 and would
+have put C++ there; putting the CLI in `engine/`, which §2.2.5 forbids in spirit.
+
+Amend §1.1 to list both.
+
+## D-029 — Resources are cartridges; the manifest envelope is the cartridge format's
+[[2.8 Templates]] · [[2.10 Assets and generator resources]]
+
+§2.8.3 defines an envelope (`schema_version`, `type`, `requires_engine`,
+`requires_capabilities`) and §2.8.1 an identifier grammar
+(`[a-z][a-z0-9]*(-[a-z0-9]+)*`, unbounded segments). The repository already
+contains manifests in the *cartridge* format (`format_version`, `kind`,
+`engine`, `requires_features`; segments `[a-z][a-z0-9_]*`, two to eight), a
+tested reader for them, and a CLI that writes them.
+
+The engine implements the cartridge form and opens every resource through
+`sqcart`. `ResourceId::parse` accepts both `_` and `-` as segment separators so
+that identities written against either document validate.
+
+Rationale: a second manifest reader would be a second chance to disagree about
+what a manifest means, and disagreement between the tool that packs cartridges
+and the tool that consumes them has the worst possible symptoms.
+
+Rejected: implementing §2.8.3 alongside the cartridge envelope (two readers);
+rewriting sqcart to §2.8.3 (discards a tested, shipped implementation).
+
+Amend §2.8.1–2.8.3 to state that generator resources are cartridges and inherit
+the container format's envelope and identity grammar.
+
+## D-030 — Resource payload root
+[[2.8 Templates]] · [[2.9 Kits]] · [[2.10 Assets and generator resources]]
+
+Templates declare their payload root as `template.tree`. The cartridge format
+gives kits, packages and asset bundles no equivalent field, so the engine's
+convention is: `tree/` when the cartridge has entries beneath it, the cartridge
+root otherwise. `SQ-INF/` is never payload.
+
+Amend §2.9 and §2.10 to state the convention, or add a `tree` field to those
+bodies in the format.
+
+## D-031 — Architecture fields absent from the cartridge format are read from raw JSON
+[[2.7 Project generation model]] · [[2.8 Templates]] · [[2.9 Kits]]
+
+The generator architecture needs manifest fields the container format does not
+model: `working_directory`, `integration_areas`, `integration_arity`,
+`processor`, parameter `default`/`default_from`, `executable`,
+`external.acquisition`, `conflicts_with`.
+
+These are read from `Manifest::raw_json()`, which format §5.4 guarantees is
+preserved verbatim. This keeps the divergence one-directional: the engine knows
+more than the format, and the format never learns about generation — which is
+the scope rule `sqcart/AGENTS.md` already states.
+
+Where such a field is absent or malformed the engine falls back to a documented
+conservative default (`working_directory` → `sq_app`, `processor` →
+`substitute`, arity → `single`). An *unknown* processor is a hard
+`capability.unsatisfied` failure, because §2.14.1 requires an unsatisfied
+capability to fail at resolution.
+
+## D-032 — v1 implements new-workspace generation only
+[[2.7 Project generation model]] · [[2.15 Error and transaction model]]
+
+`project.generate` refuses an existing workspace with
+`filesystem.workspace.exists`. Regeneration (§2.7.11) requires the write-ahead
+journal (§2.15.9), per-file staging, crash recovery across the four journal
+states, and the `damaged` terminal state (§2.15.13).
+
+Refusing loudly is the correct failure: a half-implemented journal would corrupt
+user work in exactly the situations the journal exists to protect.
+
+Already in place for it: provenance hashes written on every generation, a
+reified plan (the same type an update plan needs), and enforced ownership
+classes. Missing: the journal and the apply-in-place loop.
+
+Package and asset *materialization* are deferred on the same principle —
+resolution is implemented and reported, materialization is not, and there is no
+package or asset in the repository to design it against.
+
+## D-033 — The engine supplies built-in substitution parameters
+[[2.7 Project generation model]] · [[2.8 Templates]]
+
+The template parameter contract is validated against the **effective**
+parameters: the template's declared defaults, then engine built-ins derived from
+the request, then the workflow's values.
+
+Built-ins: `project_name`, `namespace`, `working_directory`,
+`generator_version`, `template_id`, `template_version`, `framework_version`,
+`kit_list`. Every one derives from the request or the engine — never from the
+environment or the clock, because §2.7.13 requires byte-identical output from
+equivalent inputs.
+
+Without this, every workflow would have to restate `project_name = name` to pass
+a check the engine was about to satisfy itself. §2.8.7 should say that the
+engine contributes built-ins and that validation sees the effective set.

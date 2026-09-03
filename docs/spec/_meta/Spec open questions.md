@@ -74,3 +74,20 @@ end-to-end generation.
 `.squared/` is versioned, but there is no migration story for the metadata format
 itself. What happens when a newer generator opens an older workspace record?
 Proposal: forward-compatible reader, refuse-and-report on major mismatch.
+
+---
+
+## Raised by the first implementation pass
+
+- **Q-26** — the `sandboxed` trust tier (§2.14.4) is declared in `workflow.json`
+  but not enforced: the host does not yet construct a restricted Lua
+  environment. A tier that is declared but unenforced is worse than none,
+  because it invites the assumption that it works. Close this before
+  third-party workflows are a real thing.
+- **Q-27** — §2.8.1's identifier grammar and cartridge format §5.2's disagree on
+  separators and segment counts (D-029). The engine accepts both. Decide which
+  is normative and amend the other.
+- **Q-28** — the reference workflow defaults `platforms` to `["termux"]` and
+  `framework` to `"1.0.0"`. Both are workflow policy under §2.5.6, but the
+  framework default in particular is a placeholder standing in for Q-23 (where
+  the Squared framework comes from), and it should not outlive it.
