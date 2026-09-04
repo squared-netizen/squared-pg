@@ -21,33 +21,13 @@ A capability token is a named, versioned engine feature. Enumerate them with
 
 ## Requiring one
 
-In the manifest **envelope**, beside `requires_features`:
-
 ```json
 "requires_capabilities": ["capability.template.substitute@^1.0"]
 ```
 
-A token is `name` or `name@range`. An omitted range means any version.
-
-An unsatisfied requirement fails at **resolution** with
-`capability.unsatisfied`, never at materialization. That is the rule that
-matters: a workflow must learn it cannot proceed before anything is written.
-The error names the unsatisfied tokens *and* everything the engine does
-provide, so a typo and a genuinely-too-old generator look different.
-
-## Not the same as `requires_features`
-
-They look alike and guard different things:
-
-| | Guards | Fails at | Fixed by |
-|---|---|---|---|
-| `requires_features` | the **reader** (sqcart) | opening the cartridge | a newer sqcart |
-| `requires_capabilities` | the **consumer** (squared-pg) | resolving the resource | a newer generator |
-
-sqcart validates that a capability token is well-formed and never interprets
-it — it does not know what a capability is, only that a consumer must be able
-to enumerate what a cartridge demands. That separation is why sqcart stays a
-general-purpose tool like `jar` rather than acquiring generator vocabulary.
+An unsatisfied requirement fails at **resolution**, never at materialization.
+That is the rule that matters: a workflow must learn it cannot proceed before
+anything is written.
 
 ## Versioning
 

@@ -62,23 +62,18 @@ struct Engine::Impl {
 
     ServiceLocator locator;
 
-    std::vector<Capability> capabilities;
-
     FilesystemService  filesystem;
     ResourceService    resources;
-    // The typed services check manifest capability requirements at resolution
-    // (§2.14.1), so they need the engine's capability set. `capabilities` is
-    // declared above them and filled by register_capabilities() before any
-    // resolution can run, so the span is never dangling and never stale.
-    TemplateService    templates{resources, capabilities};
-    KitService         kits{resources, capabilities};
-    PackageService     packages{resources, capabilities};
-    AssetService       assets{resources, capabilities};
+    TemplateService    templates{resources};
+    KitService         kits{resources};
+    PackageService     packages{resources};
+    AssetService       assets{resources};
     ValidationService  validation;
     MetadataService    metadata;
     ProjectService     project{resources};
     TransactionService transaction{filesystem, resources};
 
+    std::vector<Capability>          capabilities;
     std::vector<OperationDescriptor> descriptors;
     std::vector<Operation>           operations;
     std::vector<Diagnostic>          startup_diagnostics;

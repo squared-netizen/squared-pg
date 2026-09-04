@@ -27,14 +27,8 @@ DEFS     := -DSQCART_ENABLE_WRITER=1
 INC      := -Iengine/include -Iengine/src -Iengine/lua/include -Isqcart/include -Isqcart/src \
             -isystem $(MINIZ) -isystem $(YYJSON) -isystem $(SHA256) -isystem $(LUA)
 
-# -MMD -MP: header dependency tracking. Without it, editing a header does not
-# rebuild the objects that include it, and you debug a stale binary while
-# reading the corrected source. The generated project's Makefile had this from
-# the start; this one did not, and it cost an afternoon.
-DEPFLAGS := -MMD -MP
-
-CXXFLAGS := -std=$(CXXSTD) $(OPT) $(WARN) $(DEFS) $(INC) $(DEPFLAGS)
-CFLAGS   := $(OPT) -w $(INC) $(DEPFLAGS)
+CXXFLAGS := -std=$(CXXSTD) $(OPT) $(WARN) $(DEFS) $(INC)
+CFLAGS   := $(OPT) -w $(INC)
 
 # --- sources ---------------------------------------------------------------
 
@@ -110,6 +104,3 @@ smoke: all
 
 clean:
 	rm -rf $(BUILD)
-
-DEPS := $(shell find $(BUILD) -name '*.d' 2>/dev/null)
--include $(DEPS)

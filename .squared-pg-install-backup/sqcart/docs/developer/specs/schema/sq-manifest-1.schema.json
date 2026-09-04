@@ -18,15 +18,8 @@
     "description": { "type": "string", "maxLength": 2000 },
     "engine": { "$ref": "#/$defs/compatRef" },
     "requires_features": {
-      "description": "Container features the READER must implement. Unsatisfied -> the cartridge cannot be opened.",
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9_.]*$" }
-    },
-    "requires_capabilities": {
-      "description": "Opaque tokens the CONSUMER must satisfy. sqcart validates syntax and never interprets; an unsatisfied token is the consumer's failure to report, not the reader's.",
-      "type": "array",
-      "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*(@[^\\s]+)?$" }
     },
     "authors": {
       "type": "array",

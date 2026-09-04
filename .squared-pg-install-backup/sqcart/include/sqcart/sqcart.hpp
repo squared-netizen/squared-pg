@@ -351,29 +351,6 @@ public:
     [[nodiscard]] std::optional<std::string_view> license() const noexcept;
     [[nodiscard]] const std::optional<CompatRef>& engine() const noexcept;
     [[nodiscard]] std::span<const std::string>    requires_features() const noexcept;
-
-    /// Opaque tokens the *consumer* must satisfy (§5.4).
-    ///
-    /// sqcart validates syntax and never interprets. It does not know what a
-    /// token means, only that a consumer must be able to enumerate what a
-    /// cartridge demands of it -- the same way a jar manifest carries
-    /// vendor-specific attribute sections the archiver never reads.
-    ///
-    /// Distinct from requires_features, which they superficially resemble:
-    ///
-    ///   requires_features      guards the *reader*   -> fails at open
-    ///   requires_capabilities  guards the *consumer* -> fails when the
-    ///                                                   consumer resolves it
-    ///
-    /// A cartridge whose reader is too old cannot be opened at all. A
-    /// cartridge whose *consumer* is too old opens fine and must be refused
-    /// later, by the consumer, with an error naming what it lacks. Only the
-    /// consumer can make that call, so sqcart hands the list over and stops.
-    ///
-    /// Tokens follow `name` or `name@range`; the range grammar is §5.3's, and
-    /// is validated for shape but not resolved.
-    [[nodiscard]] std::span<const std::string>    requires_capabilities() const noexcept;
-
     [[nodiscard]] std::span<const Author>         authors() const noexcept;
 
     /// Exactly one of these is engaged, matching kind(); the other five are

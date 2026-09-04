@@ -45,8 +45,7 @@ Every manifest, whatever its kind:
 | `id` | yes | must begin with the kind token |
 | `version` | yes | SemVer 2.0.0 |
 | `engine` | no | version range this engine must satisfy |
-| `requires_features` | no | the **reader** must implement these, or the cartridge will not open |
-| `requires_capabilities` | no | the **consumer** must satisfy these, or resolution fails |
+| `requires_features` | no | refuse to load unless every token is implemented |
 | `<kind>` | yes | exactly one body, matching `kind` |
 
 Unrecognised members are preserved and ignored, so a newer manifest stays

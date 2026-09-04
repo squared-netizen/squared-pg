@@ -73,34 +73,6 @@ void ranges() {
     // same version. Without this, ">=1.0.0" would happily pick 2.0.0-alpha.
     CHECK(!accepts(">=1.0.0", "2.0.0-alpha.1"));
     CHECK(accepts(">=2.0.0-alpha.1", "2.0.0-alpha.1"));
-
-    // Partial operands. `^1.0` and `>=0.1` are how ranges are actually
-    // written, including by this repository's own manifests. Rejecting them
-    // does not produce an error -- callers write `if (range && ...)`, so an
-    // unparsed range means the constraint silently never applies, which is the
-    // worst possible outcome for a compatibility check.
-    CHECK(VersionRange::parse("^1.0").has_value());
-    CHECK(VersionRange::parse("^1").has_value());
-    CHECK(VersionRange::parse(">=1.0").has_value());
-    CHECK(accepts("^1.0", "1.0.0"));
-    CHECK(accepts("^1.0", "1.9.9"));
-    CHECK(!accepts("^1.0", "2.0.0"));
-    CHECK(accepts("^1", "1.5.0"));
-    CHECK(!accepts("^1", "2.0.0"));
-    CHECK(accepts("~1.2", "1.2.9"));
-    CHECK(!accepts("~1.2", "1.3.0"));
-    CHECK(accepts(">=0.1 <0.2", "0.1.5"));
-    CHECK(accepts("^0.1", "0.1.9"));
-    CHECK(!accepts("^0.1", "0.2.0"));
-    // A bare partial is still an exact match on the padded form.
-    CHECK(accepts("1.0", "1.0.0"));
-    CHECK(!accepts("1.0", "1.0.1"));
-    // The suffix survives padding.
-    CHECK(accepts(">=2.0-alpha.1", "2.0.0-alpha.1"));
-
-    // A manifest's own `version` field is NOT padded: that is a defect and
-    // must stay one.
-    CHECK(!Version::parse("1.0").has_value());
 }
 
 }  // namespace

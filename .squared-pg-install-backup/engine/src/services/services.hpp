@@ -22,7 +22,6 @@
 
 #include "squared/pg/error.hpp"
 #include "squared/pg/identity.hpp"
-#include "squared/pg/operation.hpp"
 #include "squared/pg/plan.hpp"
 #include "squared/pg/resource.hpp"
 #include "squared/pg/result.hpp"
@@ -34,7 +33,6 @@
 
 #include <filesystem>
 #include <map>
-#include <span>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -181,8 +179,7 @@ public:
     static constexpr std::string_view kServiceName = "template";
     [[nodiscard]] std::string_view service_name() const noexcept override { return kServiceName; }
 
-    TemplateService(ResourceService& resources, const std::vector<Capability>& capabilities)
-        : resources_(resources), capabilities_(capabilities) {}
+    explicit TemplateService(ResourceService& resources) : resources_(resources) {}
 
     /// §2.7.4. Resolves by identity, never by path, and never substitutes an
     /// alternative when resolution fails — that decision belongs to Lua.
@@ -196,13 +193,7 @@ public:
     [[nodiscard]] static std::string working_directory(const ResolvedResource& resolved);
 
 private:
-    ResourceService&            resources_;
-    /// A reference, not a span. The engine's capability list is filled by
-    /// register_capabilities() *after* the services are constructed, and a
-    /// span captured at construction would be a stale view over an empty
-    /// vector that later reallocated -- so every requirement would silently
-    /// pass. A reference sees the list as it ends up.
-    const std::vector<Capability>& capabilities_;
+    ResourceService& resources_;
 };
 
 class KitService final : public Service {
@@ -210,8 +201,7 @@ public:
     static constexpr std::string_view kServiceName = "kit";
     [[nodiscard]] std::string_view service_name() const noexcept override { return kServiceName; }
 
-    KitService(ResourceService& resources, const std::vector<Capability>& capabilities)
-        : resources_(resources), capabilities_(capabilities) {}
+    explicit KitService(ResourceService& resources) : resources_(resources) {}
 
     /// §2.7.5. Validates template compatibility, platform support and
     /// framework range at resolution — before any workspace mutation.
@@ -219,13 +209,7 @@ public:
                                                    std::vector<Diagnostic>& diagnostics);
 
 private:
-    ResourceService&            resources_;
-    /// A reference, not a span. The engine's capability list is filled by
-    /// register_capabilities() *after* the services are constructed, and a
-    /// span captured at construction would be a stale view over an empty
-    /// vector that later reallocated -- so every requirement would silently
-    /// pass. A reference sees the list as it ends up.
-    const std::vector<Capability>& capabilities_;
+    ResourceService& resources_;
 };
 
 /// §2.7.6. Packages resolve and are recorded; materialization of package
@@ -236,20 +220,13 @@ public:
     static constexpr std::string_view kServiceName = "package";
     [[nodiscard]] std::string_view service_name() const noexcept override { return kServiceName; }
 
-    PackageService(ResourceService& resources, const std::vector<Capability>& capabilities)
-        : resources_(resources), capabilities_(capabilities) {}
+    explicit PackageService(ResourceService& resources) : resources_(resources) {}
 
     [[nodiscard]] Result<ResolvedResource> resolve(const ResourceRef& ref, const ResolutionContext& context,
                                                    std::vector<Diagnostic>& diagnostics);
 
 private:
-    ResourceService&            resources_;
-    /// A reference, not a span. The engine's capability list is filled by
-    /// register_capabilities() *after* the services are constructed, and a
-    /// span captured at construction would be a stale view over an empty
-    /// vector that later reallocated -- so every requirement would silently
-    /// pass. A reference sees the list as it ends up.
-    const std::vector<Capability>& capabilities_;
+    ResourceService& resources_;
 };
 
 /// §2.7.7, §2.10. As with packages: resolution is implemented, transformation
@@ -260,20 +237,13 @@ public:
     static constexpr std::string_view kServiceName = "asset";
     [[nodiscard]] std::string_view service_name() const noexcept override { return kServiceName; }
 
-    AssetService(ResourceService& resources, const std::vector<Capability>& capabilities)
-        : resources_(resources), capabilities_(capabilities) {}
+    explicit AssetService(ResourceService& resources) : resources_(resources) {}
 
     [[nodiscard]] Result<ResolvedResource> resolve(const ResourceRef& ref, const ResolutionContext& context,
                                                    std::vector<Diagnostic>& diagnostics);
 
 private:
-    ResourceService&            resources_;
-    /// A reference, not a span. The engine's capability list is filled by
-    /// register_capabilities() *after* the services are constructed, and a
-    /// span captured at construction would be a stale view over an empty
-    /// vector that later reallocated -- so every requirement would silently
-    /// pass. A reference sees the list as it ends up.
-    const std::vector<Capability>& capabilities_;
+    ResourceService& resources_;
 };
 
 // ---------------------------------------------------------------------------

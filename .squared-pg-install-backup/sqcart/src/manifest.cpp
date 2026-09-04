@@ -21,41 +21,6 @@
 namespace sqcart {
 namespace {
 
-/// Shape check for a capability token: `name` or `name@range`.
-///
-/// `name` is dotted lowercase, like an identifier segment chain. The range, if
-/// present, is passed over -- §5.3's grammar is the consumer's to resolve, and
-/// validating it here would mean sqcart owning a version resolver it has no
-/// use for.
-[[nodiscard]] bool valid_capability_token(std::string_view token)
-{
-    if (token.empty() || token.size() > 128) return false;
-
-    const std::size_t at = token.find('@');
-    const std::string_view name = token.substr(0, at);
-    if (at != std::string_view::npos && at + 1 >= token.size()) return false;  // trailing '@'
-    if (name.empty()) return false;
-
-    bool segment_start = true;
-    for (char c : name) {
-        if (c == '.') {
-            if (segment_start) return false;  // empty segment
-            segment_start = true;
-            continue;
-        }
-        const bool lower = c >= 'a' && c <= 'z';
-        const bool digit = c >= '0' && c <= '9';
-        if (segment_start && !lower) return false;
-        if (!lower && !digit && c != '_') return false;
-        segment_start = false;
-    }
-    return !segment_start;  // must not end on a '.'
-}
-
-}  // namespace
-
-namespace {
-
 // RAII guard so the yyjson document is freed on every return path.
 class DocGuard {
 public:
@@ -511,7 +476,6 @@ struct ParsedData {
     std::optional<std::string> license;
     std::optional<CompatRef> engine;
     std::vector<std::string> requires_features;
-    std::vector<std::string> requires_capabilities;
     std::vector<Author> authors;
 
     std::unique_ptr<CartridgeBody> cartridge;
@@ -569,25 +533,6 @@ Result<ParsedData> parse_root(yyjson_val* root, std::string raw)
     }
     if (!get_str_arr(root, "requires_features", i.requires_features)) {
         return unexpected(malformed("'requires_features' must be a string array"));
-    }
-    if (!get_str_arr(root, "requires_capabilities", i.requires_capabilities)) {
-        return unexpected(malformed("'requires_capabilities' must be a string array"));
-    }
-    // Shape only. sqcart checks that a token could name something and that the
-    // list does not repeat itself; it does not and must not know whether the
-    // token names anything real. That is the consumer's question, and a reader
-    // that answered it would have to be taught every consumer's vocabulary.
-    for (std::size_t a = 0; a < i.requires_capabilities.size(); ++a) {
-        if (!valid_capability_token(i.requires_capabilities[a])) {
-            return unexpected(malformed("'requires_capabilities' entry is not a valid token: "
-                                        + i.requires_capabilities[a]));
-        }
-        for (std::size_t b = 0; b < a; ++b) {
-            if (i.requires_capabilities[b] == i.requires_capabilities[a]) {
-                return unexpected(malformed("'requires_capabilities' repeats: "
-                                            + i.requires_capabilities[a]));
-            }
-        }
     }
     if (!parse_authors(root, i.authors)) {
         return unexpected(malformed("'authors' is malformed"));
@@ -700,7 +645,6 @@ Result<Manifest> Manifest::parse(std::string_view json, const Limits& /*limits*/
     i.license = std::move(d.license);
     i.engine = std::move(d.engine);
     i.requires_features = std::move(d.requires_features);
-    i.requires_capabilities = std::move(d.requires_capabilities);
     i.authors = std::move(d.authors);
     i.cartridge = std::move(d.cartridge);
     i.template_ = std::move(d.template_);
@@ -770,11 +714,6 @@ const std::optional<CompatRef>& Manifest::engine() const noexcept
 std::span<const std::string> Manifest::requires_features() const noexcept
 {
     return impl_->requires_features;
-}
-
-std::span<const std::string> Manifest::requires_capabilities() const noexcept
-{
-    return impl_->requires_capabilities;
 }
 
 std::span<const Author> Manifest::authors() const noexcept

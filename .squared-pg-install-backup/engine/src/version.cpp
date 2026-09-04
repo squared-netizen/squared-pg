@@ -85,36 +85,6 @@ namespace {
     }
 }
 
-/// Pad a partial version to three components: `1` -> `1.0.0`, `1.2` -> `1.2.0`.
-///
-/// Only comparator *operands* are padded, never a manifest's own `version`
-/// field -- a resource declaring `"version": "1.0"` is a manifest defect and
-/// must stay one. But `^1.0` and `>=0.1` are how everyone writes ranges, and
-/// how the repository's own manifests write `requires_engine`, so refusing
-/// them means the constraint silently never applies.
-///
-/// Any pre-release or build suffix is preserved: `^1.0-alpha` pads its core to
-/// `1.0.0-alpha`.
-[[nodiscard]] std::string pad_version(std::string_view token) {
-    std::string_view core   = token;
-    std::string_view suffix;
-    if (const std::size_t cut = token.find_first_of("-+"); cut != std::string_view::npos) {
-        core   = token.substr(0, cut);
-        suffix = token.substr(cut);
-    }
-
-    std::size_t dots = 0;
-    for (char c : core) {
-        if (c == '.') ++dots;
-    }
-    if (dots >= 2) return std::string{token};
-
-    std::string padded{core};
-    for (std::size_t i = dots; i < 2; ++i) padded += ".0";
-    padded += suffix;
-    return padded;
-}
-
 [[nodiscard]] std::string_view trim(std::string_view text) {
     while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
     while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.remove_suffix(1);
@@ -234,8 +204,7 @@ std::optional<VersionRange> VersionRange::parse(std::string_view text) {
         std::string_view token = rest.substr(0, end);
         if (token.empty()) return std::nullopt;
 
-        const std::string padded = pad_version(token);
-        auto version = Version::parse(padded);
+        auto version = Version::parse(token);
         if (!version) return std::nullopt;
         range.clauses_.push_back(Clause{op, *version});
 

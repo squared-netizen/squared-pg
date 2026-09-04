@@ -11,7 +11,6 @@
 #include "services/services.hpp"
 
 #include <algorithm>
-#include <span>
 
 namespace squared::pg {
 namespace {
@@ -52,66 +51,10 @@ namespace {
     return error;
 }
 
-/// Check a resource's declared capability requirements against the engine.
-///
-/// §2.14.1: an unsatisfied capability MUST fail at resolution, never at
-/// materialization. This is the check that makes the capability registry
-/// usable rather than merely enumerable -- before sqcart carried
-/// `requires_capabilities`, a manifest had nowhere to state a requirement and
-/// eight of the nine tokens could not be demanded by anything.
-///
-/// sqcart validated the token's *shape* and deliberately stopped there. Whether
-/// `capability.template.substitute@^1.0` names something real, and whether this
-/// build satisfies the range, is the consumer's question -- which is to say,
-/// this function's.
-[[nodiscard]] Result<void> check_capabilities(const sqcart::Manifest& manifest,
-                                              std::span<const Capability> provided,
-                                              const ResourceId& id, ErrorCategory category) {
-    std::vector<std::string> unmet;
-
-    for (const std::string& requirement : manifest.requires_capabilities()) {
-        const std::size_t at = requirement.find('@');
-        const std::string_view token{std::string_view{requirement}.substr(0, at)};
-        const std::string_view constraint =
-            at == std::string::npos ? std::string_view{} : std::string_view{requirement}.substr(at + 1);
-
-        const auto found = std::find_if(provided.begin(), provided.end(),
-                                        [&](const Capability& c) { return c.token == token; });
-        if (found == provided.end()) {
-            unmet.push_back(requirement);
-            continue;
-        }
-        auto range = VersionRange::parse(constraint);
-        if (!range || !range->satisfied_by(found->version)) unmet.push_back(requirement);
-    }
-
-    if (unmet.empty()) return {};
-
-    EngineError error = make_error(ErrorCategory::capability, "capability.unsatisfied",
-                                   id.str() + " requires capabilities this engine does not provide");
-    error.resource    = id.str();
-    error.recoverable = true;
-
-    // §2.15.3: the list of what the engine *does* provide is what makes this
-    // actionable. "Capability unsatisfied" on its own tells the author nothing
-    // about whether they mistyped a token or need a newer generator.
-    std::vector<std::string> available;
-    for (const Capability& capability : provided) {
-        available.push_back(capability.token + '@' + capability.version.to_string());
-    }
-    Value detail = Value::object();
-    detail.set("unsatisfied", Value::strings(unmet));
-    detail.set("provided", Value::strings(available));
-    error.diagnostics = std::move(detail);
-    (void)category;
-    return Unexpected{std::move(error)};
-}
-
 /// Common resolution front half: select a record, open its payload.
 [[nodiscard]] Result<ResolvedResource> select_and_open(ResourceService& resources, const ResourceRef& ref,
                                                        ResourceKind kind, ErrorCategory category,
-                                                       std::string_view code_prefix,
-                                                       std::span<const Capability> provided) {
+                                                       std::string_view code_prefix) {
     const ResourceIndex& index = resources.index();
 
     auto range = VersionRange::parse(ref.range);
@@ -142,14 +85,6 @@ namespace {
 
     auto cartridge = resources.open(*record);
     if (!cartridge) return Unexpected{cartridge.error()};
-
-    // Before anything else about the body is looked at. A resource this engine
-    // cannot honour should be refused for that reason, not for whatever
-    // secondary complaint its body happens to trigger first.
-    if (auto satisfied = check_capabilities((*cartridge)->manifest(), provided, record->id, category);
-        !satisfied) {
-        return Unexpected{satisfied.error()};
-    }
 
     ResolvedResource resolved;
     resolved.record    = record;
@@ -206,7 +141,7 @@ namespace {
 Result<ResolvedResource> TemplateService::resolve(const ResourceRef& ref, const ResolutionContext& context,
                                                   std::vector<Diagnostic>& diagnostics) {
     auto resolved = select_and_open(resources_, ref, ResourceKind::project_template,
-                                    ErrorCategory::template_, "template", capabilities_);
+                                    ErrorCategory::template_, "template");
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
@@ -286,8 +221,7 @@ std::string TemplateService::working_directory(const ResolvedResource& resolved)
 
 Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const ResolutionContext& context,
                                              std::vector<Diagnostic>& diagnostics) {
-    auto resolved = select_and_open(resources_, ref, ResourceKind::kit, ErrorCategory::kit, "kit",
-                                    capabilities_);
+    auto resolved = select_and_open(resources_, ref, ResourceKind::kit, ErrorCategory::kit, "kit");
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
@@ -379,8 +313,7 @@ Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const Resol
 Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const ResolutionContext& context,
                                                  std::vector<Diagnostic>& diagnostics) {
     auto resolved =
-        select_and_open(resources_, ref, ResourceKind::package, ErrorCategory::package,
-                        "package", capabilities_);
+        select_and_open(resources_, ref, ResourceKind::package, ErrorCategory::package, "package");
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
@@ -430,8 +363,7 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
 
 Result<ResolvedResource> AssetService::resolve(const ResourceRef& ref, const ResolutionContext& context,
                                                std::vector<Diagnostic>& diagnostics) {
-    auto resolved = select_and_open(resources_, ref, ResourceKind::asset, ErrorCategory::asset, "asset",
-                                    capabilities_);
+    auto resolved = select_and_open(resources_, ref, ResourceKind::asset, ErrorCategory::asset, "asset");
     if (!resolved) return resolved;
 
     auto body = resolved->cartridge->manifest().as_assets();

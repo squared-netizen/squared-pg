@@ -87,11 +87,6 @@ Proposal: forward-compatible reader, refuse-and-report on major mismatch.
 - **Q-27** — §2.8.1's identifier grammar and cartridge format §5.2's disagree on
   separators and segment counts (D-029). The engine accepts both. Decide which
   is normative and amend the other.
-- **Q-29** — the engine can express "requires kit X" but not "requires at least
-  one kit providing X". `template.android.cpp` needs the latter: it wants *a*
-  rendering backend without naming `kit.opengl` specifically, so that
-  `kit.sfml` is a drop-in alternative. `__has_include` covers it in the
-  generated source; whether resolution should also express it is open.
 - **Q-28** — the reference workflow defaults `platforms` to `["termux"]` and
   `framework` to `"1.0.0"`. Both are workflow policy under §2.5.6, but the
   framework default in particular is a placeholder standing in for Q-23 (where

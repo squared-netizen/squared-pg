@@ -32,7 +32,6 @@ struct Manifest::Impl {
     std::optional<std::string> license;
     std::optional<CompatRef>   engine;
     std::vector<std::string>   requires_features;
-    std::vector<std::string>   requires_capabilities;
     std::vector<Author>        authors;
 
     std::unique_ptr<CartridgeBody> cartridge;
