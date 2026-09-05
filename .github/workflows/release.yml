@@ -1,0 +1,239 @@
+# squared-pg — release.
+#
+# Triggered by pushing a tag `v*`, which tools/release.fish does after running
+# the same checks locally. Nothing here is a substitute for that: the point of
+# the local script is that a failed release should be discovered before a tag
+# exists, because a tag is the one thing that is awkward to take back.
+#
+# Artifacts:
+#
+#   squared-pg-<version>-src.tar.gz          source, vendored deps included
+#   squared-pg-<version>-<platform>.tar.gz   binary bundle, per platform
+#   SHA256SUMS
+#
+# The source tarball is the primary artifact, not a fallback. squared-pg builds
+# offline from a checkout in under a minute, and on Termux — the primary target
+# — building from source is the only sensible route: a binary would have to
+# match one Termux libc++ and would rot at the next upgrade.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (without the leading v)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Refuse to release something that does not pass its own tests.
+  # -------------------------------------------------------------------------
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        name: resolve and check the version
+        run: |
+          file_version=$(tr -d ' \t\n\r' < VERSION)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [ "$tag_version" != "$file_version" ]; then
+              echo "tag $GITHUB_REF_NAME does not match VERSION ($file_version)" >&2
+              exit 1
+            fi
+          fi
+          echo "version=$file_version" >> "$GITHUB_OUTPUT"
+
+      - run: sh tools/version-check.sh
+
+      - name: build and test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+  # -------------------------------------------------------------------------
+  # The source tarball. Built once, on one runner, so it is byte-identical
+  # regardless of which platform job happens to finish first.
+  # -------------------------------------------------------------------------
+  source:
+    name: source tarball
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: archive
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          name="squared-pg-$VERSION"
+          mkdir -p dist
+          # git archive rather than tar: it honours .gitignore and export
+          # rules, so a stray build directory or a scratch workspace cannot
+          # end up in a release.
+          git archive --format=tar --prefix="$name/" HEAD \
+            | gzip -9 > "dist/$name-src.tar.gz"
+          ls -lh dist/
+
+      - name: the tarball builds offline
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          # Unpacking somewhere unrelated and building proves the tarball is
+          # self-contained -- that nothing was left behind in .gitignore and
+          # no dependency is fetched.
+          cd "$(mktemp -d)"
+          tar xzf "$GITHUB_WORKSPACE/dist/squared-pg-$VERSION-src.tar.gz"
+          cd "squared-pg-$VERSION"
+          make -j
+          make check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: dist/*
+
+  # -------------------------------------------------------------------------
+  # Binary bundles.
+  #
+  # No Termux/Android binary. A Termux build links that installation's libc++
+  # and would break on the next upgrade; the source tarball builds there in
+  # under a minute with no network. Shipping a binary that rots would be worse
+  # than shipping none.
+  # -------------------------------------------------------------------------
+  bundle:
+    name: bundle / ${{ matrix.platform }}
+    needs: verify
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - platform: macos-arm64
+            runner: macos-14
+          - platform: macos-x86_64
+            runner: macos-13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="$PWD/stage/usr"
+          cmake --build build -j
+          cmake --install build
+
+      - name: test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+      - name: assemble
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          name="squared-pg-$VERSION-$PLATFORM"
+          mkdir -p "dist/$name"
+          # The layout sqpg looks for: the binary beside its resources, so the
+          # upward walk finds them wherever the bundle is unpacked.
+          cp stage/usr/bin/sqpg "dist/$name/"
+          cp -r resources lua "dist/$name/"
+          cp LICENSE README.md BUILDING.md "dist/$name/"
+          printf '%s\n' "$VERSION" > "dist/$name/VERSION"
+
+          # Prove it works from the bundle before shipping it, not after.
+          ( cd "dist/$name" && ./sqpg list && ./sqpg describe )
+
+          tar czf "dist/$name.tar.gz" -C dist "$name"
+          rm -rf "dist/$name"
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.platform }}
+          path: dist/*.tar.gz
+
+  # -------------------------------------------------------------------------
+  publish:
+    name: publish
+    needs: [verify, source, bundle]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staged
+
+      - name: collect and checksum
+        run: |
+          mkdir -p dist
+          find staged -name '*.tar.gz' -exec cp {} dist/ \;
+          cd dist && sha256sum *.tar.gz | tee SHA256SUMS
+
+      - name: release notes
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          cat > NOTES.md <<EOF
+          ## squared-pg $VERSION
+
+          An offline-first project generator for the Squared framework. A C++20
+          engine provides generation capability; a Lua 5.4 control layer
+          sequences it into workflows.
+
+          **Alpha.** The interfaces are settled enough to build against and not
+          settled enough to promise. See \`docs/developer/engine/limitations.md\`
+          for what this build deliberately does not do.
+
+          ### Install
+
+          Binary bundles: unpack and run \`./sqpg\`. The binary finds its
+          resources beside itself, so no installation step is needed.
+
+          On **Termux**, build from source — a binary would link that
+          installation's libc++ and break on the next upgrade:
+
+          \`\`\`sh
+          tar xzf squared-pg-$VERSION-src.tar.gz && cd squared-pg-$VERSION
+          make -j4 && make check
+          \`\`\`
+
+          No network is used at any point. Every dependency is vendored.
+
+          ### Verify
+
+          \`\`\`sh
+          sha256sum -c SHA256SUMS
+          \`\`\`
+          EOF
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          body_path: NOTES.md
+          prerelease: true
+          draft: true
+          fail_on_unmatched_files: true

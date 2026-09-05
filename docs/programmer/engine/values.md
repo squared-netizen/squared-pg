@@ -81,7 +81,7 @@ A pre-release is only selected when a clause explicitly names one at the same
 checked, which a `std::string` with dots in it has not.
 
 ```text
-template.termux.cpp
+template.terminal.cpp
 kit.terminal@^0.1.0
 ```
 

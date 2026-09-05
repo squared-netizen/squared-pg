@@ -63,7 +63,7 @@ Two to eight segments, lowercase, each starting with a letter. Separators may
 not double or end a segment. The first segment names the kind.
 
 ```text
-template.termux.cpp     kit.terminal     package.squared.gui
+template.terminal.cpp     kit.terminal     package.squared.gui
 ```
 
 `*.squared_pg.*` is reserved for generator-internal resources.

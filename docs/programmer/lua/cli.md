@@ -57,19 +57,19 @@ runs before a script is running.
 sqpg list
 
 # what would happen
-sqpg plan hello --template template.termux.cpp --kit kit.terminal
+sqpg plan hello --template template.terminal.cpp --kit kit.terminal
 
 # do it
-sqpg new hello --template template.termux.cpp --kit kit.terminal
+sqpg new hello --template template.terminal.cpp --kit kit.terminal
 cd hello && make && ./build/hello
 
 # with a Lua script workspace as well
-sqpg new hello --template template.termux.cpp --kit kit.terminal --kit kit.lua
+sqpg new hello --template template.terminal.cpp --kit kit.terminal --kit kit.lua
 
 # from a config file
 cat > project.lua <<'EOF'
 return {
-  ["template"] = "template.termux.cpp",
+  ["template"] = "template.terminal.cpp",
   kits = { "kit.terminal", "kit.lua" },
   platforms = { "termux" },
   parameters = { description = "My terminal tool." },
@@ -78,7 +78,7 @@ EOF
 sqpg new hello --config project.lua
 
 # for a script
-sqpg plan hello --template template.termux.cpp --kit kit.terminal --json
+sqpg plan hello --template template.terminal.cpp --kit kit.terminal --json
 ```
 
 ## Exit status

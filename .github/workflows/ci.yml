@@ -1,0 +1,196 @@
+# squared-pg — continuous integration.
+#
+# Two build systems, deliberately. CMake is the supported path; the hand-written
+# Makefile is what Termux uses. They must stay behaviourally identical, and the
+# only way to know they have is to run both — a bug that appeared under CMake
+# and not under make is exactly how the installation-root defect was found.
+#
+# No network is used by the build itself. Everything squared-pg compiles is
+# vendored, so a runner with a compiler and CMake is the whole requirement.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cmake:
+    name: cmake / ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64-gcc
+            runner: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: linux-x86_64-clang
+            runner: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: linux-aarch64-gcc
+            runner: ubuntu-24.04-arm
+            cc: gcc
+            cxx: g++
+          - name: macos-arm64
+            runner: macos-14
+            cc: clang
+            cxx: clang++
+          - name: macos-x86_64
+            runner: macos-13
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: build
+        run: cmake --build build -j
+
+      # The smoke test generates projects, builds them and runs them, so it
+      # needs somewhere writable. macOS runners set TMPDIR; Linux ones do not
+      # always, and the tests fall back to "." which is not always what we want.
+      - name: test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+      # macOS is the platform with no on-device testing behind it. Proving the
+      # binary can find its own resources there is the check that matters,
+      # because the executable-path lookup is platform-specific code.
+      - name: sqpg finds its installation
+        run: |
+          ./build/sqpg list
+          ./build/sqpg describe
+
+  makefile:
+    name: makefile / ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-14]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: make -j
+
+      - name: engine tests
+        run: make check
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+      - name: end-to-end smoke
+        run: make smoke
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+      # The bug class that cost an afternoon: header dependency tracking makes
+      # a link target depend on its headers, and a rule using $^ then tries to
+      # compile them. It only appears on an incremental rebuild, so a clean
+      # build alone would not have caught it.
+      - name: incremental rebuild after touching a source
+        run: |
+          touch engine/src/services/project_service.cpp
+          make -j
+      - name: incremental rebuild after touching a header
+        run: |
+          touch engine/src/services/services.hpp
+          make -j
+
+  sqcart:
+    name: sqcart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The nested project must build standalone. squared-pg links it from
+      # vendored in-tree source, so a change here that only works inside the
+      # parent build would break its isolation gate.
+      - name: build and test
+        run: cd sqcart && make -j && make check
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: version is single-sourced
+        run: sh tools/version-check.sh
+
+      - name: manifests are valid JSON
+        run: |
+          fail=0
+          for m in $(find resources -name manifest.json) \
+                   $(find lua/workflows -name workflow.json); do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$m" \
+              || { echo "invalid: $m" >&2; fail=1; }
+          done
+          exit $fail
+
+      - name: shell scripts parse
+        run: |
+          fail=0
+          for s in $(find tools -name '*.sh'); do
+            # bash -n for the bash scripts, sh -n for the POSIX ones. Checking
+            # everything with sh would reject valid bash; checking everything
+            # with bash would let a bashism into a POSIX script unnoticed.
+            if head -n 1 "$s" | grep -q bash; then
+              bash -n "$s" || { echo "syntax error: $s" >&2; fail=1; }
+            else
+              sh -n "$s" || { echo "syntax error: $s" >&2; fail=1; }
+            fi
+          done
+          exit $fail
+
+      # The tooling is bash now (D-043), which means CI can actually execute
+      # it. `check` runs the full build and test matrix itself, so hygiene runs
+      # only the parts that are cheap and self-contained.
+      - name: release tooling runs
+        run: |
+          tools/release.sh status
+          tools/release.sh --help >/dev/null
+        env:
+          TMPDIR: ${{ runner.temp }}
+
+      # fish is developer tooling (§1.7) and is the one language in the tree
+      # that nothing else exercises. Two real bugs shipped in release.fish
+      # because neither the author nor CI could run it: shadowing fish's
+      # read-only $version, and reading a top-level `set --local` from inside a
+      # function, which fish does not permit and does not warn about.
+      - name: install fish
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fish
+
+      - name: fish scripts parse and scope correctly
+        run: python3 tools/fish-lint.py
+
+      - name: no generated workspace was committed
+        run: |
+          # A stray `sqpg new` in the repository root is easy to do and would
+          # ship someone's scratch project in the release tarball.
+          if find . -name '.squared' -not -path './.git/*' | grep -q .; then
+            echo "a generated workspace is committed:" >&2
+            find . -name '.squared' -not -path './.git/*' >&2
+            exit 1
+          fi

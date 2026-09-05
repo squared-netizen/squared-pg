@@ -54,7 +54,7 @@ Value request(const std::string& name, const std::string& output, bool with_lua)
     Value config = Value::object();
     config.set("name", name);
     config.set("output", output);
-    config.set("template", "template.termux.cpp");
+    config.set("template", "template.terminal.cpp");
 
     Array kits;
     kits.emplace_back("kit.terminal");
@@ -84,7 +84,7 @@ void resolution() {
     auto engine = ready_engine();
 
     Value params = Value::object();
-    params.set("id", "template.termux.cpp");
+    params.set("id", "template.terminal.cpp");
     const OperationResult resolved = engine->execute("template.resolve", params);
     CHECK(resolved.succeeded());
     CHECK_EQ(std::string{resolved.data().string_or("working_directory", "")}, "sq_app");
@@ -226,7 +226,7 @@ void metadata_and_provenance() {
     CHECK(record.int_or("record_version", 0) == 1);
     CHECK_EQ(std::string{record.find("project")->string_or("name", "")}, "hello");
     CHECK_EQ(std::string{record.find("resources")->find("template")->string_or("id", "")},
-             "template.termux.cpp");
+             "template.terminal.cpp");
 
     // §2.7.3 forbids absolute host paths in the record, so a workspace stays
     // relocatable and its identity does not depend on where it sits.
@@ -289,7 +289,7 @@ void required_kit_is_enforced() {
     Value config = Value::object();
     config.set("name", "hello");
     config.set("output", "/nonexistent/hello");
-    config.set("template", "template.termux.cpp");
+    config.set("template", "template.terminal.cpp");
     config.set("kits", Value::array());  // template requires kit.terminal
 
     const OperationResult result = engine->execute("project.plan", config);

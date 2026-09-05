@@ -11,8 +11,19 @@
 
 cmake_minimum_required(VERSION 3.21)
 
+# The version lives in one file, read by both build systems and compiled into
+# the engine. Three hardcoded copies is two too many: they drift silently and
+# the first symptom is a manifest refusing to resolve against an engine that
+# reports the wrong number.
+file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" SQUARED_PG_VERSION_FILE)
+string(STRIP "${SQUARED_PG_VERSION_FILE}" SQUARED_PG_VERSION)
+
+# project() accepts only numeric components, so a pre-release suffix is kept
+# for the compiled-in string and stripped for CMake's own bookkeeping.
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" SQUARED_PG_VERSION_CORE "${SQUARED_PG_VERSION}")
+
 project(squared-pg
-    VERSION     0.1.0
+    VERSION     ${SQUARED_PG_VERSION_CORE}
     DESCRIPTION "Offline-first project generator for the Squared framework"
     LANGUAGES   C CXX)
 
@@ -103,8 +114,24 @@ if(SQUARED_PG_BUILD_TESTS)
     add_subdirectory(engine/tests)
 endif()
 
+# ---------------------------------------------------------------------------
+# Install
+#
+# The layout matches what sqpg looks for when it cannot find its tree by
+# walking upward: <prefix>/share/squared-pg alongside <prefix>/bin/sqpg.
+# ---------------------------------------------------------------------------
+
+if(PROJECT_IS_TOP_LEVEL AND SQUARED_PG_BUILD_CLI)
+    include(GNUInstallDirs)
+    install(TARGETS sqpg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(DIRECTORY resources lua
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/squared-pg)
+    install(FILES LICENSE README.md BUILDING.md
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/squared-pg)
+endif()
+
 if(PROJECT_IS_TOP_LEVEL)
-    message(STATUS "squared-pg ${PROJECT_VERSION}")
+    message(STATUS "squared-pg ${SQUARED_PG_VERSION}")
     message(STATUS "  cli    : ${SQUARED_PG_BUILD_CLI}")
     message(STATUS "  tests  : ${SQUARED_PG_BUILD_TESTS}")
 endif()

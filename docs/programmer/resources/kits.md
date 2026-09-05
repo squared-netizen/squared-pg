@@ -35,7 +35,7 @@ build fragment `kit_<name>.mk` so the template's wildcard include finds it.
 
   "provides": ["graphics", "input"],
   "platforms": ["termux", "linux"],
-  "compatible_templates": ["template.termux.cpp"],
+  "compatible_templates": ["template.terminal.cpp"],
 
   "requires": {
     "framework": ">=1.0.0 <2.0.0",

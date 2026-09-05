@@ -21,6 +21,8 @@ counterpart there.
 - [The CLI](lua/cli.md) — `sqpg` commands and options
 
 ### Resources
+- [Android projects](resources/android.md) — the NDK workspace and its rendering kits
+- [Termux projects](resources/termux.md) — Termux:API through `kit.termux`
 - [Authoring a template](resources/templates.md)
 - [Authoring a kit](resources/kits.md)
 - [Manifest reference](resources/manifests.md)
@@ -40,7 +42,7 @@ if (!engine->initialize().succeeded()) { /* report and stop */ }
 squared::pg::Value request = squared::pg::Value::object();
 request.set("name", "hello");
 request.set("output", "./hello");
-request.set("template", "template.termux.cpp");
+request.set("template", "template.terminal.cpp");
 request.set("kits", squared::pg::Value::strings({"kit.terminal"}));
 
 const auto result = engine->execute("project.generate", request);
@@ -55,7 +57,7 @@ The same thing from Lua:
 local result = engine.project.generate({
   name = "hello",
   output = "./hello",
-  ["template"] = "template.termux.cpp",
+  ["template"] = "template.terminal.cpp",
   kits = { "kit.terminal" },
 })
 if not result.ok then print(result.error.code, result.error.message) end
@@ -64,7 +66,7 @@ if not result.ok then print(result.error.code, result.error.message) end
 And from a shell:
 
 ```sh
-sqpg new hello --template template.termux.cpp --kit kit.terminal
+sqpg new hello --template template.terminal.cpp --kit kit.terminal
 ```
 
 All three go through the same operation registry entry.

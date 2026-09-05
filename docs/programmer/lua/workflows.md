@@ -35,6 +35,15 @@ it, and run it by id. No rebuild.
 
 `trust` is a *request*. The host assigns the tier and may refuse.
 
+**`sandboxed` is currently refused.** Enforcing it means constructing a
+restricted `_ENV` — no `io`, no `os.execute`, no `loadfile`, no `package` — and
+giving the workflow a host-provided I/O channel instead of the standard
+library's. None of that exists yet, so `sqpg` declines to run a workflow that
+asks for the tier rather than granting it more than it requested. A tier that is
+declared but silently unenforced is worse than none.
+
+Declare `trusted` for now. Tracked as Q-26.
+
 ## What the host gives you
 
 ### `engine`
@@ -42,7 +51,7 @@ it, and run it by id. No rebuild.
 ```lua
 engine.execute{ operation = "project.generate", parameters = config }
 engine.project.generate(config)              -- sugar; same registry entry
-engine.template.resolve("template.termux.cpp")  -- a lone string binds to the
+engine.template.resolve("template.terminal.cpp")  -- a lone string binds to the
                                                 -- first required parameter
 engine.state()        -- "ready"
 engine.version()      -- "0.1.0"
@@ -117,7 +126,7 @@ end
 local result = engine.project.generate({
   name = name,
   output = "./" .. name,
-  ["template"] = "template.termux.cpp",
+  ["template"] = "template.terminal.cpp",
   kits = { "kit.terminal" },
 })
 

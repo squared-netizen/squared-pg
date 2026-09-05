@@ -23,7 +23,9 @@ YYJSON   := $(THIRD)/yyjson-0.12.0/src
 SHA256   := $(THIRD)/crypto-algorithms
 LUA      := $(THIRD)/lua-5.4.8/src
 
-DEFS     := -DSQCART_ENABLE_WRITER=1
+SQ_VERSION := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
+
+DEFS     := -DSQCART_ENABLE_WRITER=1 -DSQUARED_PG_VERSION=\"$(SQ_VERSION)\"
 INC      := -Iengine/include -Iengine/src -Iengine/lua/include -Isqcart/include -Isqcart/src \
             -isystem $(MINIZ) -isystem $(YYJSON) -isystem $(SHA256) -isystem $(LUA)
 
@@ -68,7 +70,8 @@ SQCART_OBJ  := $(patsubst %,$(BUILD)/%.o,$(SQCART_SRC))
 C_OBJ       := $(patsubst %,$(BUILD)/%.o,$(C_SRC))
 LUA_OBJ     := $(patsubst %,$(BUILD)/%.o,$(LUA_SRC))
 
-TESTS    := test_version test_identity test_value test_support test_lifecycle test_generate
+TESTS    := test_version test_identity test_value test_support test_lifecycle test_generate \
+            test_android
 TEST_BIN := $(patsubst %,$(BUILD)/%,$(TESTS))
 
 .PHONY: all check smoke clean
@@ -88,15 +91,25 @@ $(BUILD)/liblua.a: $(LUA_OBJ)
 $(BUILD)/libsquaredpg.a: $(ENGINE_OBJ) $(SQCART_OBJ) $(C_OBJ)
 	ar rcs $@ $^
 
+# Inputs are named explicitly rather than with $^.
+#
+# $^ is every prerequisite, and once the .d files below are included, each
+# link target gains its headers as prerequisites -- so $^ would expand to
+# include .hpp files and clang refuses with "cannot specify -o when generating
+# multiple output files". It only appears on an *incremental* build, because a
+# clean tree has no .d files when the makefile is parsed, which is exactly the
+# kind of bug that passes locally and fails on the next machine.
 $(BUILD)/sqpg: app/src/main.cpp $(BINDING_OBJ) $(BUILD)/libsquaredpg.a $(BUILD)/liblua.a
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) app/src/main.cpp $(BINDING_OBJ) \
+	    $(BUILD)/libsquaredpg.a $(BUILD)/liblua.a -o $@
 
 # Tests reach the real resources/ tree rather than a fixture copy: the point of
 # these tests is that the shipped template and kits generate correctly.
 $(BUILD)/test_%: engine/tests/test_%.cpp $(BUILD)/libsquaredpg.a
 	@mkdir -p $(BUILD)
-	$(CXX) $(CXXFLAGS) -DSQUARED_PG_TEST_SOURCE_DIR=\"$(CURDIR)\" -Iengine/tests $^ -o $@
+	$(CXX) $(CXXFLAGS) -DSQUARED_PG_TEST_SOURCE_DIR=\"$(CURDIR)\" -Iengine/tests \
+	    $< $(BUILD)/libsquaredpg.a -o $@
 
 check: all
 	@fail=0; for t in $(TEST_BIN); do \

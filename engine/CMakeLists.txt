@@ -34,6 +34,9 @@ target_link_libraries(squared_pg_engine
     PUBLIC  sqcart::read
     PRIVATE yyjson squared_pg_sha256)
 
+target_compile_definitions(squared_pg_engine PRIVATE
+    SQUARED_PG_VERSION="${SQUARED_PG_VERSION}")
+
 target_compile_options(squared_pg_engine PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>)

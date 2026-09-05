@@ -405,3 +405,164 @@ constraint *silently never applied* — and the repository's own manifests wrote
 `requires_engine: "^0.1"`, so the engine-compatibility warning had never once
 fired. A compatibility check that quietly does nothing is worse than one that
 errors, because nothing signals it.
+
+## D-036 — NDK detection belongs to the template, not the rendering kit
+[[2.8 Templates]] · [[2.9 Kits]]
+
+`template.android.cpp` locates the NDK, exports `SQ_NDK_INC` / `SQ_NDK_LIB`,
+and compiles `android_native_app_glue.c` from it. `kit.opengl` consumes those
+and adds only `-lEGL -lGLESv3` plus its own header.
+
+An earlier draft put detection in the kit. That is wrong for a reason worth
+recording: the template requires **no** rendering kit — that is what makes
+`kit.opengl` and a future `kit.sfml` alternatives rather than one being baked
+in — so a project with no kit would have had no glue and could not build.
+NativeActivity is the template's architecture; EGL is the kit's contribution
+on top of it.
+
+The general rule: an integration point's *substrate* belongs to whoever cannot
+be absent. A second rendering kit inherits a working NativeActivity build
+rather than re-solving detection, and there is one copy of the detection logic
+rather than one per kit.
+
+## D-037 — Declared parameter defaults are applied after engine built-ins
+[[2.8 Templates]] · amends D-033
+
+`effective_parameters` layers workflow values, then engine built-ins, then the
+template's declared defaults — each put-if-absent, so an earlier layer still
+wins.
+
+Built-ins first is what lets a template write `"default_from": "project_name"`,
+where `project_name` is engine-supplied rather than workflow-supplied.
+`template.android.cpp` uses exactly that for `app_label`, and with the previous
+order the reference resolved against nothing and substitution failed.
+
+A template default for a name the engine also provides is now redundant rather
+than in conflict, which is the right relationship: the engine's built-ins are
+facts about the request, and a template cannot know better.
+
+## D-038 — SDK levels are build settings, not generation parameters
+[[2.7 Project generation model]]
+
+`AndroidManifest.xml` carries no `<uses-sdk>`. `minSdkVersion`,
+`targetSdkVersion` and the ABI are make variables in
+`mk/squared_generated.mk`, passed to `aapt2 link` at package time.
+
+Baking them at generation time would mean regenerating a project to retarget
+it, which §2.7.11's absence makes worse than it sounds: with no in-place
+update, regenerating means losing the workspace. Declaring them in both places
+would create two sources of truth, and aapt2 takes the manifest's.
+
+The general test: if a value can change over a project's life without changing
+what the project *is*, it belongs in the build, not in the generated content.
+
+## D-039 — A kit adds an external sysroot with `-idirafter`, never `-I`
+[[2.9 Kits]]
+
+`kit.opengl` reaches the NDK's Khronos headers with `-idirafter $(SQ_NDK_INC)`,
+and names `libEGL.so` and `libGLESv3.so` by absolute path rather than as `-l`
+names with `-L`.
+
+Both are corrections made after the first on-device build failed.
+
+**Headers.** Termux's clang ships a complete sysroot including every
+`android/*` header, so the NDK is needed only for what Termux lacks. Adding it
+with `-I` puts a second complete set of C headers *ahead of libc++*, and
+`<cctype>` finds the NDK's `ctype.h` instead of libc++'s wrapper — libc++
+detects the mismatch and stops the build. `-idirafter` appends to the end of
+the search path, so an external sysroot supplies only headers nothing else
+provides.
+
+**Libraries.** `-L` fixes the libglvnd shadowing problem but creates a second
+one: it also places the NDK's `libc`, `libm` and `libdl` stubs ahead of the
+host's for every implicit `-l` the driver adds. Naming the two files outright
+avoids both. A search order cannot go wrong when there is no search.
+
+Generalises to every kit whose external dependency ships its own sysroot —
+which is most of them, since that is what `acquisition: "system"` usually
+means. A kit contributes *additions* to a host toolchain and must not
+reorganise it.
+
+## D-040 — A template's identity names what it produces, not where it runs
+[[2.8 Templates]] · renames `template.termux.cpp`
+
+`template.termux.cpp` becomes `template.terminal.cpp`, with
+`platforms: ["termux", "linux", "macos", "desktop"]`.
+
+The template was never Termux-specific — it is portable C++20 and `make`, and
+it builds and runs unchanged on desktop Linux. Naming it for the platform it
+was first written on made `sqpg list` tell a Debian user the tool was not for
+them, which is an adoption failure caused entirely by a string.
+
+The rule: **an identity names the artifact; a `platforms` list names the
+hosts.** `template.android.cpp` keeps its name because Android is what it
+produces, not merely where it was authored.
+
+Renaming a resource identity is a breaking change. Done now, at 0.1.0 with one
+consumer, because it only gets more expensive.
+
+## D-041 — The workflow assumes no target platform
+[[2.5 Lua control layer]] · [[2.7 Project generation model]]
+
+`workflow.generate.default` no longer defaults `platforms` to `["termux"]`.
+An empty platform set means "no restriction", so compatibility checks admit any
+resource rather than filtering against a guess.
+
+Detection from the host was considered and rejected. The host a project is
+*generated* on is not necessarily the host it *targets* — `template.android.cpp`
+is generated on Termux and targets Android — so `uname` would be wrong in
+exactly the case that matters. A workflow that wants filtering says so.
+
+## D-042 — The installation root is found by marker, not by directory name
+[[2.1 Architectural model]]
+
+`sqpg` locates its resources and workflows by walking upward from its own
+executable until it finds a directory containing both `lua/workflows` and
+`resources`, then falling back to `<prefix>/share/squared-pg`.
+
+The previous version special-cased the directory names `build` and `bin`. That
+meant `cmake -B build-cmake` — or CLion's default `cmake-build-debug`, or any
+other name — produced a binary that could not find its own workflows. It was
+found by the CMake build's smoke test failing while every other test passed,
+which is the whole reason for having a second build path.
+
+Recognising the thing being looked for survives a build directory called
+anything. Executable location now also handles macOS (`_NSGetExecutablePath`)
+and the BSDs (`KERN_PROC_PATHNAME`); `argv[0]` is the last resort rather than
+the first, since for a binary on `PATH` it is a bare name that resolves to
+nothing.
+
+## D-043 — Repository tooling is bash; fish is an optional translation
+[[1.7 Tools]]
+
+`tools/*.fish` becomes `tools/*.sh`, written in bash 3.2-compatible form.
+§1.7's preference for fish is amended: fish may be provided *alongside* a bash
+script for readability, but the bash form is canonical and is what CI runs.
+
+The reason is not taste. Two real bugs shipped in `tools/release.fish` because
+neither the author nor CI could execute it:
+
+- `version` is read-only in fish — it holds fish's own version — so
+  `--argument-names root version` is a parse-time error in every function
+  declaring it.
+- fish does not expose a caller's local variables to the functions it calls,
+  unlike bash, so a top-level `set --local root` was invisible inside every
+  function and `$root` expanded to nothing.
+
+Neither is exotic. Both would have been caught by running the script once. The
+problem was that the script could not be run where it was written, and a
+release script that has never been executed is a release script that does not
+work — which is exactly what happened, twice.
+
+Bash is present on every target host: Termux, Linux, macOS. The 3.2
+compatibility constraint is real and comes from macOS, which still ships that
+version and is in the CI matrix: no associative arrays, no `mapfile`, no
+`${var,,}`.
+
+`tools/fish-lint.py` stays. Any fish that is written should still be checked,
+and it catches both classes above — including the scoping one, which no parser
+can see because it is not a syntax error.
+
+The installer inside a release artifact remains POSIX `sh`: it runs on a
+stranger's machine, where every additional requirement is one more thing that
+can be missing.

@@ -1,6 +1,15 @@
 # Build trees (anchored — do NOT use bare build/)
 /build/
+/build-*/
+/cmake-build-*/
+/out/
 /sqcart/build/
+
+# Release staging
+/dist/
+
+# Installer backups
+/.squared-pg-install-backup/
 
 # Object and archive files
 *.o

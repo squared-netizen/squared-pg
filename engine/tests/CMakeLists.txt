@@ -11,7 +11,8 @@ set(SQUARED_PG_TESTS
     test_value
     test_support
     test_lifecycle
-    test_generate)
+    test_generate
+    test_android)
 
 foreach(test IN LISTS SQUARED_PG_TESTS)
     add_executable(${test} ${test}.cpp)
@@ -31,6 +32,7 @@ endforeach()
 target_link_libraries(test_support PRIVATE yyjson squared_pg_sha256)
 target_link_libraries(test_value PRIVATE yyjson squared_pg_sha256)
 target_link_libraries(test_generate PRIVATE squared_pg_sha256)
+target_link_libraries(test_android PRIVATE squared_pg_sha256)
 
 # The smoke test drives the CLI end to end: generate a workspace, build it, run
 # it. It is the only test that proves the *output* works, not just the engine.

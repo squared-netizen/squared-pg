@@ -115,7 +115,19 @@ local function build_config(name)
     out = parsed.options.out,
   }
 
-  local config = args.merge({ platforms = { "termux" }, framework = "1.0.0" }, from_file, from_cli)
+  -- No platform default.
+  --
+  -- This used to default to "termux", which made every generation on Linux or
+  -- macOS claim a platform the user was not on. An empty platform set means
+  -- "no restriction": the engine's compatibility checks then admit any
+  -- resource rather than filtering against a guess.
+  --
+  -- Detection is deliberately not attempted either. The host a project is
+  -- *generated* on is not necessarily the host it *targets* -- the Android
+  -- template is generated on Termux and targets Android -- so guessing from
+  -- uname would be wrong in exactly the case that matters. If you want
+  -- filtering, say so: --platform android.
+  local config = args.merge({ framework = "1.0.0" }, from_file, from_cli)
 
   -- Merge parameter tables rather than replacing: a --param on the command
   -- line should refine a config file, not discard it.

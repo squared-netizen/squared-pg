@@ -85,7 +85,7 @@ void indexing() {
     const ResourceIndex& index = engine->resources();
     CHECK(index.size() >= 3);
 
-    auto id = ResourceId::parse("template.termux.cpp").value();
+    auto id = ResourceId::parse("template.terminal.cpp").value();
     CHECK(index.versions_of(id).size() == 1);
     CHECK(index.select(id, VersionRange::parse("^0.1.0").value()) != nullptr);
     CHECK(index.select(id, VersionRange::parse(">=9.0.0").value()) == nullptr);

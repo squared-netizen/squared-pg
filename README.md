@@ -11,38 +11,47 @@ enough — to run the generator, and to build what it produces.
 ## Build
 
 ```sh
-cmake -S . -B build && cmake --build build && ctest --test-dir build
+cmake -S . -B build && cmake --build build -j4 && ctest --test-dir build
 ```
 
 Without CMake — Termux, chiefly:
 
 ```sh
-make          # engine, CLI and tests
+make -j4      # engine, CLI and tests
 make check    # run the tests
 make smoke    # generate a project, build it, run it
 ```
 
 No network, at any point. A clean checkout plus `third-party/` is the whole
-dependency list.
+dependency list. A C++20 compiler and `make` are the only requirements; see
+[BUILDING.md](BUILDING.md) for per-platform notes and troubleshooting.
 
 ## Use
 
 ```sh
 ./build/sqpg list
-./build/sqpg new hello --template template.termux.cpp --kit kit.terminal
+./build/sqpg new hello --template template.terminal.cpp --kit kit.terminal
 cd hello && make && ./build/hello
 ```
 
 Add a Lua script workspace alongside the C++ one:
 
 ```sh
-./build/sqpg new hello --template template.termux.cpp --kit kit.terminal --kit kit.lua
+./build/sqpg new hello --template template.terminal.cpp --kit kit.terminal --kit kit.lua
+```
+
+Or build an Android app, on the phone, with no Gradle anywhere:
+
+```sh
+./build/sqpg new myapp --template template.android.cpp --kit kit.opengl \
+    --platform android --param package_name=com.example.myapp
+cd myapp && make apk && make install
 ```
 
 See what would happen without doing it:
 
 ```sh
-./build/sqpg plan hello --template template.termux.cpp --kit kit.terminal
+./build/sqpg plan hello --template template.terminal.cpp --kit kit.terminal
 ```
 
 ## The idea
@@ -90,10 +99,16 @@ docs/          specification and the two documentation trees
 registry, a manifest-identity resource index built on `sqcart`, plan production,
 and transactional new-workspace generation with provenance recording.
 
-**Resources.** `template.termux.cpp` (a C++20 terminal application that builds
-with make and a compiler), `kit.terminal` (header-only console I/O, regex
-helpers and a libGDX-style `FileHandle`), `kit.lua` (an embedded Lua 5.4
-interpreter and an `sq_lua/` script workspace).
+**Resources.** Two templates: `template.terminal.cpp` (a C++20 terminal
+application that builds with make and a compiler, on Termux, Linux or macOS)
+and `template.android.cpp` (a plain NDK workspace — NativeActivity, no Java,
+no Gradle, producing a signed APK on a phone).
+
+Four kits: `kit.terminal` (header-only console I/O, regex helpers and a
+libGDX-style `FileHandle`), `kit.lua` (an embedded Lua 5.4 interpreter and an
+`sq_lua/` script workspace), `kit.opengl` (EGL context management and GLES 3.0),
+and `kit.termux` (Termux:API — battery, clipboard, notifications, dialogs,
+speech, location, sensors).
 
 **Not yet.** Regeneration into an existing workspace, package and asset
 materialization, template composition, and enforcement of the sandboxed workflow

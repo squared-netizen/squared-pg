@@ -25,6 +25,14 @@
 #include <string>
 #include <vector>
 
+// Locating our own executable has no portable spelling.
+#if defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+#  include <sys/sysctl.h>
+#  include <sys/types.h>
+#endif
+
 extern "C" {
 #include "lauxlib.h"
 #include "lua.h"
@@ -45,24 +53,84 @@ struct HostConfig {
     bool                     fast_durability{false};
 };
 
+/// This executable's own path.
+///
+/// Every platform spells it differently and none of the spellings is in the
+/// standard library. argv[0] is the last resort rather than the first choice:
+/// it is whatever the caller passed, which for a binary found on PATH is a
+/// bare name that resolves to nothing useful.
+[[nodiscard]] std::filesystem::path executable_path(const char* argv0) {
+    std::error_code ec;
+
+#if defined(__linux__) || defined(__ANDROID__)
+    std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec && !self.empty()) return self;
+#elif defined(__APPLE__)
+    std::uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);  // asks for the required length
+    std::string buffer(size, '\0');
+    if (_NSGetExecutablePath(buffer.data(), &size) == 0) {
+        std::filesystem::path self = std::filesystem::canonical(buffer.c_str(), ec);
+        if (!ec) return self;
+    }
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
+    char buffer[4096];
+    std::size_t size = sizeof buffer;
+    if (::sysctl(mib, 4, buffer, &size, nullptr, 0) == 0 && size > 0) {
+        return std::filesystem::path{buffer};
+    }
+#endif
+
+    return std::filesystem::absolute(argv0 != nullptr ? argv0 : "sqpg", ec);
+}
+
+/// Whether `candidate` looks like a squared-pg installation.
+///
+/// Both markers, not either: `lua/` alone matches a Lua project that happens
+/// to be nearby, and `resources/` alone is a common enough directory name to
+/// match by accident.
+[[nodiscard]] bool is_installation_root(const std::filesystem::path& candidate) {
+    std::error_code ec;
+    return std::filesystem::is_directory(candidate / "lua" / "workflows", ec) &&
+           std::filesystem::is_directory(candidate / "resources", ec);
+}
+
 /// Where the installation lives.
 ///
-/// Derived from the executable's own location rather than the current working
+/// Derived from the executable's own location, never the current working
 /// directory: §2.7.2 forbids generation depending on the cwd, and a host that
-/// only works when launched from the repository root would violate that in
+/// only worked when launched from the repository root would violate that in
 /// spirit even though the engine itself is clean.
+///
+/// Found by walking upward and testing for the markers, rather than by
+/// recognising directory names. An earlier version special-cased "build" and
+/// "bin", which meant `cmake -B build-cmake` -- or CLion's default
+/// `cmake-build-debug`, or any other name -- produced a binary that could not
+/// find its own workflows. Recognising the thing being looked for survives a
+/// build directory called anything.
 [[nodiscard]] std::filesystem::path installation_root(const char* argv0) {
     std::error_code ec;
-    std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
-    if (ec || self.empty()) {
-        self = std::filesystem::absolute(argv0 != nullptr ? argv0 : "sqpg", ec);
-    }
-    // <root>/build/sqpg and <root>/bin/sqpg both resolve to <root>.
+    const std::filesystem::path self = executable_path(argv0);
+
+    // An installed layout puts the binary in <prefix>/bin and its data in
+    // <prefix>/share/squared-pg, which no amount of walking upward would find.
+    const std::filesystem::path shared = self.parent_path().parent_path() / "share" / "squared-pg";
+    if (is_installation_root(shared)) return shared;
+
+    // Six levels covers a build tree nested well beyond anything reasonable
+    // and still terminates on a binary sitting at the filesystem root.
     std::filesystem::path directory = self.parent_path();
-    if (directory.filename() == "build" || directory.filename() == "bin") {
-        return directory.parent_path();
+    for (int depth = 0; depth < 6; ++depth) {
+        if (is_installation_root(directory)) return directory;
+        const std::filesystem::path parent = directory.parent_path();
+        if (parent == directory) break;
+        directory = parent;
     }
-    return directory;
+
+    // Nothing found. Return the executable's own directory so the error names
+    // a real path, and let workflow lookup report what it searched.
+    return self.parent_path();
 }
 
 /// Environment overrides exist so a packaged install can point elsewhere
@@ -136,19 +204,27 @@ struct HostConfig {
     return {};
 }
 
-/// Read the workflow's `entry` from its declaration. The host reads only the
-/// fields it needs to start the script; the workflow's own requirements are
-/// checked by the workflow (§2.14.3).
-[[nodiscard]] std::string workflow_entry(const std::filesystem::path& directory) {
+/// Read one string field from a workflow declaration.
+///
+/// The host reads only the fields it needs to start the script -- `entry` and
+/// `trust`. Everything else in the declaration is the workflow's own business
+/// (§2.14.3), and a full JSON parse here would put the engine's yyjson on the
+/// host's critical path for two string lookups.
+[[nodiscard]] std::string workflow_field(const std::filesystem::path& directory,
+                                         std::string_view field, std::string fallback) {
     std::ifstream in(directory / "workflow.json", std::ios::binary);
-    if (!in) return "init.lua";
+    if (!in) return fallback;
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    const std::size_t key = text.find("\"entry\"");
-    if (key == std::string::npos) return "init.lua";
-    const std::size_t open = text.find('"', text.find(':', key));
-    if (open == std::string::npos) return "init.lua";
+
+    const std::string quoted = '"' + std::string{field} + '"';
+    const std::size_t key = text.find(quoted);
+    if (key == std::string::npos) return fallback;
+    const std::size_t colon = text.find(':', key + quoted.size());
+    if (colon == std::string::npos) return fallback;
+    const std::size_t open = text.find('"', colon);
+    if (open == std::string::npos) return fallback;
     const std::size_t close = text.find('"', open + 1);
-    if (close == std::string::npos) return "init.lua";
+    if (close == std::string::npos) return fallback;
     return text.substr(open + 1, close - open - 1);
 }
 
@@ -214,7 +290,34 @@ int main(int argc, char** argv) {
         lua_pop(state, 1);
     }
 
-    const std::filesystem::path entry = workflow_dir / workflow_entry(workflow_dir);
+    // §2.14.4: a workflow *requests* a trust tier and the host assigns one.
+    //
+    // Enforcing `sandboxed` means constructing a restricted _ENV -- no `io`,
+    // no `os.execute`, no `loadfile`, no `package` -- and giving the workflow
+    // a host-provided I/O channel in place of the standard library's. None of
+    // that exists yet, so a workflow declaring the tier is refused rather than
+    // run with the full standard library.
+    //
+    // A tier that is declared but silently unenforced is worse than no tier at
+    // all: it invites exactly the assumption it fails to justify. Refusing
+    // converts a false guarantee into an honest failure, and costs nothing to
+    // remove once enforcement lands. Tracked as Q-26.
+    const std::string trust = workflow_field(workflow_dir, "trust", "trusted");
+    if (trust == "sandboxed") {
+        std::fprintf(stderr,
+                     "sqpg: workflow '%s' requests the 'sandboxed' trust tier, which this build\n"
+                     "      does not enforce. Refusing to run it with full standard-library\n"
+                     "      access, because that would grant more than it asked for.\n"
+                     "\n"
+                     "      To run it anyway, review it and change its trust tier to 'trusted'\n"
+                     "      in %s\n",
+                     config.workflow.c_str(), (workflow_dir / "workflow.json").string().c_str());
+        lua_close(state);
+        (void)engine->shutdown();
+        return 3;
+    }
+
+    const std::filesystem::path entry = workflow_dir / workflow_field(workflow_dir, "entry", "init.lua");
 
     int status = 0;
     if (luaL_dofile(state, entry.string().c_str()) != LUA_OK) {

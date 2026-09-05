@@ -40,9 +40,12 @@ model) that authoring `kit.android` is meant to settle.
 **Not implemented.** A template provides its complete workspace foundation
 directly, which §2.8.9 explicitly permits.
 
-Q-21 is open and the specification defers it to "when the reference templates
-are authored". One template exists. Composition is worth having when the four
-reference templates share structure; it is speculation before then.
+Two templates now exist, and they do share structure: `sq_app/`, the
+Makefile-plus-generated-fragment split, `.gitignore`, `.clang-format`. That is
+the first real evidence for composition, and the first real risk of drift —
+a fix applied to one template's Makefile does not reach the other. Worth
+revisiting once a third template exists, which is when the duplication stops
+being tolerable.
 
 ## Asset transformation (§2.10.5)
 
@@ -63,15 +66,20 @@ register any.
 
 ## Sandboxed workflow trust tier (§2.14.4)
 
-**Partially implemented.** Workflows declare `trust` in `workflow.json` and the
-reference workflow declares `trusted`. The host does not yet construct a
-restricted Lua environment for `sandboxed`, so a workflow claiming that tier
-currently gets the full standard library.
+**Declared, not enforced — and therefore refused.** Workflows declare `trust` in
+`workflow.json`. The host reads it and, for `sandboxed`, **refuses to run the
+workflow at all** (exit 3) rather than granting it the full standard library.
 
-This is the gap most worth closing before third-party workflows are a real
-thing. It is recorded rather than hidden because a trust tier that is declared
-but not enforced is worse than no tier at all — it invites the assumption that
-it works.
+Enforcement needs three things: a restricted `_ENV` (base library minus `load`,
+`loadfile` and `dofile`; no `debug`; `os` reduced to the clock functions; no
+`io`; no `package`), a whitelist-backed replacement for `require` since
+`package.path` is directory traversal with extra steps, and a host-provided I/O
+channel — which ripples, because `squaredpg.report` writes to `io.stderr`
+directly and could not run sandboxed as written.
+
+Refusing is the honest interim state. A tier that is declared but silently
+unenforced is worse than no tier at all: it invites exactly the assumption it
+fails to justify. Tracked as Q-26.
 
 ## Manifest schema divergence
 

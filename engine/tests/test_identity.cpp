@@ -10,7 +10,7 @@ using namespace squared::pg;
 namespace {
 
 void grammar() {
-    CHECK(ResourceId::parse("template.termux.cpp").has_value());
+    CHECK(ResourceId::parse("template.terminal.cpp").has_value());
     CHECK(ResourceId::parse("kit.terminal").has_value());
     CHECK(ResourceId::parse("package.squared.gui").has_value());
     CHECK(ResourceId::parse("kit.acme.raylib").has_value());
@@ -27,7 +27,7 @@ void grammar() {
 }
 
 void kinds() {
-    CHECK(ResourceId::parse("template.termux.cpp", ResourceKind::project_template).has_value());
+    CHECK(ResourceId::parse("template.terminal.cpp", ResourceKind::project_template).has_value());
     // The prefix must agree with the kind; a kit claiming to be a template is
     // exactly the confusion the prefix rule exists to prevent.
     CHECK(!ResourceId::parse("kit.terminal", ResourceKind::project_template).has_value());

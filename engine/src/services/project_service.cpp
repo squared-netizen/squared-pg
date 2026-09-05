@@ -105,8 +105,6 @@ Value effective_parameters(const ResolvedResource& project_template, const Value
         parameters = Value::object();
     }
 
-    apply_declared_defaults(parameters, project_template);
-
     // Built-ins. Everything here derives from the request or from the engine,
     // never from the environment or the clock: §2.7.2 forbids ambient inputs
     // and §2.7.13 asks for byte-identical output from equivalent inputs, which
@@ -131,6 +129,13 @@ Value effective_parameters(const ResolvedResource& project_template, const Value
         joined += kit_ids[i];
     }
     put_if_absent("kit_list", joined.empty() ? std::string{"none"} : joined);
+
+    // Declared defaults come *after* the built-ins, so that a template may
+    // write `"default_from": "project_name"` and have it resolve. The order
+    // costs nothing: every step is put-if-absent, so a value the workflow
+    // supplied still wins over both, and a template default for a name the
+    // engine also provides is simply redundant rather than in conflict.
+    apply_declared_defaults(parameters, project_template);
 
     return parameters;
 }
