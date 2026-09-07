@@ -92,3 +92,28 @@ inline, B under `## Related`.
 This vault lives at `squared-pg/docs/spec/`. Note names are prefixed `Spec ` in
 `_meta/` to avoid collision with `docs/edu/` notes of the same name (notably
 `Glossary`) if `docs/` is opened as a single Obsidian vault.
+
+## Audit cadence (D-054)
+
+**No new audit is opened until the previous one is closed.**
+
+audit-02 sat with 22 unmarked findings for long enough that two of them
+described a cartridge format that had been superseded in the interval. An
+amendment written against a version of the system that no longer exists cannot
+be applied; it can only be closed or rewritten, and discovering which costs
+more than the amendment saved.
+
+The bottleneck is the marking pass, which is human and does not scale with how
+fast findings can be generated. Capping the number of open audits at one puts
+the constraint where it actually is.
+
+**An amendment is checked against the code before it is applied.** Applying
+audit-02 found three amendments that were wrong: the parameter layering order
+was stated backwards, §2.9.2 named six kit fields no implementation reads, and
+§1.1 asserted a directory was unprovisioned that had been populated for
+months. All three had survived a full prior audit, because every audit until
+this one compared the specification against *intent*.
+
+**A question added during implementation is triaged when the audit that would
+have caught it closes.** Not later. Q-26 through Q-29 accumulated untriaged
+because no step in the process owned them.

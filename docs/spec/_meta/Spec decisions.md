@@ -566,3 +566,206 @@ can see because it is not a syntax error.
 The installer inside a release artifact remains POSIX `sh`: it runs on a
 stranger's machine, where every additional requirement is one more thing that
 can be missing.
+
+---
+
+## D-045 — Workflow reporting routes through a host channel
+
+[[2.14 Extensibility model]]
+
+`squaredpg.report` writes to a host-provided channel rather than to
+`io.stderr` directly.
+
+Raised while resolving AUD-K-003. Enforcing the `sandboxed` trust tier would
+mean removing `io` from a workflow's environment, which would break reporting
+for *every* workflow, not only sandboxed ones. Routing now costs almost
+nothing and removes the hardest dependency from work that may never happen.
+
+It buys more than that. A channel is capturable, which makes report assertions
+possible without scraping stderr, and it is what structured `--json` output
+needs regardless.
+
+---
+
+## D-046 — A workspace's tier is its location, not a metadata field
+
+[[2.7 Project generation model]]
+
+`~/sqsysroot/sandbox/x` is in the sandbox because of where it is. Promotion is
+a rename.
+
+The alternative — a `tier` field with the directories as convention — makes
+promotion a one-line metadata edit, which is suspiciously cheap for something
+that changes what an agent may do. It also permits the layout to lie: a field
+can disagree with the filesystem, and a directory cannot disagree with itself.
+
+The cost is that a workspace moves out from under an open editor. Once per
+project, on a deliberate act.
+
+---
+
+## D-047 — The workflow verbs are drivers, not implementations
+
+[[2.5 Lua control layer]]
+
+`format`, `lint`, `check`, `test`, `docs`, `dist` find the workspace and run
+`make <verb>`. `sqpg lint` does not know what a linter is.
+
+Three properties follow, and they are the reason:
+
+- the engine keeps its no-external-runtime-dependency property, since a
+  driver's whole job is executing other people's tools;
+- a generated workspace stays independent of squared-pg — `make lint` works
+  with no `sqpg` installed, which is §2.7.11's invariant;
+- the vocabulary is fixed while the implementation is not.
+
+`--explain` prints the command instead of running it, which is what stops the
+layer becoming a black box experts route around.
+
+**No `profile` and no `debug`.** They are interactive and session-shaped, and
+a vocabulary of things that run unattended and exit with a status is the wrong
+container for them.
+
+This is the decision with the longest reach in the set. Reversing it later
+means moving six commands.
+
+---
+
+## D-048 — `quarantine` copies; `promote` and `demote` move
+
+[[2.7 Project generation model]]
+
+Asymmetric on purpose. Promotion and demotion act on a tree the environment
+already owns, so a rename is right and reversible. Quarantine acts on someone
+else's tree — a clone the author may still want where it is — and moving it
+would be this tool deciding its environment outranks the rest of the
+filesystem.
+
+The asymmetry is arguable and a `--move` flag would be easy to add.
+
+---
+
+## D-049 — The default workflow is `workflow.sqpg.default`
+
+[[2.5 Lua control layer]]
+
+Renamed from `workflow.generate.default`. It is no longer generation-only: it
+carries the environment lifecycle and the workflow verbs as well.
+
+A name that lies is the thing the corpus argument is against. The cost is
+anyone with the old id in a script, which in alpha is nobody.
+
+---
+
+## D-050 — Demotion preserves history; promotion removes the sandbox boundary
+
+[[2.7 Project generation model]]
+
+Not symmetric, and the asymmetry is the point.
+
+Promotion deletes the sandbox `AGENTS.md` because squared-pg wrote it and it
+would now be false. Demotion refuses to delete `.git` because the author's
+history lives in it, and removing the only copy to satisfy a tier rule would
+be the worst thing this tool could do.
+
+The rule: this tool may delete what it wrote and what has become untrue. It
+may not delete what it did not write.
+
+---
+
+## D-051 — Ownership uses an explicit `default`, not glob specificity
+
+[[2.7 Project generation model]] · [[2.8 Templates]]
+
+At most one ownership list may match a path; an unmatched path takes
+`ownership.default`, which is `seeded` when absent.
+
+**This replaced working behaviour.** `classify_path` had resolved overlaps
+with a specificity heuristic — +2 per literal character, −4 per `*`, −8 per
+`**` — and it was correct: every shipped template classified identically under
+it, and `user: ["**"]` behaved exactly as `default: "user"` does now. What
+AUD-L-004 found was not a broken template but two implementations disagreeing,
+`sqcart` enforcing exactly-one while the engine scored patterns.
+
+It was replaced because nobody can predict a scoring table's outcome without
+consulting it. Whether `mk/**` outranks `**/*.mk` is a question you compute —
+it does, −2 against −4 — and ownership is a thing template authors meet on
+their first day.
+
+What was given up: wildcard carve-outs. `generated: ["mk/**"]` with
+`user: ["mk/local.mk"]` worked under specificity; it is now an overlap
+warning, and the author writes non-overlapping patterns instead.
+
+The manifest's vocabulary is not the engine's: manifest `user` maps to
+`OwnershipClass::seeded`, because a file the generator is materialising cannot
+be `user`. `ownership_class_from_manifest` is the one place that translation
+happens.
+
+---
+
+## D-052 — `workspace.verify` reports; it never repairs
+
+[[2.16 Architectural invariants]]
+
+The first reader of the provenance table, which every generation had written
+and nothing had ever read.
+
+It does not restore files. A verify that quietly repaired would be the
+regeneration path §2.7.11 defers, arriving by a side door — and the value of
+the report is that the author decides.
+
+Findings exit non-zero so it composes into a `check` target.
+
+---
+
+## D-053 — Consumer schemas are normative in the consuming project's spec
+
+[[2.8 Templates]] · [[2.9 Kits]] · [[2.14 Extensibility model]]
+
+Cartridge format 2.0 moved every generator concept into
+`consumers.squared_pg`, which `sqcart` carries as opaque text. That was right
+and it left the schema homeless: the only definition of what a template or kit
+could declare was the engine's parser.
+
+§2.8.6 and §2.9.2 are now that definition — every member, its type, its
+default when absent, and which code reads it.
+
+Two rules that existed only in code and are now written down:
+
+- **A malformed member is treated as absent** and takes its default. Not an
+  error, because §5.6 means nothing validates the section, and a generator
+  refusing an unrecognised value could not open a cartridge written for a
+  newer version of itself.
+- **`processor` is the exception** and fails with `capability.unsatisfied`.
+  The other members describe *what* to generate; `processor` describes *how*
+  to transform content, and the wrong transform produces a workspace that
+  looks correct and is not.
+
+Fields read by nothing are listed as reserved rather than omitted, because an
+author copying a shipped manifest will copy them: `project_types`,
+`requires.kits.optional`, `runtime.model`.
+
+---
+
+## D-054 — The environment is control-layer configuration, never engine discovery
+
+[[2.7 Project generation model]]
+
+An environment (`~/sqsysroot`) is resolved by the Lua control layer, from
+`$SQSYSROOT` or `$HOME`, and passed to the engine as explicit absolute paths.
+
+§2.7.2 forbids ambient inputs to generation, and a discovered root is ambient.
+The prohibition survives because of *where* the lookup happens: the engine has
+no concept of an environment and cannot be made to acquire one. `sqpg promote
+demo` may resolve `demo` against a discovered root; `project.generate` receives
+a path and nothing else.
+
+The tier invariant is stated as **nothing in sandbox is irreplaceable**, and
+every other rule derives from it. Stating a consequence — "sandbox has no
+git" — invites relitigating each consequence separately.
+
+**Divergence from the design proposal:** demotion moves a dirty tree and warns
+rather than refusing. Refusing would make `git` a hard dependency of the tier
+system and would refuse most sandbox trees, which have no repository to be
+dirty, while protecting against a loss that cannot occur — the rename is
+reversible and the working tree is carried intact.

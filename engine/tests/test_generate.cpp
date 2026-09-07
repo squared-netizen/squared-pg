@@ -250,6 +250,84 @@ void metadata_and_provenance() {
     (void)engine->shutdown();
 }
 
+/// workspace.verify: the first reader of the provenance table.
+///
+/// The table has been written on every generation since provenance existed
+/// and read by nothing, which meant it was correct only by coincidence --
+/// unread data drifts without failing. These assertions are what make it
+/// correct on purpose.
+void verify_detects_drift() {
+    Scratch scratch("verify");
+    auto    engine = ready_engine();
+    const auto target = scratch.child("hello");
+
+    CHECK(engine->execute("project.generate", request("hello", target.string(), true)).succeeded());
+
+    Value params = Value::object();
+    params.set("workspace", target.string());
+
+    const auto verify = [&]() { return engine->execute("workspace.verify", params); };
+
+    // A freshly generated workspace verifies clean. If this ever fails, the
+    // hashes being written do not describe the bytes being written, and every
+    // other assertion here is meaningless.
+    {
+        const OperationResult clean = verify();
+        CHECK(clean.succeeded());
+        CHECK(clean.data().int_or("missing", -1) == 0);
+        CHECK(clean.data().int_or("modified", -1) == 0);
+        CHECK(clean.data().int_or("conflicts", -1) == 0);
+        CHECK(clean.data().int_or("recorded", 0) > 0);
+    }
+
+    // Editing a `seeded` file is the system working, not a conflict. It was
+    // handed over at generation and has been written in since, which is what
+    // seeded means -- counted as `edited`, reported as nothing.
+    {
+        std::ofstream(target / "sq_app" / "src" / "main.cpp", std::ios::app) << "\n// mine\n";
+        const OperationResult edited = verify();
+        CHECK(edited.succeeded());
+        CHECK(edited.data().int_or("edited", -1) == 1);
+        CHECK(edited.data().int_or("modified", -1) == 0);
+        CHECK(edited.data().int_or("conflicts", -1) == 0);
+    }
+
+    // Editing a `generated` file is a conflict: a future generation would
+    // overwrite it, and the point of verify is to say so before that happens.
+    {
+        std::ofstream(target / "mk" / "squared_generated.mk", std::ios::app) << "\n# hand edit\n";
+        const OperationResult conflict = verify();
+        CHECK(conflict.succeeded());   // a finding is a report, not a failure
+        CHECK(conflict.data().int_or("modified", -1) == 1);
+        CHECK(conflict.data().int_or("conflicts", -1) == 1);
+
+        const Array* findings = conflict.data().find("findings")->as_array();
+        CHECK(findings != nullptr && findings->size() == 1);
+        if (findings != nullptr && findings->size() == 1) {
+            CHECK_EQ(std::string{(*findings)[0].string_or("finding", "")}, "modified");
+            CHECK_EQ(std::string{(*findings)[0].string_or("path", "")},
+                     "mk/squared_generated.mk");
+        }
+    }
+
+    // A deleted recorded file is found, and distinguished from a modified one
+    // -- the remedy differs, so the report must too.
+    {
+        std::filesystem::remove(target / "mk" / "squared_generated.mk");
+        const OperationResult gone = verify();
+        CHECK(gone.succeeded());
+        CHECK(gone.data().int_or("missing", -1) == 1);
+
+        const Array* findings = gone.data().find("findings")->as_array();
+        CHECK(findings != nullptr && findings->size() == 1);
+        if (findings != nullptr && findings->size() == 1) {
+            CHECK_EQ(std::string{(*findings)[0].string_or("finding", "")}, "missing");
+        }
+    }
+
+    (void)engine->shutdown();
+}
+
 void refuses_existing_workspace() {
     Scratch scratch("existing");
     auto    engine = ready_engine();
@@ -326,6 +404,7 @@ int main() {
     plan_matches_generation();
     generation();
     metadata_and_provenance();
+    verify_detects_drift();
     refuses_existing_workspace();
     determinism();
     required_kit_is_enforced();

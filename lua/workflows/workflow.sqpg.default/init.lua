@@ -28,6 +28,7 @@ usage:
   sqpg list [template|kit|package|asset]      list indexed resources
   sqpg show <id>                              resolve one resource and describe it
   sqpg inspect <workspace>                    read a workspace metadata record
+  sqpg verify [workspace]                     check a workspace against its record
   sqpg describe                               engine version, services, capabilities
   sqpg operations                             enumerate the control surface
 
@@ -272,6 +273,59 @@ function commands.inspect()
   end
   report.out(report.json(result.data))
   return 0
+end
+
+function commands.verify()
+  -- Defaults to the enclosing workspace, like the workflow verbs, because
+  -- "is this workspace still intact" is a question you ask from inside it.
+  local workspace = parsed.positional[1] or envmod.find_workspace(".")
+  if workspace == nil then
+    report.err("sqpg: verify needs a workspace path, or a workspace here or above")
+    return 2
+  end
+
+  local result = call("workspace.verify", { workspace = workspace })
+  if result == nil then
+    return 1
+  end
+
+  if parsed.options.json ~= nil then
+    report.out(report.json(result.data))
+    return #(result.data.findings or {}) > 0 and 1 or 0
+  end
+
+  local d = result.data
+  report.out(("workspace %s"):format(d.workspace))
+  report.out(("  recorded  %d files"):format(d.recorded or 0))
+  report.out(("  missing   %d"):format(d.missing or 0))
+  report.out(("  modified  %d  (generator-managed; a conflict)"):format(d.modified or 0))
+  report.out(("  edited    %d  (yours; expected)"):format(d.edited or 0))
+  if (d.unhashed or 0) > 0 then
+    -- Named rather than folded into a total: an unhashed row is one this
+    -- command could not check, and a summary that hid them would overstate
+    -- what it proved.
+    report.out(("  unchecked %d (recorded without a hash)"):format(d.unhashed))
+  end
+
+  local findings = d.findings or {}
+  if #findings == 0 then
+    report.out("")
+    report.out("no conflicts. every generator-managed file matches its record.")
+    return 0
+  end
+
+  report.out("")
+  report.out(("%d conflict(s):"):format(#findings))
+  for _, f in ipairs(findings) do
+    report.out(("  %-9s %s"):format(f.finding, f.path))
+    report.out(("            %s"):format(f.detail))
+  end
+  report.out("")
+  report.out("squared-pg does not repair these. what to do about a generator-managed")
+  report.out("file you changed or removed is your decision; this only tells you a")
+  report.out("future generation would not preserve it.")
+  -- Non-zero so `sqpg verify` is usable in a script or a check target.
+  return 1
 end
 
 function commands.plan()

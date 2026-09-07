@@ -96,3 +96,23 @@ Proposal: forward-compatible reader, refuse-and-report on major mismatch.
   `framework` to `"1.0.0"`. Both are workflow policy under §2.5.6, but the
   framework default in particular is a placeholder standing in for Q-23 (where
   the Squared framework comes from), and it should not outlive it.
+
+---
+
+## Triage, 2026-09-07 (AUD-M-003, D-054)
+
+The register had grown to Q-29 without review. Current state:
+
+| Q | Subject | State |
+|---|---|---|
+| Q-21 | Template composition scope | **weaker than assumed.** Measured: one file of twenty is duplicated between the two templates. Composition was proposed to solve a duplication problem that has not appeared. Keep open, do not act. |
+| Q-22 | Build emission model depth | open, unchanged |
+| Q-23 | Squared framework acquisition | **partly answered.** The framework is delivered as packages, so acquisition becomes package materialisation rather than a new mechanism. `requires.framework` may become an ordinary dependency on `package.sq.core`. |
+| Q-24 | Metadata format migration | **half answered** by §2.7.3b: how an older record is *read* is settled. Whether one is ever rewritten forward is not. |
+| Q-25 | Invariant testability gaps | **answered** by the register in §2.16.2 (D-028) and strengthened for I-16 by §2.16.5. I-10 remains the acknowledged weak row. |
+| Q-26 | Lua sandbox enforcement | open. Declared, recognised and refused (D-045). No concrete consumer. |
+| Q-27–Q-29 | *(added during implementation)* | untriaged at the time this note was written; review before the next audit opens |
+
+The rule that prevents a recurrence is in [[Spec conventions]]: a question
+added during implementation is triaged when the audit that would have caught
+it closes, not later.
