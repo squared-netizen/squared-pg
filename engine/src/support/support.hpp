@@ -59,11 +59,6 @@ using Digest = std::array<std::byte, 32>;
 /// `sq_app` — otherwise every manifest would need both patterns.
 [[nodiscard]] bool glob_match(std::string_view pattern, std::string_view path);
 
-/// Specificity, used to break ties between two matching `files` entries.
-/// Higher wins. §2.8.6 makes an exact tie a manifest error rather than
-/// something resolved by declaration order, and the caller enforces that.
-[[nodiscard]] int glob_specificity(std::string_view pattern);
-
 // ---------------------------------------------------------------------------
 // JSON
 //

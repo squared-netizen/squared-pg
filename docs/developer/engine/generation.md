@@ -33,21 +33,59 @@ a file.
 ## Ownership classification
 
 `detail::classify_path` matches a workspace path against the resource's
-`ownership` globs. Most specific pattern wins; `glob_specificity` scores literal
-characters up and wildcards down, `**` more than `*`.
+`ownership` globs, read from `consumers.squared_pg.ownership`.
 
-Two rules do the real work:
+**At most one list may match.** Two lists claiming one path is a manifest
+defect: the author has said two contradictory things about one file, and only
+they know which was meant. It is reported as a warning and resolved toward the
+class that cannot destroy work — `generated` is the only class this engine
+overwrites, so anything else wins. Two patterns in the *same* list is not a
+conflict and is silent.
 
-**An unmatched path is `seeded`** (§2.7.10). Defaulting to `generated` would
-make the safe case the one you have to remember, and forgetting would mean
-overwriting user work.
+**An unmatched path takes `default`.** Absent `default` means `seeded`
+(§2.7.10). Defaulting to `generated` would make the safe case the one you have
+to remember, and forgetting would mean overwriting user work.
 
-**Two equally specific patterns that disagree is a manifest defect.** §2.8.6
-says so. Rather than resolving by declaration order — which would make the
-outcome depend on how the JSON happened to be written — the safer class is kept
-and a warning is emitted.
+### What this replaced, and why
 
-The cartridge format's `shared` maps to `seeded`, because `shared` is what
+Until D-051 this used a specificity heuristic: `glob_specificity` scored
+literal characters up and wildcards down, `**` more than `*`, and the highest
+score won.
+
+**That heuristic worked.** Every shipped template classified correctly under
+it, and `user: ["**"]` behaved exactly as `default: "user"` does now. Nothing
+was broken.
+
+It was replaced because nobody can predict its outcome without knowing the
+scoring table. Whether `mk/**` outranks `**/*.mk` is a question you have to
+compute — it does, −2 against −4 — and ownership is a thing template authors
+meet on their first day. A rule that fits in a sentence beats a rule that fits
+in a lookup table, even when the lookup table is correct.
+
+What went with it: wildcard carve-outs. Under specificity,
+`generated: ["mk/**"]` with `user: ["mk/local.mk"]` worked, the literal beating
+the wildcard. That is now an overlap warning, and the author writes
+non-overlapping patterns instead — `generated: ["mk/squared_*.mk"]`. A real
+cost, and a small one in practice.
+
+### Two vocabularies
+
+`ownership_class_from_manifest` maps the manifest's words onto the engine's,
+and the mapping is not the identity.
+
+A manifest author writes about *who owns the file*. The engine reasons about
+*what it may do on a later pass*. So the manifest's `user` maps to
+`OwnershipClass::seeded`, not to `::user`: a file the generator is
+materialising cannot be `user`, because the generator is by definition writing
+it. `OwnershipClass::user` is for files that appear afterwards by the author's
+own hand, which no manifest can enumerate.
+
+The list-based path always did this mapping, inline and unremarked. `default`
+made it visible by getting it wrong — routing the field through
+`ownership_class_from_string` produced `::user` for every materialised file
+and broke two suites.
+
+The manifest's `shared` also maps to `seeded`, because `shared` is what
 §2.7.10 reserves as `merged` and explicitly does not implement in v1 (D-020).
 
 ## Substitution

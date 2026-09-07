@@ -124,27 +124,6 @@ bool glob_match(std::string_view pattern, std::string_view path) {
     return match_here(pattern, path);
 }
 
-int glob_specificity(std::string_view pattern) {
-    // Literal characters are evidence of intent; wildcards are the opposite.
-    // A `**` costs more than a `*` because it crosses segment boundaries.
-    int score = 0;
-    for (std::size_t i = 0; i < pattern.size(); ++i) {
-        if (pattern[i] == '*') {
-            if (i + 1 < pattern.size() && pattern[i + 1] == '*') {
-                score -= 8;
-                ++i;
-            } else {
-                score -= 4;
-            }
-        } else if (pattern[i] == '?') {
-            score -= 1;
-        } else {
-            score += 2;
-        }
-    }
-    return score;
-}
-
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------

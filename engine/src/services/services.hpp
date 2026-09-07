@@ -152,14 +152,34 @@ private:
 /// coupling format spec §0.1 forbids. The declaration now lives here, and is
 /// read from `consumers.squared_pg.ownership`.
 ///
-/// The three sets are not required to be disjoint by anything in the
-/// cartridge format any more. `classify_path` resolves an overlap by
-/// precedence; see its comment for why that is a decision and not an
-/// oversight.
+/// The three pattern lists MUST NOT overlap each other. A path matching two
+/// of them is a manifest defect, not something to be resolved: the author has
+/// said two contradictory things about one file and only they know which was
+/// meant.
+///
+/// `default_class` is what an *unmatched* path becomes, and it is the reason
+/// the lists can be required not to overlap. Before it existed, a template
+/// wanting "everything else is the user's" had to say so with a pattern --
+/// `user: ["**"]` -- and a pattern meaning "everything" necessarily overlaps
+/// every other pattern in the manifest. The field separates the two ideas
+/// that spelling was conflating: *claiming specific files* and *a fallback
+/// for the rest*.
 struct OwnershipRules {
     std::vector<std::string> generated;
     std::vector<std::string> user;
     std::vector<std::string> shared;
+
+    /// Class for a path no pattern matches. Absent in the manifest means
+    /// `seeded`, which is the conservative reading: written once, never
+    /// rewritten, so a template that says nothing cannot lose user work.
+    OwnershipClass           default_class{OwnershipClass::seeded};
+
+    /// Whether the manifest stated `default` explicitly.
+    ///
+    /// Kept because "said nothing" and "said seeded" are the same outcome but
+    /// different facts, and `workspace.verify` should be able to tell an
+    /// author which one they are relying on.
+    bool                     default_declared{false};
 };
 
 /// One declared template parameter (§2.8.7).

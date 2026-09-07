@@ -24,9 +24,9 @@ void globs() {
     CHECK(support::glob_match("a/**/b.c", "a/b.c"));  // ** may match nothing
     CHECK(support::glob_match("a/**/b.c", "a/x/y/b.c"));
 
-    // Specificity decides which of two matching rules wins.
-    CHECK(support::glob_specificity("mk/squared_generated.mk") > support::glob_specificity("**"));
-    CHECK(support::glob_specificity("src/*.cpp") > support::glob_specificity("src/**"));
+    // glob_specificity() used to live here, scoring patterns so the most
+    // specific match won an ownership conflict. It went with the conflict
+    // resolution it existed for -- see ownership() below.
 }
 
 void paths() {
@@ -92,21 +92,69 @@ void substitution() {
 }
 
 void ownership() {
-    OwnershipRules rules;
-    rules.generated = {"mk/squared_generated.mk", "sq_kit/**"};
-    rules.user      = {"**"};
-
     std::vector<Diagnostic> diagnostics;
+
+    // The shape a template should now be written in: claim what you own,
+    // declare a fallback for the rest.
+    OwnershipRules rules;
+    rules.generated       = {"mk/squared_generated.mk", "sq_kit/**"};
+    rules.default_class   = OwnershipClass::seeded;
+    rules.default_declared = true;
+
     CHECK(detail::classify_path(rules, "mk/squared_generated.mk", &diagnostics) ==
           OwnershipClass::generated);
     CHECK(detail::classify_path(rules, "sq_kit/include/x.hpp", &diagnostics) ==
           OwnershipClass::generated);
-    CHECK(detail::classify_path(rules, "sq_app/src/main.cpp", &diagnostics) == OwnershipClass::seeded);
+    CHECK(detail::classify_path(rules, "sq_app/src/main.cpp", &diagnostics) ==
+          OwnershipClass::seeded);
+    CHECK(diagnostics.empty());
 
-    // §2.7.10: a path matching nothing defaults to seeded. Defaulting to
-    // generated would mean the safe case is the one you have to remember.
+    // The default is honoured for unmatched paths, and it is not always
+    // seeded. A template whose whole tree is derived can say so.
+    OwnershipRules derived;
+    derived.generated       = {"sq_app/**"};
+    derived.default_class   = OwnershipClass::generated;
+    derived.default_declared = true;
+    CHECK(detail::classify_path(derived, "anything/at/all", &diagnostics) ==
+          OwnershipClass::generated);
+
+    // Absent `default` means seeded: written once, never rewritten. Defaulting
+    // to generated would make the safe case the one you have to remember.
     OwnershipRules empty;
+    CHECK(!empty.default_declared);
     CHECK(detail::classify_path(empty, "anything", &diagnostics) == OwnershipClass::seeded);
+
+    // Two lists claiming one path is a manifest defect, reported rather than
+    // resolved silently. This is the case `user: ["**"]` used to produce for
+    // every generated file in the tree, and which the specificity heuristic
+    // absorbed without comment.
+    {
+        std::vector<Diagnostic> conflicts;
+        OwnershipRules overlapping;
+        overlapping.generated = {"mk/squared_generated.mk"};
+        overlapping.user      = {"**"};
+
+        const OwnershipClass cls =
+            detail::classify_path(overlapping, "mk/squared_generated.mk", &conflicts);
+
+        CHECK(conflicts.size() == 1);
+        // Resolved toward the class that cannot destroy work. `generated` is
+        // the only class this engine overwrites, so the other one wins --
+        // which is the opposite of what specificity did here, and the safer
+        // answer when the manifest is self-contradictory.
+        CHECK(cls == OwnershipClass::seeded);
+    }
+
+    // Two patterns in the *same* list is not a conflict. Overlap only matters
+    // across lists, where it means the author said two different things.
+    {
+        std::vector<Diagnostic> quiet;
+        OwnershipRules same;
+        same.generated = {"mk/**", "mk/squared_generated.mk"};
+        CHECK(detail::classify_path(same, "mk/squared_generated.mk", &quiet) ==
+              OwnershipClass::generated);
+        CHECK(quiet.empty());
+    }
 }
 
 }  // namespace

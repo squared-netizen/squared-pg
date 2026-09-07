@@ -178,51 +178,104 @@ void FilesystemService::sync_path(const std::filesystem::path& path) const {
 // ---------------------------------------------------------------------------
 
 namespace detail {
+/// Manifest ownership vocabulary -> engine OwnershipClass.
+///
+/// The two are deliberately different and the mapping is not the identity.
+///
+/// A manifest author writes about *who owns the file*: `generated` is mine,
+/// `user` is theirs, `shared` is both. The engine reasons about *what it may
+/// do on a later pass*: `generated` may be overwritten, `seeded` is written
+/// once and never again, `user` is never written at all.
+///
+/// So the manifest's `user` maps to `seeded`, not to `OwnershipClass::user`.
+/// A file the generator is materialising cannot be `user` -- the generator is,
+/// by definition, writing it. `OwnershipClass::user` is for files that appear
+/// afterwards by the author's own hand, which no manifest can enumerate.
+///
+/// The list-based path has always done this mapping, inline and unremarked.
+/// `default` made it visible by getting it wrong: routing the field through
+/// ownership_class_from_string() produced `OwnershipClass::user` for every
+/// materialised file and broke two suites, which is the mapping announcing
+/// itself.
+[[nodiscard]] OwnershipClass ownership_class_from_manifest(std::string_view declared) {
+    if (declared == "generated") return OwnershipClass::generated;
+    if (declared == "user") return OwnershipClass::seeded;
+    // `shared` is 2.7.10's reserved `merged`, unimplemented (D-020). Seeded is
+    // the conservative reading of it.
+    if (declared == "shared") return OwnershipClass::seeded;
+    return OwnershipClass::seeded;
+}
 
+/// Which class a workspace-relative path belongs to (2.8.6).
+///
+/// Exactly one of the three pattern lists may match. A path matching two is a
+/// manifest defect: the author has said two contradictory things about one
+/// file, and only they know which was meant. It is reported and the safer
+/// class is kept, because refusing to generate over a manifest defect would
+/// punish the user for the template author's mistake.
+///
+/// A path matching none takes `rules.default_class`.
+///
+/// This replaced a specificity heuristic that scored patterns -- +2 per
+/// literal character, -4 per `*`, -8 per `**` -- and let the highest score
+/// win. That heuristic worked. Every shipped template classified correctly
+/// under it, and `user: ["**"]` behaved exactly as `default: "user"` does
+/// now. It was replaced anyway, for one reason: nobody can predict its
+/// outcome without knowing the scoring table. Whether `mk/**` outranks
+/// `**/*.mk` is a question you have to compute (it does, -2 against -4), and
+/// ownership is a thing template authors meet on their first day. A rule that
+/// fits in a sentence beats a rule that fits in a lookup table, even when the
+/// lookup table is correct.
+///
+/// What was given up with it: wildcard carve-outs. Under specificity,
+/// `generated: ["mk/**"]` with `user: ["mk/local.mk"]` worked, the literal
+/// beating the wildcard. That is now an overlap error, and the author writes
+/// non-overlapping patterns instead -- `generated: ["mk/squared_*.mk"]`. A
+/// real cost, and a small one in practice.
 OwnershipClass classify_path(const OwnershipRules& rules, std::string_view path,
                              std::vector<Diagnostic>* diagnostics) {
-    struct Candidate {
-        OwnershipClass cls{OwnershipClass::seeded};
-        int            score{0};
-        bool           found{false};
-        std::string    pattern;
-    };
+    bool           found = false;
+    OwnershipClass chosen{OwnershipClass::seeded};
+    std::string    chosen_pattern;
 
-    Candidate best;
     const auto consider = [&](const std::vector<std::string>& patterns, OwnershipClass cls) {
         for (const std::string& pattern : patterns) {
             if (!support::glob_match(pattern, path)) continue;
-            const int score = support::glob_specificity(pattern);
-            if (!best.found || score > best.score) {
-                best = Candidate{cls, score, true, pattern};
-            } else if (score == best.score && best.cls != cls) {
-                // §2.8.6: two equally specific patterns disagreeing is a
-                // manifest defect. Report it and keep the safer class rather
-                // than resolving by declaration order, which would make the
-                // outcome depend on how the file happened to be written.
-                if (diagnostics != nullptr) {
-                    diagnostics->push_back(Diagnostic{
-                        Severity::warning,
-                        "ownership patterns '" + best.pattern + "' and '" + pattern +
-                            "' are equally specific and disagree; using the safer class",
-                        {},
-                        std::string{path}});
-                }
-                if (cls == OwnershipClass::seeded || cls == OwnershipClass::user) best.cls = cls;
+            if (!found) {
+                found          = true;
+                chosen         = cls;
+                chosen_pattern = pattern;
+                continue;
+            }
+            if (cls == chosen) continue;   // two patterns, same class: not a conflict
+
+            if (diagnostics != nullptr) {
+                diagnostics->push_back(Diagnostic{
+                    Severity::warning,
+                    "ownership patterns '" + chosen_pattern + "' (" +
+                        std::string{to_string(chosen)} + ") and '" + pattern + "' (" +
+                        std::string{to_string(cls)} +
+                        ") both match; a path must match at most one ownership list",
+                    {},
+                    std::string{path}});
+            }
+            // Prefer the class that cannot destroy work. `generated` is the
+            // only one this engine ever overwrites, so anything else wins.
+            if (chosen == OwnershipClass::generated) {
+                chosen         = cls;
+                chosen_pattern = pattern;
             }
         }
     };
 
-    consider(rules.generated, OwnershipClass::generated);
-    consider(rules.user, OwnershipClass::seeded);
-    // The cartridge format's `shared` has no v1 counterpart: it is what §2.7.10
-    // reserves as `merged` and explicitly does not implement (D-020). Treating
-    // it as seeded means the generator writes it once and never rewrites it,
-    // which is the conservative reading.
-    consider(rules.shared, OwnershipClass::seeded);
+    consider(rules.generated, ownership_class_from_manifest("generated"));
+    consider(rules.user, ownership_class_from_manifest("user"));
+    // `shared` is what 2.7.10 reserves as `merged` and does not implement
+    // (D-020). Seeded is the conservative reading: written once, never
+    // rewritten.
+    consider(rules.shared, ownership_class_from_manifest("shared"));
 
-    if (!best.found) return OwnershipClass::seeded;
-    return best.cls;
+    return found ? chosen : rules.default_class;
 }
 
 OwnershipRules ownership_rules(const sqcart::Manifest& manifest) {
@@ -240,6 +293,16 @@ OwnershipRules ownership_rules(const sqcart::Manifest& manifest) {
     fill("generated", out.generated);
     fill("user", out.user);
     fill("shared", out.shared);
+
+    // `default` is what an unmatched path becomes. Absent means seeded, and
+    // the distinction between absent and explicitly-seeded is recorded so
+    // `workspace.verify` can tell an author which they are relying on.
+    if (const Value* fallback = declared.find("default"); fallback != nullptr) {
+        if (auto text = fallback->as_string()) {
+            out.default_class    = ownership_class_from_manifest(*text);
+            out.default_declared = true;
+        }
+    }
     return out;
 }
 
