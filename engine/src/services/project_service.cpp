@@ -42,15 +42,13 @@ struct Contribution {
     return out;
 }
 
-[[nodiscard]] std::string body_key(ResourceKind kind) {
-    switch (kind) {
-        case ResourceKind::project_template: return "template";
-        case ResourceKind::kit: return "kit";
-        case ResourceKind::package: return "package";
-        case ResourceKind::asset: return "assets";
-        default: return "template";
-    }
-}
+// body_key() lived here. It mapped a ResourceKind onto the manifest member
+// holding that kind's body -- "template", "kit", "package", "assets".
+//
+// Cartridge format 2 has one section per *consumer*, not one per kind, so
+// there is nothing left to select. Every resource this engine reads addresses
+// it under the same identity, and which role the resource plays is already
+// known from ResourceKind without asking the manifest twice.
 
 /// Apply the template's declared parameter defaults (§2.8.7).
 ///
@@ -63,7 +61,7 @@ struct Contribution {
 /// manifest's preserved raw JSON alongside the declared parameters.
 void apply_declared_defaults(Value& parameters, const ResolvedResource& project_template) {
     const Value declared =
-        detail::manifest_extension(project_template.cartridge->manifest(), "template", "parameters");
+        detail::manifest_extension(project_template.cartridge->manifest(), "parameters");
     const Array* entries = declared.as_array();
     if (entries == nullptr) return;
 
@@ -199,12 +197,11 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
 
     for (const Contribution& contribution : contributions) {
         const ResolvedResource& resource = *contribution.resource;
-        const std::string        key      = body_key(resource.record->kind);
 
         const std::vector<std::string> executable_globs =
-            string_list(detail::manifest_extension(resource.cartridge->manifest(), key, "executable"));
+            string_list(detail::manifest_extension(resource.cartridge->manifest(), "executable"));
         const Value processor_value =
-            detail::manifest_extension(resource.cartridge->manifest(), key, "processor");
+            detail::manifest_extension(resource.cartridge->manifest(), "processor");
         const std::string processor{processor_value.as_string().value_or("substitute")};
         if (processor != "copy" && processor != "substitute") {
             EngineError error = make_error(ErrorCategory::capability, "capability.unsatisfied",

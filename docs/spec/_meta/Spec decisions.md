@@ -247,7 +247,7 @@ restates.
 > implementation and the specification is amended to match. Each entry names the
 > sections that need amending.
 
-## D-028 — The CLI host lives at `app/`; the Lua binding at `engine/lua/`
+## D-029 — The CLI host lives at `app/`; the Lua binding at `engine/lua/`
 [[1.1 Repository identity]] · [[2.1 Architectural model]] · [[2.6 Engine-Lua boundary]]
 
 §1.1 divides the repository into `engine/`, `lua/`, `third-party/`, `tools/` and
@@ -265,7 +265,7 @@ have put C++ there; putting the CLI in `engine/`, which §2.2.5 forbids in spiri
 
 Amend §1.1 to list both.
 
-## D-029 — Resources are cartridges; the manifest envelope is the cartridge format's
+## D-030 — Resources are cartridges; the manifest envelope is the cartridge format's
 [[2.8 Templates]] · [[2.10 Assets and generator resources]]
 
 §2.8.3 defines an envelope (`schema_version`, `type`, `requires_engine`,
@@ -289,7 +289,7 @@ rewriting sqcart to §2.8.3 (discards a tested, shipped implementation).
 Amend §2.8.1–2.8.3 to state that generator resources are cartridges and inherit
 the container format's envelope and identity grammar.
 
-## D-030 — Resource payload root
+## D-031 — Resource payload root
 [[2.8 Templates]] · [[2.9 Kits]] · [[2.10 Assets and generator resources]]
 
 Templates declare their payload root as `template.tree`. The cartridge format
@@ -300,7 +300,7 @@ root otherwise. `SQ-INF/` is never payload.
 Amend §2.9 and §2.10 to state the convention, or add a `tree` field to those
 bodies in the format.
 
-## D-031 — Architecture fields absent from the cartridge format are read from raw JSON
+## D-032 — Architecture fields absent from the cartridge format are read from raw JSON
 [[2.7 Project generation model]] · [[2.8 Templates]] · [[2.9 Kits]]
 
 The generator architecture needs manifest fields the container format does not
@@ -319,7 +319,7 @@ conservative default (`working_directory` → `sq_app`, `processor` →
 `capability.unsatisfied` failure, because §2.14.1 requires an unsatisfied
 capability to fail at resolution.
 
-## D-032 — v1 implements new-workspace generation only
+## D-033 — v1 implements new-workspace generation only
 [[2.7 Project generation model]] · [[2.15 Error and transaction model]]
 
 `project.generate` refuses an existing workspace with
@@ -338,7 +338,7 @@ Package and asset *materialization* are deferred on the same principle —
 resolution is implemented and reported, materialization is not, and there is no
 package or asset in the repository to design it against.
 
-## D-033 — The engine supplies built-in substitution parameters
+## D-034 — The engine supplies built-in substitution parameters
 [[2.7 Project generation model]] · [[2.8 Templates]]
 
 The template parameter contract is validated against the **effective**
@@ -355,8 +355,8 @@ Without this, every workflow would have to restate `project_name = name` to pass
 a check the engine was about to satisfy itself. §2.8.7 should say that the
 engine contributes built-ins and that validation sees the effective set.
 
-## D-034 — `requires_capabilities` is an opaque array in the cartridge envelope
-[[2.8 Templates]] · [[2.14 Extensibility model]] · supersedes part of D-029
+## D-035 — `requires_capabilities` is an opaque array in the cartridge envelope
+[[2.8 Templates]] · [[2.14 Extensibility model]] · supersedes part of D-030
 
 §2.14.1 requires an unsatisfied capability to fail at resolution. Until now a
 manifest had nowhere to state one: the capability registry was enumerable and
@@ -382,17 +382,17 @@ tool. This is the mechanism that lets sqcart stay one.
 
 Rejected: adding a generator-specific `requires_capabilities` field that sqcart
 *understands* (puts generator vocabulary in a general format); reading it from
-raw JSON as D-031 does for the structural fields (a mistyped token would
+raw JSON as D-032 does for the structural fields (a mistyped token would
 silently pass, and silent passing is the worst failure mode for a mechanism
 whose entire purpose is failing loudly).
 
 Note the limit: this shape works because a capability requirement is a flat
-list of strings. It does **not** generalise to the D-031 fields, two of which
+list of strings. It does **not** generalise to the D-032 fields, two of which
 are maps and one of which carries arbitrary JSON values. Those stay in the kind
 body, read from raw JSON. Validating them, if it becomes worth doing, is a
 generator-side JSON Schema — generator semantics checked by the generator.
 
-## D-035 — Version range operands may be partial
+## D-036 — Version range operands may be partial
 [[2.8 Templates]]
 
 `^1.0`, `>=0.1` and `~1.2` now parse, padding to `^1.0.0`, `>=0.1.0`, `~1.2.0`.
@@ -406,7 +406,7 @@ constraint *silently never applied* — and the repository's own manifests wrote
 fired. A compatibility check that quietly does nothing is worse than one that
 errors, because nothing signals it.
 
-## D-036 — NDK detection belongs to the template, not the rendering kit
+## D-037 — NDK detection belongs to the template, not the rendering kit
 [[2.8 Templates]] · [[2.9 Kits]]
 
 `template.android.cpp` locates the NDK, exports `SQ_NDK_INC` / `SQ_NDK_LIB`,
@@ -425,8 +425,8 @@ be absent. A second rendering kit inherits a working NativeActivity build
 rather than re-solving detection, and there is one copy of the detection logic
 rather than one per kit.
 
-## D-037 — Declared parameter defaults are applied after engine built-ins
-[[2.8 Templates]] · amends D-033
+## D-038 — Declared parameter defaults are applied after engine built-ins
+[[2.8 Templates]] · amends D-034
 
 `effective_parameters` layers workflow values, then engine built-ins, then the
 template's declared defaults — each put-if-absent, so an earlier layer still
@@ -441,7 +441,7 @@ A template default for a name the engine also provides is now redundant rather
 than in conflict, which is the right relationship: the engine's built-ins are
 facts about the request, and a template cannot know better.
 
-## D-038 — SDK levels are build settings, not generation parameters
+## D-039 — SDK levels are build settings, not generation parameters
 [[2.7 Project generation model]]
 
 `AndroidManifest.xml` carries no `<uses-sdk>`. `minSdkVersion`,
@@ -456,7 +456,7 @@ would create two sources of truth, and aapt2 takes the manifest's.
 The general test: if a value can change over a project's life without changing
 what the project *is*, it belongs in the build, not in the generated content.
 
-## D-039 — A kit adds an external sysroot with `-idirafter`, never `-I`
+## D-040 — A kit adds an external sysroot with `-idirafter`, never `-I`
 [[2.9 Kits]]
 
 `kit.opengl` reaches the NDK's Khronos headers with `-idirafter $(SQ_NDK_INC)`,
@@ -483,7 +483,7 @@ which is most of them, since that is what `acquisition: "system"` usually
 means. A kit contributes *additions* to a host toolchain and must not
 reorganise it.
 
-## D-040 — A template's identity names what it produces, not where it runs
+## D-041 — A template's identity names what it produces, not where it runs
 [[2.8 Templates]] · renames `template.termux.cpp`
 
 `template.termux.cpp` becomes `template.terminal.cpp`, with
@@ -501,7 +501,7 @@ produces, not merely where it was authored.
 Renaming a resource identity is a breaking change. Done now, at 0.1.0 with one
 consumer, because it only gets more expensive.
 
-## D-041 — The workflow assumes no target platform
+## D-042 — The workflow assumes no target platform
 [[2.5 Lua control layer]] · [[2.7 Project generation model]]
 
 `workflow.generate.default` no longer defaults `platforms` to `["termux"]`.
@@ -513,7 +513,7 @@ Detection from the host was considered and rejected. The host a project is
 is generated on Termux and targets Android — so `uname` would be wrong in
 exactly the case that matters. A workflow that wants filtering says so.
 
-## D-042 — The installation root is found by marker, not by directory name
+## D-043 — The installation root is found by marker, not by directory name
 [[2.1 Architectural model]]
 
 `sqpg` locates its resources and workflows by walking upward from its own
@@ -532,7 +532,7 @@ and the BSDs (`KERN_PROC_PATHNAME`); `argv[0]` is the last resort rather than
 the first, since for a binary on `PATH` it is a bare name that resolves to
 nothing.
 
-## D-043 — Repository tooling is bash; fish is an optional translation
+## D-044 — Repository tooling is bash; fish is an optional translation
 [[1.7 Tools]]
 
 `tools/*.fish` becomes `tools/*.sh`, written in bash 3.2-compatible form.

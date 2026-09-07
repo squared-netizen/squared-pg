@@ -21,7 +21,7 @@ BUILD    := build
 CXXFLAGS := -std=$(CXXSTD) $(OPT) $(WARN) $(DEFS) $(INC)
 CFLAGS   := $(OPT) -w $(DEFS) $(INC)
 
-LIB_SRC  := src/errors.cpp src/path.cpp src/glob.cpp src/manifest.cpp src/symlink.cpp \
+LIB_SRC  := src/errors.cpp src/path.cpp src/manifest.cpp src/symlink.cpp \
             src/reader.cpp src/digest.cpp src/validate.cpp src/extract.cpp \
             src/sha256.cpp src/writer.cpp
 APP_SRC  := app/src/cli.cpp app/src/commands_read.cpp app/src/commands_write.cpp \
@@ -35,7 +35,15 @@ LIB_OBJ  := $(patsubst %,$(BUILD)/%.o,$(LIB_SRC))
 APP_OBJ  := $(patsubst %,$(BUILD)/%.o,$(APP_SRC))
 C_OBJ    := $(patsubst %,$(BUILD)/%.o,$(C_SRC))
 
-TESTS    := test_errors test_expected test_path test_manifest test_open test_write test_conformance test_seeds test_symlinks \
+# test_write comes before the tests that read tests/test.sq, because it is
+# what produces that file. The previous order ran test_manifest and
+# test_open against whatever test.sq was committed, so a fixture that had
+# gone stale -- as it did across the format 2 bump -- failed two tests
+# with an unrelated-looking open error before the test that regenerates it
+# had run.
+TESTS    := test_errors test_expected test_path test_write \
+            test_manifest test_format2 test_open \
+            test_conformance test_seeds test_symlinks \
             test_digest test_validate test_extract test_exploded
 APPTESTS := test_cli
 TEST_BIN := $(patsubst %,$(BUILD)/%,$(TESTS)) $(patsubst %,$(BUILD)/%,$(APPTESTS))

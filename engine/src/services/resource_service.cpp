@@ -109,10 +109,17 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
 
         const sqcart::Manifest& manifest = opened->manifest();
 
-        auto kind = resource_kind_from_string(sqcart::to_string(manifest.kind()));
+        // `kind` is an opaque token as of cartridge format 2, so mapping it
+        // onto a ResourceKind is this engine's job and an unrecognised token
+        // is an ordinary outcome rather than a defect. The index skips it and
+        // says so: a sysroot may hold cartridges for tools that are not this
+        // one, and refusing to scan past them would make the index brittle.
+        auto kind = resource_kind_from_string(manifest.kind());
         if (!kind) {
-            diagnostics.push_back(Diagnostic{Severity::warning, "unknown resource kind, skipped", {},
-                                             location.string()});
+            diagnostics.push_back(Diagnostic{Severity::info,
+                                             "cartridge kind '" + std::string{manifest.kind()} +
+                                                 "' is not a squared-pg resource kind, skipped",
+                                             {}, location.string()});
             continue;
         }
         // A cartridge is a runnable application, not a generation input. It
@@ -150,7 +157,13 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
         record.location    = location;
         record.title       = manifest_string(manifest.title());
         record.description = manifest_string(manifest.description());
-        if (manifest.engine()) record.engine_range = manifest.engine()->version;
+        // `engine` moved out of the cartridge envelope and into this
+        // engine's own section: the field's `id` named the consumer it was
+        // addressed to, which is what the section key already says.
+        if (const Value range = detail::manifest_extension(manifest, "requires.engine");
+            range.as_string()) {
+            record.engine_range = std::string{*range.as_string()};
+        }
         for (const std::string& feature : manifest.requires_features()) {
             record.required_features.push_back(feature);
         }

@@ -51,7 +51,7 @@ ENGINE_SRC := engine/src/value.cpp engine/src/version.cpp engine/src/identity.cp
 
 BINDING_SRC := engine/lua/src/bindings.cpp
 
-SQCART_SRC := sqcart/src/errors.cpp sqcart/src/path.cpp sqcart/src/glob.cpp \
+SQCART_SRC := sqcart/src/errors.cpp sqcart/src/path.cpp \
               sqcart/src/manifest.cpp sqcart/src/symlink.cpp sqcart/src/reader.cpp \
               sqcart/src/digest.cpp sqcart/src/validate.cpp sqcart/src/extract.cpp \
               sqcart/src/sha256.cpp sqcart/src/writer.cpp

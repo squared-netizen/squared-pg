@@ -54,6 +54,19 @@ struct HostInfo {
     std::string              workflow_id;   ///< workflow the host selected
     std::vector<std::string> workflow_path; ///< search path, in declared order
     std::string              cwd;           ///< where the host was invoked
+
+    /// The running executable, resolved. Distinct from `program`, which is
+    /// argv[0] verbatim and may be a bare name found on PATH.
+    ///
+    /// Exposed because `initialize` installs the tool into the environment,
+    /// and a program that installs itself has to know where it is. Deriving
+    /// it in Lua from workflow_path would work only for a repository layout
+    /// and would break the moment the tool was already installed.
+    std::string              executable;
+
+    /// Root of the installation the host resolved: the directory holding
+    /// `lua/workflows` and `resources`. What `initialize` copies from.
+    std::string              installation;
 };
 
 /// Install the `sqpg` host table.

@@ -59,26 +59,5 @@ std::string_view to_string(ErrorCode code) noexcept {
     return "cartridge.internal";
 }
 
-std::string_view to_string(Kind kind) noexcept {
-    switch (kind) {
-        case Kind::cartridge:        return "cartridge";
-        case Kind::project_template: return "template";
-        case Kind::kit:              return "kit";
-        case Kind::package:          return "package";
-        case Kind::asset_bundle:     return "asset-bundle";
-        case Kind::plugin:           return "plugin";
-    }
-    return "";
-}
-
-std::optional<Kind> kind_from_string(std::string_view s) noexcept {
-    if (s == "cartridge")    { return Kind::cartridge; }
-    if (s == "template")     { return Kind::project_template; }
-    if (s == "kit")          { return Kind::kit; }
-    if (s == "package")      { return Kind::package; }
-    if (s == "asset-bundle") { return Kind::asset_bundle; }
-    if (s == "plugin")       { return Kind::plugin; }
-    return std::nullopt;
-}
 
 }  // namespace sqcart

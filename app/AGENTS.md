@@ -24,4 +24,4 @@ it belongs in `lua/workflows/` instead.
 ## Why it is a separate top-level directory
 
 The host is a *consumer* of the engine, not part of it (§2.1.6). Putting it
-under `engine/` would blur exactly the line §2.2.5 draws. Recorded as D-028.
+under `engine/` would blur exactly the line §2.2.5 draws. Recorded as D-029.

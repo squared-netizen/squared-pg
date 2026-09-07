@@ -11,7 +11,7 @@ spec) or generator behaviour (that is the engine services' concern)
 
 | Document | What it specifies |
 |---|---|
-| `sq-cartridge-1.0.md` | The `.sq` container format — bytes, layout, manifest schema. Normative. |
+| `sq-cartridge-2.0.md` | The `.sq` container format — bytes, layout, manifest schema. Normative. |
 | `sqcart-component.md` | Where sqcart sits architecturally — placement, layering, bootstrap rule, dogfood chain. |
 | `sqcart/include/sqcart/sqcart.hpp` | The concrete C++20 API — exact signatures. |
 | `tools/sqcart-isolation.fish` | The build-time gate that enforces §2.4 of this document. |
@@ -219,17 +219,27 @@ Repository Conventions).
   SHALL cause `manifest_malformed`, not `format_unsupported` — the latter is
   reserved for a recognised format at an unsupported version.
 - **FR-MAN-4.** A manifest whose `format_version` this build does not
-  implement SHALL cause `format_unsupported`. This build implements exactly
-  `1`.
-- **FR-MAN-5.** A manifest whose `kind` body does not match its declared
-  `kind` (§5.1: "MUST NOT contain a kind body other than the one matching
-  its kind") SHALL cause `kind_invalid`. This applies even if the foreign
-  body is well-formed on its own.
-- **FR-MAN-6.** Exactly one of `Manifest::as_cartridge` /
-  `as_template` / `as_kit` / `as_package` / `as_assets` / `as_plugin` SHALL
-  return non-null, and it SHALL be the one matching `Manifest::kind()`. The
-  other five SHALL return `nullptr`. This SHALL hold for every successfully
-  parsed manifest without exception.
+  implement SHALL cause `format_unsupported`, **at parse time, before any
+  other member is read**. This build implements exactly `2`. There is no
+  compatibility path for format 1 in either direction.
+- **FR-MAN-5.** `kind` SHALL be validated for shape only: one identity
+  segment matching `[a-z][a-z0-9_]*`. A malformed token SHALL cause
+  `kind_invalid`. An **unrecognised** token SHALL NOT: this library does
+  not enumerate the ecosystem's roles, and a cartridge of a kind it has
+  never seen SHALL open, index and report normally (format spec §5.2.1).
+
+  *Retired.* This requirement previously rejected a manifest carrying a
+  body that did not match its `kind`. There are no kind bodies to be
+  foreign, and a `consumers` section addressed to a namespace that is not
+  yours is the mechanism working, not a masquerade.
+- **FR-MAN-6.** `consumers` sections SHALL be carried without
+  interpretation. A conforming implementation SHALL check that `consumers`
+  is an object, that each key is a well-formed consumer identity, and that
+  each value is an object; it SHALL check nothing else about a section's
+  contents. `Manifest::consumer()` SHALL return the section as JSON text
+  with member order preserved, and `Manifest::consumers()` SHALL enumerate
+  identities. An absent section SHALL be reported as absent and never
+  synthesised as empty (format spec §5.6).
 - **FR-MAN-7.** Unrecognised members of any manifest object SHALL be
   ignored, not rejected (format spec §5.4, default tier), and SHALL remain
   retrievable via `Manifest::raw_json()`.
@@ -242,32 +252,31 @@ Repository Conventions).
   without a surrounding container, applying the same rules as manifest
   validation during `open()`.
 - **FR-MAN-10.** The structural constraints a manifest must satisfy SHALL
-  match `docs/developer/specs/schema/sq-manifest-1.schema.json` exactly,
+  match `docs/developer/specs/schema/sq-manifest-2.schema.json` exactly,
   whether or not the implementation runs that schema literally. A manifest
   the schema accepts and sqcart rejects, or vice versa, is a defect in
   whichever side disagrees with the schema — the schema is the tie-breaker.
 
-### 3.5 Kind bodies
+### 3.5 Kind bodies — retired
 
-- **FR-KIND-1.** `TemplateBody::ownership` glob sets (`generated`, `user`,
-  `shared`) SHALL be checked for internal well-formedness — each is a
-  syntactically valid glob — by `Manifest::parse()`. Whether the three sets
-  overlap against an actual materialised file tree is a `validate()`
-  concern (§3.9), not a parse concern, since it requires the payload to
-  exist.
-- **FR-KIND-2.** `KitBody::integration_areas` SHALL be required non-empty;
-  a `kit` manifest with an absent or empty `integration_areas` SHALL cause
-  `manifest_malformed`.
-- **FR-KIND-3.** Every `AssetsBody::Entry::path` SHALL be checked for
-  presence in the cartridge's entry list. A referenced-but-absent path
-  SHALL cause `payload_missing`, naming the missing entry.
-- **FR-KIND-4.** `CartridgeBody::permissions` SHALL default to an empty
-  list when absent from the manifest JSON, never to "unrestricted" (format
-  spec §6.1). This SHALL be enforced by the parser, not left to caller
-  convention.
-- **FR-KIND-5.** `LuaEntry::type == "lua-bytecode"` SHALL require
-  `target` to be present; its absence SHALL cause `manifest_malformed`
-  (format spec §7 rule 2).
+FR-KIND-1 through FR-KIND-5 required this library to know a template's
+ownership globs, a kit's integration areas, an asset entry's path, a
+cartridge's permission default and a Lua entry's bytecode target.
+
+Every one of them was a rule about a *consumer's* schema, and holding them
+here is what made format spec §0.1 false in code: a framework runtime
+linking this library acquired the generator's vocabulary whether it wanted
+it or not.
+
+They are not weakened or relocated within this document. They are the
+consuming project's requirements now, verified by its own conformance
+tests. What this library owes a consumer is FR-MAN-6: the section arrives
+intact, addressed, and unopened.
+
+The loss is real and worth naming. FR-KIND-3 in particular — every declared
+asset path is present in the cartridge — was a genuinely useful check that
+nothing here replaces. A consumer can make it better, because it knows what
+the reference was for.
 
 ### 3.6 Entry access — `entries`, `contains`, `find`, `read`, `read_into`
 
@@ -448,10 +457,16 @@ Repository Conventions).
   (strings, numbers, booleans, arrays, maps); it SHALL NOT expose a handle,
   pointer, or any value requiring native lifetime management on the Lua
   side.
-- **FR-LUA-3.** The kind body SHALL appear under a Lua key matching the
-  manifest's `kind` (e.g. `cartridge.manifest.kit.integration_areas` for a
-  `kit`-kind cartridge), mirroring the C++ `as_kit()` /
-  `as_template()` accessor naming.
+- **FR-LUA-3.** `cartridge.manifest.consumers` SHALL be a map from consumer
+  identity to that section's JSON **as a string**, mirroring the C++
+  `Manifest::consumer()`. The binding SHALL NOT decode a section into a Lua
+  table: doing so would require this library to decide how a consumer's
+  JSON maps onto Lua values, which is a decision belonging to the consumer.
+  A Lua caller that wants a table decodes the string with its own reader.
+
+  This requirement is moot in practice — `sqcart::lua` is deprioritised
+  indefinitely for want of a concrete consumer — and is recorded so that a
+  future implementation does not reintroduce the coupling by reflex.
 - **FR-LUA-4.** `error_table` SHALL contain `category`, `code`, `message`,
   `entry` (or `nil`), and `recoverable`, matching `Error` field-for-field,
   per format spec §2.6.12.
@@ -571,7 +586,8 @@ be checked against each other without one restating the other.
 **UC-1 — Engine resolves a kit.** The Kit Service calls
 `Cartridge::open("resources/cache/kit.sdl3-1.2.0.sq")`. sqcart runs
 FR-OPEN-1 through FR-OPEN-5, returns a `Cartridge`, and the engine reads
-`manifest().as_kit()->integration_areas` (FR-MAN-6, FR-KIND-2) to check
+`manifest().consumer("squared_pg")`, parsing `integration_areas` from it
+(FR-MAN-6) to check
 against other selected kits — a comparison sqcart does not perform itself
 (FR-VAL-5).
 
@@ -604,7 +620,7 @@ choosing different deflate implementations.
 ## 7. Data requirements
 
 The manifest's structural shape is authoritative in
-`docs/developer/specs/schema/sq-manifest-1.schema.json` (FR-MAN-10). This
+`docs/developer/specs/schema/sq-manifest-2.schema.json` (FR-MAN-10). This
 document does not duplicate field-by-field constraints already expressed
 there; where a functional requirement above depends on a specific field
 (`KitBody::integration_areas`, `CartridgeBody::permissions`, and so on), the
@@ -620,8 +636,8 @@ document is the source of truth for what sqcart *does* in response.
 | FR-OPEN-1..7 | format spec §3.2, §3.5, §12.1 | *planned:* `test_open.cpp` |
 | FR-PATH-1..5 | format spec §3.3 | *planned:* `test_path.cpp` |
 | FR-LIM-1..4 | format spec §3.4 | *planned:* `test_limits.cpp` |
-| FR-MAN-1..10 | format spec §5 | *planned:* `test_manifest.cpp`; schema cross-check via `docs/.../schema/sq-manifest-1.schema.json` |
-| FR-KIND-1..5 | format spec §6.1–§6.5 | *planned:* `test_kind_dispatch.cpp` |
+| FR-MAN-1..10 | format spec §5 | *planned:* `test_manifest.cpp`; schema cross-check via `docs/.../schema/sq-manifest-2.schema.json` |
+| FR-KIND-1..5 | *retired* — moved to the consuming project (§3.5) | n/a |
 | FR-ENTRY-1..5 | format spec §3.1, §3.4 | *planned:* `test_entries.cpp` |
 | FR-INT-1..6 | format spec §9 | *planned:* `test_digest.cpp` |
 | FR-EXT-1..5 | format spec §3.1, §2.3.13 (engine transaction boundary) | *planned:* `test_extract.cpp` |

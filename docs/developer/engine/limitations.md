@@ -84,4 +84,4 @@ fails to justify. Tracked as Q-26.
 ## Manifest schema divergence
 
 The engine reads the *cartridge* manifest schema, not §2.8.3's envelope. See
-[resources/manifests.md](../resources/manifests.md). Recorded as D-029.
+[resources/manifests.md](../resources/manifests.md). Recorded as D-030.

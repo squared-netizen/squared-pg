@@ -1,17 +1,14 @@
 {
   "format": "squared-cartridge",
-  "format_version": 1,
+  "format_version": 2,
 
-  "kind": "asset-bundle",
+  "kind": "{{kind}}",
   "id": "{{id}}",
   "version": "{{version}}",
+  "tree": ".",
 
   "title": "{{title}}",
   "description": "Created by sqcart from a plain directory.",
 
-  "assets": {
-    "entries": [
-{{asset_entries}}
-    ]
-  }
+  "consumers": {}
 }

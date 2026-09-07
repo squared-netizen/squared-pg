@@ -58,7 +58,9 @@ void write_usage(std::ostream& stream)
         "      --lenient               open at lenient conformance, not strict\n"
         "      --overwrite             allow unpack to overwrite existing files\n"
         "      --no-hashes             omit SQ-INF/hashes.json when packing\n"
-        "      --store                 store entries uncompressed when packing\n"
+        "  -c, --compress=0-9          deflate level when packing (default 6)\n"
+        "                              0 stores; 1 is fastest; 9 is smallest\n"
+        "      --store                 synonym for --compress=0\n"
         "      --verify-integrity      check declared digests while opening\n"
         "      --symlinks=MODE         skip (default) | follow | reject\n"
         "                              follow resolves links whose target stays\n"
@@ -82,6 +84,7 @@ std::optional<std::string> long_name_for_short(char c)
 {
     switch (c) {
         case 'o': return "output";
+        case 'c': return "compress";
         case 'd': return "dest";
         case 'v': return "verbose";
         case 'h': return "help";
@@ -92,7 +95,8 @@ std::optional<std::string> long_name_for_short(char c)
 bool option_takes_value(std::string_view name)
 {
     return name == "output" || name == "dest" || name == "kind" || name == "id" ||
-           name == "version" || name == "title" || name == "symlinks";
+           name == "version" || name == "title" || name == "symlinks" ||
+           name == "compress";
 }
 
 }  // namespace

@@ -58,7 +58,7 @@ into its manifest. The manifest is owned by the cartridge, so keeping the
 pointer without keeping the cartridge would dangle — and the type system would
 not catch it.
 
-## Payload root (D-030)
+## Payload root (D-031)
 
 Templates declare `template.tree`. The cartridge format gives kits, packages and
 asset bundles no equivalent field, so the convention is: `tree/` when the

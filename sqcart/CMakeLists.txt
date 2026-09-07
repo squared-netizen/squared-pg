@@ -118,7 +118,6 @@ target_include_directories(sqcart_sha256 SYSTEM PUBLIC "${_sha_dir}")
 set(SQCART_READ_SOURCES
     src/errors.cpp
     src/path.cpp
-    src/glob.cpp
     src/manifest.cpp
     src/reader.cpp
     src/digest.cpp

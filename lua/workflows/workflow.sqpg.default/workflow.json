@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "id": "workflow.generate.default",
+  "id": "workflow.sqpg.default",
   "version": "0.1.0",
   "entry": "init.lua",
-  "description": "Reference generation workflow: new, plan, list, show, inspect, describe.",
+  "description": "Reference workflow: generation, environment lifecycle, and the workflow verbs.",
 
   "requires_engine": "^0.1",
   "requires_capabilities": [

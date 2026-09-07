@@ -43,7 +43,7 @@ namespace {
 
 namespace pg = squared::pg;
 
-constexpr const char* kDefaultWorkflow = "workflow.generate.default";
+constexpr const char* kDefaultWorkflow = "workflow.sqpg.default";
 
 struct HostConfig {
     std::string              workflow{kDefaultWorkflow};
@@ -275,6 +275,8 @@ int main(int argc, char** argv) {
     info.workflow_path = config.workflow_roots;
     std::error_code ec;
     info.cwd = std::filesystem::current_path(ec).string();
+    info.executable = executable_path(argc > 0 ? argv[0] : nullptr).string();
+    info.installation = installation_root(argc > 0 ? argv[0] : nullptr).string();
     pg::lua::open_host(state, info);
 
     // Let the workflow require its own modules, and the repository's shared

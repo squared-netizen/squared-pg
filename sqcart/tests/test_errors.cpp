@@ -18,14 +18,18 @@ int main() {
     CHECK(to_string(ErrorCode::native_code_prohibited)
                                                == "cartridge.native_code_prohibited");
 
-    // Kind round-trips through its manifest spelling. Note "template", not
-    // "project_template" -- the enumerator is renamed only because template
-    // is a keyword.
-    CHECK(to_string(Kind::project_template) == "template");
-    CHECK(kind_from_string("template")      == Kind::project_template);
-    CHECK(kind_from_string("asset-bundle")  == Kind::asset_bundle);
-    CHECK(!kind_from_string("Template").has_value());   // no case folding
-    CHECK(!kind_from_string("resource").has_value());
+    // Kind is a token, not an enum, as of format 2. What is checkable is
+    // shape; what is deliberately NOT checkable is membership of any list,
+    // because this library does not know the ecosystem's roles (§0.1).
+    CHECK(valid_kind_token("template"));
+    CHECK(valid_kind_token("kit"));
+    CHECK(valid_kind_token("asset_bundle"));
+    CHECK(valid_kind_token("something_nobody_has_defined"));   // the point
+    CHECK(!valid_kind_token("Template"));      // no case folding
+    CHECK(!valid_kind_token("asset-bundle"));  // hyphen retired with `id`
+    CHECK(!valid_kind_token("2fast"));         // must open on a letter
+    CHECK(!valid_kind_token("dotted.kind"));   // one segment, not a hierarchy
+    CHECK(!valid_kind_token(""));
 
     // Error carries its category without a separate lookup.
     const Error e{ErrorCode::integrity_failed, "digest mismatch", {}, {}, false};

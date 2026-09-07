@@ -58,19 +58,6 @@ std::string sanitise_segment(std::string_view raw)
     return out;
 }
 
-/// The id prefix a kind requires, per format spec §5.2. Generator-resource
-/// kinds must carry their kind token; `cartridge` is reverse-DNS and gets no
-/// automatic prefix, so a created one is only a starting point.
-std::string_view prefix_for(std::string_view kind)
-{
-    if (kind == "kit")          return "kit";
-    if (kind == "package")      return "package";
-    if (kind == "template")     return "template";
-    if (kind == "asset-bundle") return "asset";
-    if (kind == "plugin")       return "plugin";
-    return "";   // cartridge
-}
-
 std::string replace_all(std::string s, std::string_view from, std::string_view to)
 {
     std::size_t at = 0;
@@ -152,88 +139,14 @@ Result<std::vector<std::string>> collect_payload(const std::filesystem::path& ro
     return paths;
 }
 
-/// Guess an asset type from an extension. Advisory only: the manifest is a
-/// starting point a human edits, and a wrong guess is visible and cheap.
-std::string_view asset_type_for(std::string_view path)
-{
-    const auto dot = path.rfind('.');
-    if (dot == std::string_view::npos) {
-        return "data";
-    }
-    const auto ext = path.substr(dot + 1);
-    if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "webp") return "texture";
-    if (ext == "wav" || ext == "ogg" || ext == "mp3" || ext == "flac")  return "audio";
-    if (ext == "ttf" || ext == "otf")                                   return "font";
-    if (ext == "glsl" || ext == "vert" || ext == "frag")                return "shader";
-    if (ext == "json" || ext == "toml" || ext == "yaml")                return "config";
-    if (ext == "lua")                                                   return "script";
-    return "data";
-}
-
-/// Render the asset_entries block: one entry per payload file.
-///
-/// This is why asset-bundle is the default kind. It is the only kind whose
-/// required fields can be filled in honestly from a plain folder -- every
-/// other kind needs a human to say something the filesystem does not know.
-std::string render_asset_entries(const std::vector<std::string>& paths,
-                                 std::string_view                id_prefix)
-{
-    std::string out;
-    for (std::size_t i = 0; i < paths.size(); ++i) {
-        const auto& p = paths[i];
-
-        // Asset identity from the path, sanitised per segment.
-        std::string ident(id_prefix);
-        std::size_t start = 0;
-        while (start <= p.size()) {
-            const auto slash = p.find('/', start);
-            const auto piece = p.substr(start, slash == std::string::npos
-                                                   ? std::string::npos
-                                                   : slash - start);
-            auto seg = piece;
-            if (const auto dot = seg.rfind('.'); dot != std::string::npos && dot > 0) {
-                seg = seg.substr(0, dot);   // drop the extension from the id
-            }
-            ident += '.';
-            ident += sanitise_segment(seg);
-            if (slash == std::string::npos) {
-                break;
-            }
-            start = slash + 1;
-        }
-
-        out += "      { \"id\": \"" + ident + "\", \"path\": \"" + json_escape(p) +
-               "\", \"type\": \"" + std::string(asset_type_for(p)) + "\" }";
-        out += (i + 1 < paths.size()) ? ",\n" : "\n";
-    }
-    if (out.empty()) {
-        // An empty entries array fails the schema's minItems, so say why now
-        // rather than emitting a manifest that will not validate.
-        return {};
-    }
-    return out;
-}
-
-/// Detect a plausible Lua entry point for cartridge/plugin kinds.
-std::string detect_entry_module(const std::vector<std::string>& paths)
-{
-    static constexpr std::string_view kCandidates[] = {
-        "game/main.lua", "main.lua", "src/main.lua", "lua/init.lua", "init.lua",
-    };
-    for (auto candidate : kCandidates) {
-        if (std::find(paths.begin(), paths.end(), candidate) != paths.end()) {
-            return std::string(candidate);
-        }
-    }
-    return {};
-}
-
 }  // namespace
 
 ExitCode cmd_create(const Invocation& inv, Environment& env)
 {
     if (inv.positional.empty()) {
-        env.err << "usage: sqcart create <directory> [-o out.sq] [--kind K] [--id ID]\n"
+        env.err << "usage: sqcart create <directory> --kind K [-o out.sq] [--id ID]\n"
+                   "       --kind is any well-formed token; sqcart does not\n"
+                   "       enumerate roles (format spec 5.2)\n"
                    "       --in-place writes SQ-INF/manifest.json and packs nothing\n";
         return ExitCode::usage;
     }
@@ -275,79 +188,59 @@ ExitCode cmd_create(const Invocation& inv, Environment& env)
         return ExitCode::failure;
     }
 
-    // Kind selection. asset-bundle is the default because it is the only kind
-    // whose required fields can be filled honestly from a directory listing;
-    // a detected Lua entry point is strong enough evidence to prefer
-    // cartridge instead.
-    const std::string detected_entry = detect_entry_module(*payload);
-    std::string kind = inv.option("kind").value_or(
-        detected_entry.empty() ? "asset-bundle" : "cartridge");
-
-    auto seed = seed_for(kind);
-    if (!seed) {
-        env.err << "sqcart: no seed for kind '" << kind << "'\n        known kinds:";
-        for (auto k : seed_kinds()) {
-            env.err << ' ' << k;
-        }
-        env.err << '\n';
+    // Kind. Required, with no default and no detection.
+    //
+    // Format 1 guessed: asset-bundle normally, cartridge if a file named
+    // main.lua turned up. Both branches required knowing what those roles
+    // mean and what their bodies must contain, which is the coupling format 2
+    // removed. A tool that does not know the ecosystem's roles cannot pick
+    // one for you, and pretending otherwise would put a wrong `kind` in a
+    // manifest a consumer then has to reject.
+    const std::string kind = inv.option("kind").value_or("");
+    if (kind.empty()) {
+        env.err << "sqcart: create needs --kind\n"
+                << "        any token matching [a-z][a-z0-9_]* is accepted; what it\n"
+                << "        means is the consuming tool's question, not sqcart's\n";
+        return ExitCode::usage;
+    }
+    if (!valid_kind_token(kind)) {
+        env.err << "sqcart: '" << kind << "' is not a well-formed kind token\n"
+                << "        expected [a-z][a-z0-9_]*, one segment\n";
         return ExitCode::usage;
     }
 
+    auto seed = seed_for(kind);
+    if (!seed) {
+        env.err << "sqcart: internal error: no envelope seed\n";
+        return ExitCode::failure;
+    }
+
     // Identity. A derived id is a starting point, not an assertion of
-    // ownership -- especially for `cartridge`, which the spec says should be
-    // reverse-DNS under a domain the author controls.
+    // ownership. No kind-derived prefix: which prefixes belong to which roles
+    // is ecosystem policy, and this tool has no standing to enforce it.
     const std::string folder = src.filename().empty()
                                    ? std::string("cartridge")
                                    : src.filename().string();
     std::string id = inv.option("id").value_or("");
     if (id.empty()) {
-        const auto prefix = prefix_for(kind);
-        id = prefix.empty() ? ("local." + sanitise_segment(folder))
-                            : (std::string(prefix) + "." + sanitise_segment(folder));
+        id = "local." + sanitise_segment(folder);
     }
 
     const std::string version = inv.option("version").value_or("0.1.0");
     const std::string title   = inv.option("title").value_or(folder);
 
-    std::string external_id = id;
-    if (const auto dot = external_id.rfind('.'); dot != std::string::npos) {
-        external_id = external_id.substr(dot + 1);
-    }
-
-    std::string entry_module = detected_entry;
-    if (entry_module.empty() && (kind == "cartridge" || kind == "plugin")) {
-        env.err << "sqcart: kind '" << kind << "' needs an entry module and none was found\n"
-                << "        looked for game/main.lua, main.lua, src/main.lua, lua/init.lua\n";
-        return ExitCode::failure;
-    }
-
-    std::string asset_entries;
-    if (kind == "asset-bundle") {
-        asset_entries = render_asset_entries(*payload, "asset");
-        if (asset_entries.empty()) {
-            env.err << "sqcart: no assets to declare\n";
-            return ExitCode::failure;
-        }
-        // Trailing newline is supplied by the seed's own layout.
-        if (asset_entries.ends_with("\n")) {
-            asset_entries.pop_back();
-        }
-    }
-
     std::string manifest(*seed);
     manifest = replace_all(std::move(manifest), "{{id}}", json_escape(id));
     manifest = replace_all(std::move(manifest), "{{version}}", json_escape(version));
     manifest = replace_all(std::move(manifest), "{{title}}", json_escape(title));
-    manifest = replace_all(std::move(manifest), "{{external_id}}", json_escape(external_id));
-    manifest = replace_all(std::move(manifest), "{{entry_module}}", json_escape(entry_module));
-    manifest = replace_all(std::move(manifest), "{{asset_entries}}", asset_entries);
+    manifest = replace_all(std::move(manifest), "{{kind}}", json_escape(kind));
 
     // Validate before writing. A seeded manifest that does not parse is a
     // defect in the seed, and the user should hear about it here rather than
     // when they later try to open what we wrote.
     if (auto parsed = Manifest::parse(manifest); !parsed) {
         env.err << "sqcart: generated manifest is invalid: " << parsed.error().message << "\n"
-                << "        this is a defect in the '" << kind << "' seed\n";
+                << "        this is a defect in the envelope seed\n";
         if (inv.has_flag("verbose")) {
             env.err << manifest << '\n';
         }

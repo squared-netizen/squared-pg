@@ -16,7 +16,7 @@
 // The repository is ground truth during initial implementation (AGENTS.md),
 // so the cartridge grammar is implemented and both separators are accepted:
 // underscores because manifests use them, hyphens because the specification
-// asks for them. This divergence is recorded as D-029.
+// asks for them. This divergence is recorded as D-030.
 
 #ifndef SQUARED_PG_IDENTITY_HPP
 #define SQUARED_PG_IDENTITY_HPP

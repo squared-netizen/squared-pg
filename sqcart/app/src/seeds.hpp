@@ -12,7 +12,8 @@
 
 namespace sqcart::app {
 
-/// The seed manifest for a kind, or empty if the kind has no seed.
+/// The envelope seed. One seed serves every kind as of format 2: the kind
+/// is a substituted token, not a schema selector.
 [[nodiscard]] std::optional<std::string_view> seed_for(std::string_view kind);
 
 /// Every kind that has a seed, in declaration order. Used for the usage text

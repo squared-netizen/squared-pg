@@ -179,7 +179,7 @@ void FilesystemService::sync_path(const std::filesystem::path& path) const {
 
 namespace detail {
 
-OwnershipClass classify_path(const sqcart::OwnershipRules& rules, std::string_view path,
+OwnershipClass classify_path(const OwnershipRules& rules, std::string_view path,
                              std::vector<Diagnostic>* diagnostics) {
     struct Candidate {
         OwnershipClass cls{OwnershipClass::seeded};
@@ -225,14 +225,56 @@ OwnershipClass classify_path(const sqcart::OwnershipRules& rules, std::string_vi
     return best.cls;
 }
 
-Value manifest_extension(const sqcart::Manifest& manifest, std::string_view body_key,
-                         std::string_view member) {
-    auto parsed = support::json_parse(manifest.raw_json());
+OwnershipRules ownership_rules(const sqcart::Manifest& manifest) {
+    OwnershipRules out;
+    const Value declared = manifest_extension(manifest, "ownership");
+    const auto fill = [&](const char* key, std::vector<std::string>& into) {
+        if (const Value* v = declared.find(key); v != nullptr) {
+            if (const Array* arr = v->as_array(); arr != nullptr) {
+                for (const Value& item : *arr) {
+                    if (auto s = item.as_string()) into.emplace_back(*s);
+                }
+            }
+        }
+    };
+    fill("generated", out.generated);
+    fill("user", out.user);
+    fill("shared", out.shared);
+    return out;
+}
+
+Value manifest_extension(const sqcart::Manifest& manifest, std::string_view member) {
+    // Cartridge format 2 carries this engine's manifest data under
+    // `consumers.squared_pg` and never opens it (format spec 5.6). sqcart
+    // hands it back as JSON text, which is the whole of the contract: the
+    // library guarantees the bytes arrived, and every question about what
+    // they mean is answered here.
+    //
+    // Note this reads the section, not raw_json(). Going through
+    // Manifest::consumer() rather than re-parsing the whole document and
+    // indexing into it keeps one fact in one place -- if the consumer
+    // identity ever changes, it changes in kConsumerId and nowhere else.
+    const auto section = manifest.consumer(kConsumerId);
+    if (!section) return {};
+    auto parsed = support::json_parse(*section);
     if (!parsed) return {};
-    const Value* body = parsed->find(body_key);
-    if (body == nullptr) return {};
-    const Value* value = body->find(member);
-    if (value == nullptr) return {};
+
+    // `member` may be dotted: "requires.kits.required" walks three levels.
+    //
+    // The nesting is not new -- `requires` has always been a block, and
+    // sqcart's parse_requires flattened it into KitBody::required_packages
+    // and friends. With the typed bodies gone, the flattening has to happen
+    // somewhere, and a path walk here is less code than a reader per field.
+    const Value* value = &*parsed;
+    std::size_t start = 0;
+    while (start <= member.size()) {
+        const std::size_t dot = member.find('.', start);
+        const std::string_view segment = member.substr(start, dot - start);
+        value = value->find(segment);
+        if (value == nullptr) return {};
+        if (dot == std::string_view::npos) break;
+        start = dot + 1;
+    }
     return *value;
 }
 

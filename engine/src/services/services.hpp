@@ -144,17 +144,48 @@ private:
 /// Holds a shared_ptr to the cartridge because `body` points into the
 /// manifest the cartridge owns; keeping the pointer without keeping the
 /// cartridge would be a dangling reference the type system would not catch.
+/// Ownership globs for a template's payload (§2.7.10).
+///
+/// Formerly `sqcart::OwnershipRules`. Cartridge format 2 removed it along
+/// with every other kind body: which files a *generator* may rewrite is a
+/// generator's question, and a cartridge reader that answered it was the
+/// coupling format spec §0.1 forbids. The declaration now lives here, and is
+/// read from `consumers.squared_pg.ownership`.
+///
+/// The three sets are not required to be disjoint by anything in the
+/// cartridge format any more. `classify_path` resolves an overlap by
+/// precedence; see its comment for why that is a decision and not an
+/// oversight.
+struct OwnershipRules {
+    std::vector<std::string> generated;
+    std::vector<std::string> user;
+    std::vector<std::string> shared;
+};
+
+/// One declared template parameter (§2.8.7).
+///
+/// Formerly `sqcart::TemplateBody::Parameter`, moved here for the same reason
+/// as OwnershipRules.
+struct TemplateParameter {
+    std::string                name;
+    std::string                type{"string"};
+    bool                       required{false};
+    std::optional<std::string> description;
+    std::optional<Value>       default_value;
+    std::optional<std::string> default_from;
+};
+
 struct ResolvedResource {
     const ResourceRecord*              record{nullptr};
     std::shared_ptr<sqcart::Cartridge> cartridge;
 
-    /// Payload root inside the cartridge. Templates declare it as
-    /// `template.tree`; other kinds use "tree/" by convention when present,
-    /// and the cartridge root otherwise (D-030).
+    /// Payload root inside the cartridge, from the manifest envelope's
+    /// `tree` (D-031). Empty means the cartridge root, which the manifest
+    /// spells "."; otherwise a path with a trailing separator.
     std::string tree_prefix;
 
-    /// Ownership globs, from the kind body.
-    sqcart::OwnershipRules ownership;
+    /// Ownership globs (§2.7.10).
+    OwnershipRules ownership;
 
     /// Integration areas: declared by a template, written by a kit.
     std::vector<std::string> integration_areas;
@@ -190,7 +221,11 @@ public:
                                                    std::vector<Diagnostic>& diagnostics);
 
     /// The template's declared parameters, as the manifest states them.
-    [[nodiscard]] static std::span<const sqcart::TemplateBody::Parameter>
+    ///
+    /// By value, not a span. Format 1 let this borrow from a typed body the
+    /// Cartridge owned; the parameters are now parsed out of the consumer
+    /// section on demand, so there is nothing stable to point at.
+    [[nodiscard]] static std::vector<TemplateParameter>
     parameters(const ResolvedResource& resolved);
 
     [[nodiscard]] static std::string working_directory(const ResolvedResource& resolved);
@@ -401,18 +436,43 @@ namespace detail {
 /// Ownership class for a workspace-relative path under a resource's rules.
 /// The most specific matching pattern wins; an unmatched path is `seeded`
 /// (§2.7.10 — the safe default is never to overwrite).
-[[nodiscard]] OwnershipClass classify_path(const sqcart::OwnershipRules& rules, std::string_view path,
+[[nodiscard]] OwnershipClass classify_path(const OwnershipRules& rules, std::string_view path,
                                            std::vector<Diagnostic>* diagnostics);
 
-/// Read a member from the manifest's raw JSON.
+/// A member of this engine's section of a cartridge manifest.
 ///
-/// sqcart models the fields the cartridge format defines; the generator
-/// architecture adds a few (template `processor`, template
-/// `integration_areas`) that the format does not. Rather than fork the
-/// manifest model, they are read from the preserved raw JSON — which §5.4 of
-/// the format guarantees is retained verbatim.
-[[nodiscard]] Value manifest_extension(const sqcart::Manifest& manifest, std::string_view body_key,
-                                       std::string_view member);
+/// Cartridge format 2 removed typed kind bodies. Everything squared-pg needs
+/// from a manifest beyond the envelope -- ownership, parameters, integration
+/// areas, working directory, the external acquisition block -- now lives
+/// under `consumers.squared_pg`, as JSON this engine parses and sqcart never
+/// opens (format spec 5.6).
+///
+/// That is a promotion, not a workaround. The previous form of this function
+/// read raw_json() for eight fields the cartridge format had no place for,
+/// alongside a typed API for the fields it did. There is one path now, and
+/// the fields that used to be second-class are the only kind there is.
+///
+/// `member` is looked up in this engine's section, and may be a dotted path:
+/// `"requires.kits.required"` walks three levels. Returns a null Value when
+/// the section is absent or any segment of the path is not present; callers distinguish
+/// the two only where it matters, because for most fields "no section" and
+/// "no such field" both mean "fall back to the default".
+///
+/// The `body_key` parameter is gone. It named the kind body -- "template",
+/// "kit" -- and there are no kind bodies to name.
+[[nodiscard]] Value manifest_extension(const sqcart::Manifest& manifest, std::string_view member);
+
+/// Ownership globs out of this engine's manifest section (§2.7.10).
+///
+/// Sits beside manifest_extension() rather than with the struct, because it
+/// is the same act: reading a member of `consumers.squared_pg` and giving it
+/// a shape. An absent or malformed `ownership` yields three empty lists,
+/// which classify_path treats as "everything is seeded" -- the conservative
+/// reading, and the one that cannot destroy user work.
+[[nodiscard]] OwnershipRules ownership_rules(const sqcart::Manifest& manifest);
+
+/// This engine's consumer identity in a cartridge manifest (format spec 5.6).
+inline constexpr std::string_view kConsumerId = "squared_pg";
 
 /// The parameter set a template is actually instantiated with.
 ///

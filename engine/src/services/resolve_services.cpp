@@ -16,6 +16,16 @@
 namespace squared::pg {
 namespace {
 
+[[nodiscard]] std::vector<std::string> string_list(const Value& value) {
+    std::vector<std::string> out;
+    if (const Array* array = value.as_array()) {
+        for (const Value& item : *array) {
+            if (auto s = item.as_string()) out.emplace_back(*s);
+        }
+    }
+    return out;
+}
+
 [[nodiscard]] EngineError not_found(ErrorCategory category, std::string code, const ResourceRef& ref,
                                     const ResourceIndex& index, ResourceKind kind) {
     EngineError error = make_error(category, std::move(code),
@@ -69,7 +79,12 @@ namespace {
                                               const ResourceId& id, ErrorCategory category) {
     std::vector<std::string> unmet;
 
-    for (const std::string& requirement : manifest.requires_capabilities()) {
+    // Also relocated into this engine's section. sqcart no longer
+    // shape-checks these tokens, so a malformed one arrives here -- which is
+    // right, since this is the only code that knows the grammar and can say
+    // what provides a missing capability.
+    for (const std::string& requirement :
+         string_list(detail::manifest_extension(manifest, "requires.capabilities"))) {
         const std::size_t at = requirement.find('@');
         const std::string_view token{std::string_view{requirement}.substr(0, at)};
         const std::string_view constraint =
@@ -157,33 +172,25 @@ namespace {
     return resolved;
 }
 
-/// Payload root inside a cartridge (D-030).
+/// Payload root inside a cartridge (D-031).
 ///
-/// Templates declare it as `template.tree`. The cartridge format gives kits,
-/// packages and asset bundles no equivalent field, so the convention is
-/// `tree/` when the cartridge has entries under it and the cartridge root
-/// otherwise. Either way SQ-INF/ is never part of the payload.
-[[nodiscard]] std::string payload_prefix(const sqcart::Cartridge& cartridge, std::string_view declared) {
-    if (!declared.empty()) {
-        std::string prefix{declared};
-        if (!prefix.empty() && prefix.back() != '/') prefix.push_back('/');
-        return prefix;
-    }
-    for (const sqcart::EntryInfo& entry : cartridge.entries()) {
-        if (entry.path.starts_with("tree/")) return "tree/";
-    }
-    return {};
+/// Every kind declares it, in the manifest envelope, as of cartridge format 2.
+/// This used to guess: templates carried `template.tree` and the other kinds
+/// had no field at all, so the engine looked for entries under `tree/` and
+/// fell back to the cartridge root. The guess was correct for every resource
+/// that happened to exist and silently wrong for any kit that shipped an
+/// unrelated `tree/` directory.
+///
+/// The manifest's value is "." for a payload at the cartridge root and a
+/// trailing-slash path otherwise, so the only work left here is turning "."
+/// into the empty prefix this engine uses for "no prefix". SQ-INF/ is not
+/// payload either way; that is the format's rule, not this function's.
+[[nodiscard]] std::string payload_prefix(const sqcart::Manifest& manifest) {
+    const std::string& declared = manifest.tree();
+    if (declared == ".") return {};
+    return declared;
 }
 
-[[nodiscard]] std::vector<std::string> string_list(const Value& value) {
-    std::vector<std::string> out;
-    if (const Array* array = value.as_array()) {
-        for (const Value& item : *array) {
-            if (auto s = item.as_string()) out.emplace_back(*s);
-        }
-    }
-    return out;
-}
 
 /// Whether a declared platform list admits `wanted`. "all" is a wildcard the
 /// shipped seed manifests already use.
@@ -210,34 +217,46 @@ Result<ResolvedResource> TemplateService::resolve(const ResourceRef& ref, const 
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
-    auto body = manifest.as_template();
-    if (!body) {
+
+    // Cartridge format 2 has no kind bodies. A template that says nothing to
+    // this engine is no longer a malformed manifest -- it is a cartridge
+    // addressed to somebody else, and the failure now surfaces as an
+    // unsatisfied requirement rather than as "carries no template body".
+    if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::template_, "template.manifest.invalid",
-                                       "manifest declares kind template but carries no template body");
+                                       "template " + ref.id.str() +
+                                           " carries no section addressed to squared-pg");
         error.resource    = ref.id.str();
         return Unexpected{std::move(error)};
     }
-    const sqcart::TemplateBody& template_body = body->get();
 
-    if (!platforms_admit(template_body.platforms, context.platforms)) {
+    const std::vector<std::string> template_platforms =
+        string_list(detail::manifest_extension(manifest, "platforms"));
+    const Value framework_declared = detail::manifest_extension(manifest, "requires.framework");
+    const std::optional<std::string> framework_range =
+        framework_declared.as_string()
+            ? std::optional<std::string>{std::string{*framework_declared.as_string()}}
+            : std::nullopt;
+
+    if (!platforms_admit(template_platforms, context.platforms)) {
         EngineError error = make_error(ErrorCategory::compatibility, "template.compatibility.platform",
                                        "template " + ref.id.str() + " does not support every requested platform");
         error.resource    = ref.id.str();
         error.recoverable = true;
         Value detail      = Value::object();
-        detail.set("supported", Value::strings(template_body.platforms));
+        detail.set("supported", Value::strings(template_platforms));
         detail.set("requested", Value::strings(context.platforms));
         error.diagnostics = std::move(detail);
         return Unexpected{std::move(error)};
     }
 
-    if (template_body.framework_range && !context.framework_version.empty()) {
-        auto range   = VersionRange::parse(*template_body.framework_range);
+    if (framework_range && !context.framework_version.empty()) {
+        auto range   = VersionRange::parse(*framework_range);
         auto version = Version::parse(context.framework_version);
         if (range && version && !range->satisfied_by(*version)) {
             EngineError error = make_error(ErrorCategory::framework, "framework.compatibility.template",
                                            "template " + ref.id.str() + " requires framework " +
-                                               *template_body.framework_range + ", requested " +
+                                               *framework_range + ", requested " +
                                                context.framework_version);
             error.resource    = ref.id.str();
             error.recoverable = true;
@@ -245,25 +264,70 @@ Result<ResolvedResource> TemplateService::resolve(const ResourceRef& ref, const 
         }
     }
 
-    if (template_body.tree.empty()) {
-        diagnostics.push_back(Diagnostic{Severity::warning,
-                                         "template declares no payload tree; the workspace will be empty "
-                                         "apart from generated files",
-                                         ref.id.str(), {}});
+    resolved->tree_prefix = payload_prefix(resolved->cartridge->manifest());
+
+    // The old form of this check tested whether the template *declared* a
+    // payload root. It cannot any more: `tree` is required by the format, so
+    // it is never absent. What is still worth warning about is the case that
+    // check was actually reaching for -- a declared root with nothing under
+    // it, which yields a workspace containing only generated files.
+    {
+        const std::string& prefix = resolved->tree_prefix;
+        const auto& entries = resolved->cartridge->entries();
+        const bool populated = std::any_of(
+            entries.begin(), entries.end(), [&](const sqcart::EntryInfo& entry) {
+                return entry.path.starts_with(prefix)
+                       && !entry.path.starts_with(sqcart::kMetaDir);
+            });
+        if (!populated) {
+            diagnostics.push_back(Diagnostic{Severity::warning,
+                                             "template payload tree is empty; the workspace will "
+                                             "contain only generated files",
+                                             ref.id.str(), {}});
+        }
     }
 
-    resolved->tree_prefix       = payload_prefix(*resolved->cartridge, template_body.tree);
-    resolved->ownership         = template_body.ownership;
-    resolved->integration_areas = string_list(detail::manifest_extension(manifest, "template",
-                                                                         "integration_areas"));
+    resolved->ownership         = detail::ownership_rules(manifest);
+    resolved->integration_areas = string_list(detail::manifest_extension(manifest, "integration_areas"));
     return resolved;
 }
 
-std::span<const sqcart::TemplateBody::Parameter> TemplateService::parameters(
-    const ResolvedResource& resolved) {
-    auto body = resolved.cartridge->manifest().as_template();
-    if (!body) return {};
-    return body->get().parameters;
+std::vector<TemplateParameter> TemplateService::parameters(const ResolvedResource& resolved) {
+    std::vector<TemplateParameter> out;
+    const Value declared =
+        detail::manifest_extension(resolved.cartridge->manifest(), "parameters");
+    const Array* array = declared.as_array();
+    if (array == nullptr) return out;
+
+    for (const Value& item : *array) {
+        TemplateParameter spec;
+        if (const Value* v = item.find("name"); v != nullptr) {
+            if (auto t = v->as_string()) spec.name = *t;
+        }
+        // A parameter without a name is dropped rather than reported. The
+        // manifest schema is squared-pg's own and `workspace.verify` is where
+        // a malformed one should be caught; failing resolution here would
+        // turn a schema defect into an unexplained resolve failure.
+        if (spec.name.empty()) continue;
+
+        if (const Value* v = item.find("type"); v != nullptr) {
+            if (auto t = v->as_string()) spec.type = *t;
+        }
+        if (const Value* v = item.find("required"); v != nullptr) {
+            spec.required = v->as_bool().value_or(false);
+        }
+        if (const Value* v = item.find("description"); v != nullptr) {
+            if (auto t = v->as_string()) spec.description = std::string{*t};
+        }
+        if (const Value* v = item.find("default"); v != nullptr) {
+            spec.default_value = *v;
+        }
+        if (const Value* v = item.find("default_from"); v != nullptr) {
+            if (auto t = v->as_string()) spec.default_from = std::string{*t};
+        }
+        out.push_back(std::move(spec));
+    }
+    return out;
 }
 
 std::string TemplateService::working_directory(const ResolvedResource& resolved) {
@@ -273,7 +337,7 @@ std::string TemplateService::working_directory(const ResolvedResource& resolved)
     // fallback rather than an error: a template that omits it still generates
     // something sensible.
     const Value declared =
-        detail::manifest_extension(resolved.cartridge->manifest(), "template", "working_directory");
+        detail::manifest_extension(resolved.cartridge->manifest(), "working_directory");
     if (auto text = declared.as_string(); text && !text->empty()) {
         return support::normalize_relative(*text);
     }
@@ -291,20 +355,31 @@ Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const Resol
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
-    auto body = manifest.as_kit();
-    if (!body) {
+    if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::kit, "kit.manifest.invalid",
-                                       "manifest declares kind kit but carries no kit body");
+                                       "kit " + ref.id.str() +
+                                           " carries no section addressed to squared-pg");
         error.resource    = ref.id.str();
         return Unexpected{std::move(error)};
     }
-    const sqcart::KitBody& kit = body->get();
+
+    const std::vector<std::string> kit_compatible_templates =
+        string_list(detail::manifest_extension(manifest, "compatible_templates"));
+    const std::vector<std::string> kit_platforms =
+        string_list(detail::manifest_extension(manifest, "platforms"));
+    const std::vector<std::string> kit_integration_areas =
+        string_list(detail::manifest_extension(manifest, "integration_areas"));
+    const Value kit_framework = detail::manifest_extension(manifest, "requires.framework");
+    const std::optional<std::string> kit_framework_range =
+        kit_framework.as_string()
+            ? std::optional<std::string>{std::string{*kit_framework.as_string()}}
+            : std::nullopt;
 
     // §2.7.5: template compatibility is checked at resolution, before any
     // mutation. An empty list means the kit declares no restriction.
-    if (!kit.compatible_templates.empty() && !context.template_id.empty()) {
-        const bool compatible = std::find(kit.compatible_templates.begin(), kit.compatible_templates.end(),
-                                          context.template_id.str()) != kit.compatible_templates.end();
+    if (!kit_compatible_templates.empty() && !context.template_id.empty()) {
+        const bool compatible = std::find(kit_compatible_templates.begin(), kit_compatible_templates.end(),
+                                          context.template_id.str()) != kit_compatible_templates.end();
         if (!compatible) {
             EngineError error = make_error(ErrorCategory::compatibility, "kit.compatibility.template",
                                            "kit " + ref.id.str() + " does not support template " +
@@ -312,32 +387,32 @@ Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const Resol
             error.resource    = ref.id.str();
             error.recoverable = true;
             Value detail      = Value::object();
-            detail.set("supported_templates", Value::strings(kit.compatible_templates));
+            detail.set("supported_templates", Value::strings(kit_compatible_templates));
             detail.set("template", context.template_id.str());
             error.diagnostics = std::move(detail);
             return Unexpected{std::move(error)};
         }
     }
 
-    if (!platforms_admit(kit.platforms, context.platforms)) {
+    if (!platforms_admit(kit_platforms, context.platforms)) {
         EngineError error = make_error(ErrorCategory::compatibility, "kit.compatibility.platform",
                                        "kit " + ref.id.str() + " does not support every requested platform");
         error.resource    = ref.id.str();
         error.recoverable = true;
         Value detail      = Value::object();
-        detail.set("supported", Value::strings(kit.platforms));
+        detail.set("supported", Value::strings(kit_platforms));
         detail.set("requested", Value::strings(context.platforms));
         error.diagnostics = std::move(detail);
         return Unexpected{std::move(error)};
     }
 
-    if (kit.framework_range && !context.framework_version.empty()) {
-        auto range   = VersionRange::parse(*kit.framework_range);
+    if (kit_framework_range && !context.framework_version.empty()) {
+        auto range   = VersionRange::parse(*kit_framework_range);
         auto version = Version::parse(context.framework_version);
         if (range && version && !range->satisfied_by(*version)) {
             EngineError error = make_error(ErrorCategory::framework, "framework.compatibility.kit",
                                            "kit " + ref.id.str() + " requires framework " +
-                                               *kit.framework_range + ", requested " +
+                                               *kit_framework_range + ", requested " +
                                                context.framework_version);
             error.resource    = ref.id.str();
             error.recoverable = true;
@@ -348,27 +423,31 @@ Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const Resol
     // §2.9.4: a `system` acquisition may require host software at build time
     // but never network access at generation time. The distinction matters
     // enough to the user that it is surfaced rather than assumed.
-    const Value acquisition = detail::manifest_extension(manifest, "kit", "external");
+    const Value acquisition = detail::manifest_extension(manifest, "external");
     if (const Value* mode = acquisition.find("acquisition")) {
         if (auto text = mode->as_string(); text && *text == "system") {
+            std::string external_id{"its external dependency"};
+            if (const Value* eid = acquisition.find("id"); eid != nullptr) {
+                if (auto t = eid->as_string(); t && !t->empty()) external_id = std::string{*t};
+            }
             diagnostics.push_back(
                 Diagnostic{Severity::info,
-                           "kit " + ref.id.str() + " expects " + kit.external.id +
+                           "kit " + ref.id.str() + " expects " + external_id +
                                " to be present on the build host; generation does not require it",
                            ref.id.str(), {}});
         }
     }
 
-    if (kit.integration_areas.empty()) {
+    if (kit_integration_areas.empty()) {
         diagnostics.push_back(Diagnostic{Severity::warning,
                                          "kit declares no integration areas; conflicts with other kits "
                                          "cannot be detected by declaration",
                                          ref.id.str(), {}});
     }
 
-    resolved->tree_prefix       = payload_prefix(*resolved->cartridge, {});
-    resolved->ownership         = kit.ownership;
-    resolved->integration_areas = kit.integration_areas;
+    resolved->tree_prefix       = payload_prefix(resolved->cartridge->manifest());
+    resolved->ownership         = detail::ownership_rules(manifest);
+    resolved->integration_areas = kit_integration_areas;
     return resolved;
 }
 
@@ -384,16 +463,23 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
     if (!resolved) return resolved;
 
     const sqcart::Manifest& manifest = resolved->cartridge->manifest();
-    auto body = manifest.as_package();
-    if (!body) {
+    if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::package, "package.manifest.invalid",
-                                       "manifest declares kind package but carries no package body");
+                                       "package " + ref.id.str() +
+                                           " carries no section addressed to squared-pg");
         error.resource    = ref.id.str();
         return Unexpected{std::move(error)};
     }
-    const sqcart::PackageBody& package = body->get();
 
-    if (!platforms_admit(package.platforms, context.platforms)) {
+    const std::vector<std::string> package_platforms =
+        string_list(detail::manifest_extension(manifest, "platforms"));
+    const Value package_framework = detail::manifest_extension(manifest, "requires.framework");
+    const std::optional<std::string> package_framework_range =
+        package_framework.as_string()
+            ? std::optional<std::string>{std::string{*package_framework.as_string()}}
+            : std::nullopt;
+
+    if (!platforms_admit(package_platforms, context.platforms)) {
         EngineError error =
             make_error(ErrorCategory::compatibility, "package.compatibility.platform",
                        "package " + ref.id.str() + " does not support every requested platform");
@@ -402,13 +488,13 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
         return Unexpected{std::move(error)};
     }
 
-    if (package.framework_range && !context.framework_version.empty()) {
-        auto range   = VersionRange::parse(*package.framework_range);
+    if (package_framework_range && !context.framework_version.empty()) {
+        auto range   = VersionRange::parse(*package_framework_range);
         auto version = Version::parse(context.framework_version);
         if (range && version && !range->satisfied_by(*version)) {
             EngineError error = make_error(ErrorCategory::framework, "framework.compatibility.package",
                                            "package " + ref.id.str() + " requires framework " +
-                                               *package.framework_range);
+                                               *package_framework_range);
             error.resource    = ref.id.str();
             error.recoverable = true;
             return Unexpected{std::move(error)};
@@ -420,7 +506,7 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
                                      "not implemented in this engine build",
                                      ref.id.str(), {}});
 
-    resolved->tree_prefix = payload_prefix(*resolved->cartridge, {});
+    resolved->tree_prefix = payload_prefix(resolved->cartridge->manifest());
     return resolved;
 }
 
@@ -434,25 +520,44 @@ Result<ResolvedResource> AssetService::resolve(const ResourceRef& ref, const Res
                                     capabilities_);
     if (!resolved) return resolved;
 
-    auto body = resolved->cartridge->manifest().as_assets();
-    if (!body) {
+    const sqcart::Manifest& manifest = resolved->cartridge->manifest();
+    if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::asset, "asset.manifest.invalid",
-                                       "manifest declares an asset bundle but carries no asset body");
+                                       "asset bundle " + ref.id.str() +
+                                           " carries no section addressed to squared-pg");
         error.resource    = ref.id.str();
         return Unexpected{std::move(error)};
     }
 
-    for (const sqcart::AssetsBody::Entry& entry : body->get().entries) {
-        if (!platforms_admit(entry.platforms, context.platforms)) {
-            // §2.10.6: a skipped asset is reported as a diagnostic, never
-            // passed over silently.
-            diagnostics.push_back(Diagnostic{Severity::info,
-                                             "asset " + entry.id + " has no target for the active platforms",
-                                             entry.id, entry.path});
+    // §2.10.6: a skipped asset is reported as a diagnostic, never passed over
+    // silently. Entries are read from the consumer section now; sqcart no
+    // longer checks that a declared path is present in the payload, so
+    // `workspace.verify` inherits that check (see MIGRATION.md).
+    const Value entries = detail::manifest_extension(manifest, "entries");
+    if (const Array* array = entries.as_array(); array != nullptr) {
+        for (const Value& item : *array) {
+            const Value* id_value = item.find("id");
+            if (id_value == nullptr) continue;
+            const std::string entry_id{id_value->as_string().value_or("")};
+
+            std::vector<std::string> entry_platforms;
+            if (const Value* p = item.find("platforms"); p != nullptr) {
+                entry_platforms = string_list(*p);
+            }
+            if (!platforms_admit(entry_platforms, context.platforms)) {
+                std::string entry_path;
+                if (const Value* pv = item.find("path"); pv != nullptr) {
+                    entry_path = std::string{pv->as_string().value_or("")};
+                }
+                diagnostics.push_back(Diagnostic{Severity::info,
+                                                 "asset " + entry_id +
+                                                     " has no target for the active platforms",
+                                                 entry_id, entry_path});
+            }
         }
     }
 
-    resolved->tree_prefix = payload_prefix(*resolved->cartridge, {});
+    resolved->tree_prefix = payload_prefix(resolved->cartridge->manifest());
     return resolved;
 }
 

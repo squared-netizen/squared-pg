@@ -1,7 +1,7 @@
 # sqcart
 
 Reference implementation of the [Squared Cartridge Specification
-1.0](docs/developer/specs/sq-cartridge-1.0.md) — the `.sq` container format
+2.0](docs/developer/specs/sq-cartridge-2.0.md) — the `.sq` container format
 used for Squared templates, kits, packages, asset bundles, plugins and
 distributable applications.
 
@@ -54,10 +54,20 @@ if (!cart) {
     return 1;
 }
 
-if (auto kit = cart->manifest().as_kit()) {
-    for (const auto& area : kit->get().integration_areas) { /* ... */ }
+// The envelope is typed. Everything a *consumer* needs is carried as text
+// under its own namespace and parsed by that consumer -- sqcart does not
+// know what a kit is, and deliberately cannot be taught here.
+std::cout << cart->manifest().kind() << '\n';        // "kit", an opaque token
+
+if (auto section = cart->manifest().consumer("squared_pg")) {
+    // JSON text. Parse it with your own reader.
 }
 ```
+
+sqcart implements the container and the manifest envelope. It carries
+consumer sections without interpreting them, which is what lets the same
+library serve `squared-pg` and the Squared framework runtime without either
+acquiring the other's vocabulary (spec §0.1, §5.6).
 
 `.sq` archives and exploded directories containing `SQ-INF/manifest.json` are
 both accepted; `open()` detects which, and the two are semantically equivalent

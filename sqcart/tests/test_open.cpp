@@ -28,7 +28,7 @@ int main(int argc, char** argv)
 
     CHECK(!c.exploded());
     CHECK(c.manifest().id() == "kit.testcart");
-    CHECK(c.manifest().kind() == Kind::kit);
+    CHECK(c.manifest().kind() == "kit");
 
     // The writer wrote: manifest.json, the kit payload, and SQ-INF assets.
     CHECK(c.contains("SQ-INF/manifest.json"));

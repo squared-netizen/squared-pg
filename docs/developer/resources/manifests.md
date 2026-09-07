@@ -3,7 +3,7 @@
 Programmer counterpart:
 [manifest reference](../../programmer/resources/manifests.md).
 
-## The divergence (D-029)
+## The divergence (D-030)
 
 The specification defines a manifest envelope in §2.8.3:
 

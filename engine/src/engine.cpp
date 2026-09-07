@@ -418,7 +418,7 @@ void Engine::Impl::register_operations() {
                 if (kind == ResourceKind::project_template) {
                     data.set("working_directory", TemplateService::working_directory(*resolved));
                     Value parameters = Value::array();
-                    for (const sqcart::TemplateBody::Parameter& spec :
+                    for (const TemplateParameter& spec :
                          TemplateService::parameters(*resolved)) {
                         Value entry = Value::object();
                         entry.set("name", spec.name);

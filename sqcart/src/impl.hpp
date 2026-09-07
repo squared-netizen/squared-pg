@@ -23,24 +23,18 @@ namespace sqcart {
 
 struct Manifest::Impl {
     CartridgeId                id;
-    Kind                       kind{Kind::cartridge};
+    std::string                kind;
     std::string                version;
-    int                        format_version{1};
+    int                        format_version{kFormatVersion};
+    EntryPath                  tree;
 
     std::optional<std::string> title;
     std::optional<std::string> description;
     std::optional<std::string> license;
-    std::optional<CompatRef>   engine;
     std::vector<std::string>   requires_features;
-    std::vector<std::string>   requires_capabilities;
     std::vector<Author>        authors;
 
-    std::unique_ptr<CartridgeBody> cartridge;
-    std::unique_ptr<TemplateBody>  template_;
-    std::unique_ptr<KitBody>       kit;
-    std::unique_ptr<PackageBody>   package;
-    std::unique_ptr<AssetsBody>    assets;
-    std::unique_ptr<PluginBody>    plugin;
+    std::map<std::string, std::string, std::less<>> consumers;
 
     std::string raw_json;
 };

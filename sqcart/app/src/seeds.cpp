@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 //
-// Embedded manifest seeds for `sqcart create`.
+// The embedded manifest seed for `sqcart create`.
+//
+// One seed, not six. Format 1 shipped a seed per kind, each containing that
+// kind's body -- which meant this tool carried the schema of every role in
+// the ecosystem in string literals. Format 2 seeds the envelope alone and
+// leaves `consumers` empty for whoever knows what belongs there.
 //
 // The canonical copies live in assets/seeds/*.json. They are embedded here
 // rather than read at runtime because a CLI that must locate an assets
@@ -26,159 +31,32 @@ struct SeedEntry {
     std::string_view json;
 };
 
-constexpr std::array<SeedEntry, 6> kSeeds{{
-    SeedEntry{"asset-bundle", R"raw({
+constexpr std::array<SeedEntry, 1> kSeeds{{
+    SeedEntry{"envelope", R"raw({
   "format": "squared-cartridge",
-  "format_version": 1,
+  "format_version": 2,
 
-  "kind": "asset-bundle",
+  "kind": "{{kind}}",
   "id": "{{id}}",
   "version": "{{version}}",
+  "tree": ".",
 
   "title": "{{title}}",
   "description": "Created by sqcart from a plain directory.",
 
-  "assets": {
-    "entries": [
-{{asset_entries}}
-    ]
-  }
-}
-)raw"},
-    SeedEntry{"cartridge", R"raw({
-  "format": "squared-cartridge",
-  "format_version": 1,
-
-  "kind": "cartridge",
-  "id": "{{id}}",
-  "version": "{{version}}",
-
-  "title": "{{title}}",
-  "description": "Created by sqcart from a plain directory.",
-
-  "cartridge": {
-    "entry": {
-      "module": "{{entry_module}}",
-      "type": "lua-source",
-      "lua_abi": "lua54"
-    },
-    "packages": [],
-    "permissions": []
-  }
-}
-)raw"},
-    SeedEntry{"kit", R"raw({
-  "format": "squared-cartridge",
-  "format_version": 1,
-
-  "kind": "kit",
-  "id": "{{id}}",
-  "version": "{{version}}",
-
-  "title": "{{title}}",
-  "description": "Created by sqcart from a plain directory.",
-
-  "kit": {
-    "external": {
-      "id": "{{external_id}}",
-      "version": ">=0.0.0"
-    },
-    "provides": [],
-    "platforms": ["all"],
-    "compatible_templates": [],
-    "requires": {
-      "packages": [],
-      "kits": []
-    },
-    "integration_areas": ["TODO.declare.integration.area"],
-    "ownership": {}
-  }
-}
-)raw"},
-    SeedEntry{"package", R"raw({
-  "format": "squared-cartridge",
-  "format_version": 1,
-
-  "kind": "package",
-  "id": "{{id}}",
-  "version": "{{version}}",
-
-  "title": "{{title}}",
-  "description": "Created by sqcart from a plain directory.",
-
-  "package": {
-    "provides": [],
-    "platforms": ["all"],
-    "requires": {
-      "packages": []
-    },
-    "build_system": "none",
-    "build_targets": []
-  }
-}
-)raw"},
-    SeedEntry{"template", R"raw({
-  "format": "squared-cartridge",
-  "format_version": 1,
-
-  "kind": "template",
-  "id": "{{id}}",
-  "version": "{{version}}",
-
-  "title": "{{title}}",
-  "description": "Created by sqcart from a plain directory.",
-
-  "template": {
-    "project_types": ["application"],
-    "platforms": ["all"],
-    "tree": "tree/",
-    "parameters": [],
-    "requires": {
-      "packages": [],
-      "kits": { "required": [], "optional": [] }
-    },
-    "ownership": {
-      "generated": [],
-      "user": ["**"],
-      "shared": []
-    }
-  }
-}
-)raw"},
-    SeedEntry{"plugin", R"raw({
-  "format": "squared-cartridge",
-  "format_version": 1,
-
-  "kind": "plugin",
-  "id": "{{id}}",
-  "version": "{{version}}",
-
-  "title": "{{title}}",
-  "description": "Created by sqcart from a plain directory.",
-
-  "plugin": {
-    "extends": "squared-pg",
-    "api_version": 1,
-    "entry": "{{entry_module}}",
-    "provides_services": [],
-    "requires": {
-      "engine_capabilities": []
-    }
-  }
+  "consumers": {}
 }
 )raw"},
 }};
 
 }  // namespace
 
-std::optional<std::string_view> seed_for(std::string_view kind)
+std::optional<std::string_view> seed_for(std::string_view)
 {
-    const auto it = std::find_if(kSeeds.begin(), kSeeds.end(),
-                                 [&](const SeedEntry& e) { return e.kind == kind; });
-    if (it == kSeeds.end()) {
-        return std::nullopt;
-    }
-    return it->json;
+    // The kind no longer selects a seed -- there is only the envelope, and
+    // the kind is substituted into it. The parameter is kept so callers read
+    // unchanged and so the signature still says what the seed is *for*.
+    return kSeeds.front().json;
 }
 
 std::vector<std::string_view> seed_kinds()

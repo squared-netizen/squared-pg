@@ -12,6 +12,55 @@
 
 namespace sqcart::app {
 
+namespace {
+
+/// Compression level for the writer, from `--compress` or `--store`.
+///
+/// Levels are miniz's deflate levels, exposed rather than wrapped in names
+/// like "fast" and "best": zip tools have spoken 0-9 for thirty years, and a
+/// private vocabulary would be one more thing to learn for no gain.
+///
+///   0    store, no compression. Fastest, largest.
+///   1-9  deflate. 6 is the default and the usual sweet spot; 9 costs
+///        noticeably more time for a few percent of size.
+///
+/// `--store` is kept as a synonym for `--compress=0`: it already shipped, it
+/// reads better at a glance, and it names the case anyone actually wants it
+/// for -- a cartridge of already-compressed payloads, where deflate spends
+/// time to make the file marginally larger.
+///
+/// Compression never affects the content digest (format spec §9.2), which is
+/// computed over uncompressed bytes in canonical order. Two cartridges packed
+/// at different levels are the same cartridge by identity and by digest, and
+/// differ only in size on disk. That is what makes exposing the knob safe to
+/// hand a beginner: there is no wrong answer, only a size/time trade.
+[[nodiscard]] std::optional<int> compression_from(const Invocation& inv, Environment& env)
+{
+    const bool store    = inv.has_flag("store");
+    const auto declared = inv.option("compress");
+
+    if (store && declared) {
+        env.err << "sqcart: --store and --compress are mutually exclusive\n"
+                << "        --store is a synonym for --compress=0\n";
+        return std::nullopt;
+    }
+    if (store) return 0;
+    if (!declared) return 6;
+
+    // Parsed by hand rather than with stoi: a level is exactly one digit, and
+    // accepting "6abc" or " 6" would let a typo silently select a level the
+    // user did not ask for.
+    if (declared->size() != 1 || declared->front() < '0' || declared->front() > '9') {
+        env.err << "sqcart: --compress takes a single digit 0-9, not '" << *declared << "'\n"
+                << "        0 stores without compressing; 1 is fastest; 9 is smallest\n";
+        return std::nullopt;
+    }
+    return declared->front() - '0';
+}
+
+}  // namespace
+
+
 #ifdef SQCART_ENABLE_WRITER
 
 // ---------------------------------------------------------------------------
@@ -51,8 +100,11 @@ ExitCode cmd_pack(const Invocation& inv, Environment& env)
     WriteOptions wo;
     wo.canonical    = true;   // FR-WRITE-6: determinism is not opt-in.
     wo.write_hashes = !inv.has_flag("no-hashes");
-    wo.compression  = inv.has_flag("store") ? 0 : 6;
     wo.symlinks     = symlink_policy_from(inv);
+
+    auto level = compression_from(inv, env);
+    if (!level) return ExitCode::usage;
+    wo.compression = *level;
 
     auto w = Writer::create(out_path, wo);
     if (!w) {

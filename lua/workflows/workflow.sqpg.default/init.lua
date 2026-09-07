@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: MIT
 --
--- workflow.generate.default -- the reference generation workflow.
+-- workflow.sqpg.default -- the reference workflow.
 --
 -- Specification: 2.5 in full, and 2.7.9 for the phase order.
 --
@@ -15,6 +15,9 @@
 
 local args = require("squaredpg.args")
 local report = require("squaredpg.report")
+local envmod = require("squaredpg.env")
+local drive = require("squaredpg.drive")
+local lifecycle = require("squaredpg.lifecycle")
 
 local usage = [[
 sqpg -- offline-first project generator for the Squared framework
@@ -27,6 +30,19 @@ usage:
   sqpg inspect <workspace>                    read a workspace metadata record
   sqpg describe                               engine version, services, capabilities
   sqpg operations                             enumerate the control surface
+
+environment (~/sqsysroot, or $SQSYSROOT):
+  sqpg initialize                             create the environment
+  sqpg promote <name>                         sandbox -> project
+  sqpg demote <name>                          project -> sandbox
+  sqpg quarantine <path> [--as NAME]          adopt a foreign tree into sandbox
+
+workflow, run inside a workspace:
+  sqpg format | lint | check | test | docs | dist
+                                              run the matching make target
+      --workspace PATH    act on this workspace instead of searching upward
+      --explain           print the command that would run, and stop
+  -j, --jobs N            parallelism, passed to make
 
 options for new and plan:
   -t, --template ID       template identity, optionally id@version-range
@@ -327,6 +343,66 @@ function commands.new()
   report.out(("write your code in %s/%s/ and run `make` in %s")
     :format(result.data.workspace, result.data.working_directory, result.data.workspace))
   return 0
+end
+
+-- Workflow verbs. Registered from one table rather than written out six
+-- times, because the point of the vocabulary is that the six are identical
+-- except for their name -- and six near-copies would drift.
+for _, verb in ipairs(drive.verbs) do
+  commands[verb.name] = function()
+    return drive.run(verb.name, {
+      workspace = parsed.options.workspace,
+      explain   = parsed.options.explain ~= nil,
+      jobs      = parsed.options.jobs,
+    }, report)
+  end
+end
+
+function commands.initialize()
+  return lifecycle.initialize({
+    root    = parsed.options.root,
+    explain = parsed.options.explain ~= nil,
+  }, report)
+end
+
+function commands.promote()
+  local name = parsed.positional[1]
+  if name == nil then
+    report.err("sqpg: promote needs a workspace name")
+    report.err("      it names a directory in ~/sqsysroot/sandbox, not a path")
+    return 2
+  end
+  return lifecycle.promote(name, {
+    root    = parsed.options.root,
+    explain = parsed.options.explain ~= nil,
+    no_git  = parsed.options["no-git"] ~= nil,
+  }, report)
+end
+
+function commands.demote()
+  local name = parsed.positional[1]
+  if name == nil then
+    report.err("sqpg: demote needs a workspace name")
+    report.err("      it names a directory in ~/sqsysroot/project, not a path")
+    return 2
+  end
+  return lifecycle.demote(name, {
+    root    = parsed.options.root,
+    explain = parsed.options.explain ~= nil,
+  }, report)
+end
+
+function commands.quarantine()
+  local path = parsed.positional[1]
+  if path == nil then
+    report.err("sqpg: quarantine needs a path to a directory outside the environment")
+    return 2
+  end
+  return lifecycle.quarantine(path, {
+    root    = parsed.options.root,
+    explain = parsed.options.explain ~= nil,
+    name    = parsed.options.as,
+  }, report)
 end
 
 local handler = commands[parsed.command]

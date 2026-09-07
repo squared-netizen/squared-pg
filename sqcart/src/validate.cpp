@@ -7,7 +7,6 @@
 // forbids ever giving validate() a multi-cartridge parameter. Whether two
 // different kits' integration_areas collide is an engine question.
 
-#include "glob.hpp"
 #include "impl.hpp"
 
 #include <algorithm>
@@ -40,49 +39,6 @@ bool is_reserved_meta_name(std::string_view path)
            path.starts_with("SQ-INF/targets/");
 }
 
-/// FR-VAL-4: every materialisable template path must match exactly one
-/// ownership classification. Zero matches or two is an error, because a file
-/// whose owner is ambiguous cannot be safely regenerated (§2.7.10-11).
-void check_template_ownership(const Cartridge& c, const TemplateBody& body, ValidationReport& r)
-{
-    const std::string prefix = body.tree.empty() ? std::string("tree/") : body.tree;
-
-    for (const auto& e : c.entries()) {
-        if (!e.path.starts_with(prefix)) {
-            continue;
-        }
-        const std::string rel = e.path.substr(prefix.size());
-        if (rel.empty()) {
-            continue;
-        }
-
-        int         matches = 0;
-        std::string which;
-        auto        test = [&](const std::vector<std::string>& pats, const char* label) {
-            for (const auto& p : pats) {
-                if (detail::glob_match(rel, p)) {
-                    ++matches;
-                    if (!which.empty()) {
-                        which += ", ";
-                    }
-                    which += label;
-                    return;
-                }
-            }
-        };
-        test(body.ownership.generated, "generated");
-        test(body.ownership.user, "user");
-        test(body.ownership.shared, "shared");
-
-        if (matches == 0) {
-            add(r, Severity::error, "template path matches no ownership classification", e.path);
-        } else if (matches > 1) {
-            add(r, Severity::error,
-                "template path matches multiple ownership classifications: " + which, e.path);
-        }
-    }
-}
-
 }  // namespace
 
 ValidationReport validate(const Cartridge& c)
@@ -97,9 +53,33 @@ ValidationReport validate(const Cartridge& c)
     const Manifest& m = c.manifest();
 
     // Stage 4: format version.
+    //
+    // Unreachable in practice as of format 2 -- parse_root refuses a foreign
+    // format_version, so a Cartridge cannot exist carrying one, and the only
+    // route to a Manifest is through that parser. Kept because it costs one
+    // comparison and the alternative is a validator that silently trusts an
+    // invariant enforced somewhere else; if the parse-time check is ever
+    // relaxed, this is the net underneath it.
     if (m.format_version() != kFormatVersion) {
         add(r, Severity::error,
             "unsupported format_version " + std::to_string(m.format_version()));
+    }
+
+    // Stage 4b: the declared payload root should contain something.
+    //
+    // Informational, not an error. A manifest-only cartridge is legal -- an
+    // asset bundle can legitimately declare entries it has yet to be filled
+    // with -- but a `tree` pointing at a directory the cartridge does not
+    // have is far more often a typo than an intention, and it fails later in
+    // a place that does not mention the manifest.
+    if (m.tree() != ".") {
+        const bool populated = std::any_of(
+            c.entries().begin(), c.entries().end(),
+            [&](const EntryInfo& e) { return e.path.starts_with(m.tree()); });
+        if (!populated) {
+            add(r, Severity::info,
+                "declared payload root '" + m.tree() + "' contains no entries");
+        }
     }
 
     // Stage 7: prohibited entries (§8) and manifest-referenced payload.
@@ -116,37 +96,24 @@ ValidationReport validate(const Cartridge& c)
         }
     }
 
-    auto require_entry = [&](const EntryPath& p, const char* what) {
-        if (!p.empty() && !c.contains(p)) {
-            add(r, Severity::error, std::string("manifest references a missing ") + what, p);
-        }
-    };
-
-    if (auto body = m.as_cartridge()) {
-        require_entry(body->get().entry.module, "entry module");
-        for (const auto& [target, path] : body->get().entry.bytecode_cache) {
-            require_entry(path, "bytecode cache entry");
-        }
-        // Format spec §7 rule 1: source is the normative form, bytecode only
-        // ever an accelerator. A cartridge whose only entry point is compiled
-        // is not portable across Lua builds.
-        if (body->get().entry.type == "lua-bytecode") {
-            add(r, Severity::warning,
-                "entry point is bytecode; source form is the normative representation",
-                body->get().entry.module);
-        }
-    }
-    if (auto body = m.as_assets()) {
-        for (const auto& a : body->get().entries) {
-            require_entry(a.path, "asset");
-        }
-    }
-    if (auto body = m.as_plugin()) {
-        require_entry(body->get().entry, "plugin entry");
-    }
-    if (auto body = m.as_template()) {
-        check_template_ownership(c, body->get(), r);
-    }
+    // Stage 7 used to continue here with payload-reference checks driven by
+    // the kind body: a cartridge's entry module exists, an asset bundle's
+    // declared paths exist, a template's ownership globs classify every file
+    // exactly once.
+    //
+    // All of them are gone with the kind bodies, and it is worth being plain
+    // that this is a real loss rather than a tidy-up. They were genuinely
+    // useful checks. They were also, every one of them, checks against a
+    // schema this library is no longer permitted to know (§0.1): you cannot
+    // verify that `entry.module` names a present entry without knowing that
+    // `entry.module` is a path, and knowing that is knowing the consumer's
+    // vocabulary.
+    //
+    // The checks belong to the consumer now, against its own section, where
+    // it can give a better error than "manifest references a missing asset"
+    // because it knows what the reference was for. What this library can
+    // still say -- and does, above -- is whether the declared payload root is
+    // populated, which is decidable without knowing anything about anyone.
 
     // Symbolic links omitted during the walk. Warnings, not errors: the
     // cartridge is structurally fine, but a human should know that files

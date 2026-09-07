@@ -39,7 +39,17 @@ namespace sqcart {
 // ---------------------------------------------------------------------------
 
 /// Container format version implemented by this library.
-inline constexpr int kFormatVersion = 1;
+///
+/// This reader implements exactly one format version. A manifest declaring
+/// any other value is refused at parse time with `format_unsupported`; there
+/// is no compatibility path for older formats. Format 2 made `tree` a
+/// required envelope field (§5.1), which a format 1 manifest by definition
+/// does not carry, so accepting one would mean reinstating the layout
+/// guesswork the field exists to remove.
+inline constexpr int kFormatVersion = 2;
+
+/// Value the manifest's `format` member must carry (§5.1).
+inline constexpr std::string_view kFormatTag = "squared-cartridge";
 
 /// Reserved metadata directory, including the trailing separator.
 inline constexpr std::string_view kMetaDir = "SQ-INF/";
@@ -127,20 +137,30 @@ template <class T>
 using Result = expected<T, Error>;
 
 // ---------------------------------------------------------------------------
-// Kinds
+// Kind
 // ---------------------------------------------------------------------------
+//
+// `kind` is an opaque token. It was a closed enum through format 1; format 2
+// makes it a validated identifier this library never enumerates.
+//
+// The change follows from §0.1. A closed enum obliges sqcart to know the set
+// of roles in the ecosystem, and every one of those roles -- template, kit,
+// package, plugin -- is a squared-pg concept. A framework runtime linking
+// this library was getting the generator's vocabulary compiled into it, which
+// is precisely the dependency §0.1 forbids.
+//
+// What a reader can still do without the enum is everything a reader should
+// be doing: report the token, index by it, and hand it to a consumer that
+// knows what it means. `kind` is a media type, not a schema selector.
+//
+// Kind tokens follow the identity grammar of §5.2 restricted to a single
+// segment: `[a-z][a-z0-9_]*`. `asset-bundle` was spelled with a hyphen
+// through format 1 and is `asset_bundle` in format 2, per the separator
+// decision that also narrowed `id`.
 
-enum class Kind : std::uint8_t {
-    cartridge,
-    project_template,   ///< manifest "template"; `template` is a keyword
-    kit,
-    package,
-    asset_bundle,
-    plugin,
-};
-
-[[nodiscard]] std::string_view to_string(Kind kind) noexcept;
-[[nodiscard]] std::optional<Kind> kind_from_string(std::string_view s) noexcept;
+/// Whether `token` is a well-formed kind (§5.2). Says nothing about whether
+/// any consumer recognises it; that question is not this library's.
+[[nodiscard]] bool valid_kind_token(std::string_view token) noexcept;
 
 // ---------------------------------------------------------------------------
 // Open options
@@ -247,145 +267,98 @@ struct Author {
     std::optional<std::string> url;
 };
 
-struct OwnershipRules {
-    std::vector<std::string> generated;
-    std::vector<std::string> user;
-    std::vector<std::string> shared;
-};
 
-struct LuaEntry {
-    EntryPath   module;
-    std::string type;      ///< "lua-source" | "lua-bytecode"
-    std::string lua_abi;   ///< e.g. "lua54"
-    std::optional<std::string> target;
-    std::map<std::string, EntryPath> bytecode_cache;
-};
-
-struct TemplateBody {
-    struct Parameter {
-        std::string name;
-        std::string type;
-        bool        required{false};
-        std::optional<std::string> pattern;
-        std::optional<std::string> description;
-    };
-
-    std::vector<std::string> project_types;
-    std::vector<std::string> platforms;
-    EntryPath                tree;
-    std::vector<Parameter>   parameters;
-    std::vector<std::string> required_kits;
-    std::vector<std::string> optional_kits;
-    std::vector<std::string> required_packages;
-    std::optional<std::string> framework_range;
-    OwnershipRules           ownership;
-};
-
-struct KitBody {
-    CompatRef                external;
-    std::vector<std::string> provides;
-    std::vector<std::string> platforms;
-    std::vector<std::string> compatible_templates;
-    std::vector<std::string> required_packages;
-    std::vector<std::string> required_kits;
-    std::optional<std::string> framework_range;
-    /// Declared generated-project areas this kit writes to. The engine uses
-    /// this for conflict detection before any filesystem mutation (§2.7.4).
-    std::vector<std::string> integration_areas;
-    OwnershipRules           ownership;
-};
-
-struct PackageBody {
-    std::vector<std::string> provides;
-    std::vector<std::string> platforms;
-    std::vector<std::string> required_packages;
-    std::optional<std::string> framework_range;
-    std::string              build_system;
-    std::vector<std::string> build_targets;
-    std::map<std::string, bool> features;   ///< name -> default
-};
-
-struct AssetsBody {
-    struct Entry {
-        CartridgeId              id;
-        EntryPath                path;
-        std::string              type;
-        std::optional<std::string> format;
-        std::vector<std::string> platforms;
-    };
-
-    std::vector<Entry>       entries;
-    std::vector<std::string> required_packages;
-};
-
-struct CartridgeBody {
-    LuaEntry                 entry;
-    std::optional<CompatRef> framework;
-    std::vector<std::string> packages;
-    std::optional<std::string> orientation;
-    std::vector<std::string> permissions;   ///< Absent means empty, never "all"
-};
-
-struct PluginBody {
-    std::string              extends;
-    int                      api_version{1};
-    EntryPath                entry;
-    std::vector<std::string> provides_services;
-    std::vector<std::string> required_engine_capabilities;
-};
-
-/// Parsed manifest: the fixed envelope plus exactly one kind body.
+/// Parsed manifest: the envelope this library understands, plus consumer
+/// sections it carries without opening.
 ///
-/// Kind bodies are exposed as pointer accessors rather than a variant so that
-/// a caller which knows the kind reads naturally, and one which guesses wrong
-/// gets nullptr rather than a throw.
+/// Format 1 modelled six kind bodies here -- template, kit, package,
+/// asset-bundle, plugin, cartridge -- with a typed struct and an accessor
+/// apiece. Every field in every one of them was a squared-pg or Squared
+/// framework concept, which made §0.1's independence requirement false in
+/// code: a framework runtime linking this library got `integration_areas`
+/// and `project_types` compiled into it.
+///
+/// Format 2 replaces them with `consumers` (§5.6): a namespaced object whose
+/// values this library validates for shape and never interprets. The model is
+/// not new, only generalised -- `requires_capabilities` has always been an
+/// uninterpreted list this library carries on a consumer's behalf.
 class Manifest {
 public:
     [[nodiscard]] const CartridgeId& id() const noexcept;
-    [[nodiscard]] Kind               kind() const noexcept;
+
+    /// The `kind` token, verbatim. An opaque identifier (§5.2); this library
+    /// does not enumerate legal values and a token it has never seen is not
+    /// an error. See the note above `valid_kind_token`.
+    [[nodiscard]] std::string_view   kind() const noexcept;
     [[nodiscard]] const std::string& version() const noexcept;
     [[nodiscard]] int                format_version() const noexcept;
+
+    /// Payload root, relative to the cartridge root (§5.1).
+    ///
+    /// Either "." (payload begins at the cartridge root) or a relative
+    /// directory path with a trailing '/'. Never empty: the field is
+    /// required, so a parsed manifest always has one.
+    ///
+    /// `SQ-INF/` is not payload regardless of this value, including when it
+    /// is "." — the reserved directory is excluded by §4, not by the payload
+    /// root happening to point elsewhere.
+    [[nodiscard]] const EntryPath&   tree() const noexcept;
 
     [[nodiscard]] std::optional<std::string_view> title() const noexcept;
     [[nodiscard]] std::optional<std::string_view> description() const noexcept;
     [[nodiscard]] std::optional<std::string_view> license() const noexcept;
-    [[nodiscard]] const std::optional<CompatRef>& engine() const noexcept;
     [[nodiscard]] std::span<const std::string>    requires_features() const noexcept;
 
-    /// Opaque tokens the *consumer* must satisfy (§5.4).
-    ///
-    /// sqcart validates syntax and never interprets. It does not know what a
-    /// token means, only that a consumer must be able to enumerate what a
-    /// cartridge demands of it -- the same way a jar manifest carries
-    /// vendor-specific attribute sections the archiver never reads.
-    ///
-    /// Distinct from requires_features, which they superficially resemble:
-    ///
-    ///   requires_features      guards the *reader*   -> fails at open
-    ///   requires_capabilities  guards the *consumer* -> fails when the
-    ///                                                   consumer resolves it
-    ///
-    /// A cartridge whose reader is too old cannot be opened at all. A
-    /// cartridge whose *consumer* is too old opens fine and must be refused
-    /// later, by the consumer, with an error naming what it lacks. Only the
-    /// consumer can make that call, so sqcart hands the list over and stops.
-    ///
-    /// Tokens follow `name` or `name@range`; the range grammar is §5.3's, and
-    /// is validated for shape but not resolved.
-    [[nodiscard]] std::span<const std::string>    requires_capabilities() const noexcept;
+    // No engine() and no requires_capabilities().
+    //
+    // Both were envelope fields through format 1 and the first half of
+    // format 2, and both were consumer data wearing envelope clothes:
+    //
+    //   "engine": { "id": "squared-pg", "version": ">=0.1.0 <0.2.0" }
+    //
+    // `engine.id` names the tool the field is addressed to -- which is
+    // exactly what a `consumers` key already says, so the member was
+    // restating the section it should have been inside. And every
+    // `requires_capabilities` token that has ever been written is in
+    // squared-pg's namespace (`capability.project.plan@^1.0`), which this
+    // library could shape-check but never resolve.
+    //
+    // They live at `consumers.<id>.requires.engine` and
+    // `consumers.<id>.requires.capabilities` now. The consumer that owns the
+    // namespace is the only party that can act on either.
+    //
+    // requires_features stays, and the contrast is the point: it names
+    // *container* capabilities -- a compression method, a signature scheme --
+    // that this reader either implements or does not. It guards the reader
+    // and fails at open. The other two guarded a consumer and could only ever
+    // fail later, somewhere else, in code this library does not own.
 
     [[nodiscard]] std::span<const Author>         authors() const noexcept;
 
-    /// Exactly one of these is engaged, matching kind(); the other five are
-    /// empty. Accessors return an optional reference so a caller which
-    /// guesses the wrong kind gets an empty optional rather than a throw or
-    /// undefined behaviour. No raw pointers cross this API.
-    [[nodiscard]] std::optional<std::reference_wrapper<const CartridgeBody>> as_cartridge() const noexcept;
-    [[nodiscard]] std::optional<std::reference_wrapper<const TemplateBody>>  as_template()  const noexcept;
-    [[nodiscard]] std::optional<std::reference_wrapper<const KitBody>>       as_kit()       const noexcept;
-    [[nodiscard]] std::optional<std::reference_wrapper<const PackageBody>>   as_package()   const noexcept;
-    [[nodiscard]] std::optional<std::reference_wrapper<const AssetsBody>>    as_assets()    const noexcept;
-    [[nodiscard]] std::optional<std::reference_wrapper<const PluginBody>>    as_plugin()    const noexcept;
+    /// Consumer identities present in `consumers` (§5.6), sorted.
+    ///
+    /// Enumerable so a tool can report what a cartridge carries and for whom
+    /// without recognising any of it. This is the honest form of what a
+    /// `kind`-driven schema switch used to do badly: it answers "who is this
+    /// addressed to" without pretending to answer "what does it say".
+    [[nodiscard]] std::vector<std::string_view> consumers() const;
+
+    /// The section addressed to `id`, as JSON text, or nullopt if absent.
+    ///
+    /// Returned as text rather than a parsed structure because this library
+    /// has no types for it and acquiring some would re-import the coupling
+    /// format 2 removed. The consumer parses it with its own JSON reader --
+    /// squared-pg already vendors yyjson and already does exactly this for
+    /// its extension fields.
+    ///
+    /// The text is a re-serialisation, not a slice of the original: key order
+    /// is preserved, insignificant whitespace is not. Callers needing the
+    /// original bytes have raw_json().
+    ///
+    /// Absent is not an error and never means empty-by-default. A consumer
+    /// finding no section for itself is looking at a cartridge that was not
+    /// addressed to it, which it must report rather than resolve.
+    [[nodiscard]] std::optional<std::string_view> consumer(std::string_view id) const noexcept;
 
     /// Raw JSON of the manifest, for consumers needing fields this version
     /// does not model. Unrecognised members are preserved verbatim (§5.4).

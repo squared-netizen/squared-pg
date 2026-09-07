@@ -90,10 +90,11 @@ int main()
         std::ofstream(tmp / "lib" / "thing.o") << "obj";
         std::ofstream(tmp / "SQ-INF" / "manifest.json") << R"({
   "format": "squared-cartridge",
-  "format_version": 1,
-  "kind": "asset-bundle",
+  "format_version": 2,
+  "kind": "asset_bundle",
   "id": "asset.native",
   "version": "1.0.0",
+  "tree": ".",
   "assets": { "entries": [
     { "id": "asset.lib.libthing", "path": "lib/libthing.so", "type": "data" },
     { "id": "asset.lib.thing", "path": "lib/thing.o", "type": "data" }
@@ -137,42 +138,51 @@ int main()
         CHECK(m.has_value());
         if (m) {
             CHECK(m->id() == "kit.testcart");
-            CHECK(m->kind() == Kind::kit);
+            CHECK(m->kind() == "kit");
             CHECK(m->format_version() == kFormatVersion);
 
-            // The schema's nested requires block must actually reach the
-            // model. The first draft read flat siblings and silently dropped
-            // these, which is the worst outcome for a resolver input.
-            auto kit = m->as_kit();
-            CHECK(kit.has_value());
-            if (kit) {
-                CHECK(kit->get().required_packages.size() == 1);
-                CHECK(kit->get().framework_range.has_value());
-                CHECK(kit->get().integration_areas.size() == 2);
+            // What used to be asserted here was that a nested `requires`
+            // block reached the typed KitBody -- a real bug once, when a
+            // draft read flat siblings and silently dropped them. That
+            // assertion cannot be made any more and should not be: the
+            // structure of a kit body is squared_pg's schema, and checking it
+            // here is what §0.1 forbids.
+            //
+            // What survives is that the section arrives intact, byte for
+            // byte, for whoever does know the schema.
+            auto section = m->consumer("sqcart_test");
+            CHECK(section.has_value());
+            if (section) {
+                CHECK(section->find("requires") != std::string_view::npos);
+                CHECK(section->find("integration_areas") != std::string_view::npos);
             }
         }
     }
 
-    // FR-KIND-2: integration_areas must be non-empty. It is the basis of the
-    // engine's pre-mutation kit conflict check (§2.7.4).
+    // Two checks stood here and are gone with the kind bodies.
+    //
+    // FR-KIND-2 required a kit's `integration_areas` to be non-empty, and
+    // FR-MAN-5 rejected a manifest carrying a body that did not match its
+    // `kind`, so a resource could not masquerade as two roles. Both were
+    // good rules. Both required knowing what a kit body is.
+    //
+    // FR-KIND-2 moves to squared-pg, which is the only party that knows why
+    // integration areas matter. FR-MAN-5 has no successor and needs none:
+    // with one `consumers` object there is no second body to be foreign, and
+    // a section addressed to a namespace that is not yours is not a
+    // masquerade -- it is the mechanism working.
     {
-        const auto broken = edited(good,
-            "\"build.cmake.targets\",\n      \"app.entrypoint\"\n    ]", "]");
-        CHECK(!broken.empty());
-        auto m = Manifest::parse(broken);
-        CHECK(!m.has_value());
-    }
-
-    // FR-MAN-5: a foreign kind body is rejected even when well formed on its
-    // own, so a resource cannot masquerade as two roles.
-    {
-        const auto broken = edited(good, "\"kit\": {", "\"package\": {");
-        CHECK(!broken.empty());
-        auto m = Manifest::parse(broken);
-        CHECK(!m.has_value());
-        if (!m) {
-            CHECK(m.error().code == ErrorCode::kind_invalid ||
-                  m.error().code == ErrorCode::manifest_malformed);
+        // What survives is the inverse assertion: rename the consumer
+        // namespace to one nothing in this repository has heard of, and the
+        // manifest still parses. Under FR-MAN-5 the equivalent edit was a
+        // rejection; now it is the mechanism working.
+        const auto altered = edited(good, "\"sqcart_test\"", "\"nobody_in_particular\"");
+        CHECK(!altered.empty());
+        auto m = Manifest::parse(altered);
+        CHECK(m.has_value());
+        if (m) {
+            CHECK(m->consumer("nobody_in_particular").has_value());
+            CHECK(!m->consumer("sqcart_test").has_value());
         }
     }
 
@@ -225,10 +235,11 @@ int main()
         std::ofstream(tmp / "lib" / "thing.o") << "obj";
         std::ofstream(tmp / "SQ-INF" / "manifest.json") << R"({
   "format": "squared-cartridge",
-  "format_version": 1,
-  "kind": "asset-bundle",
+  "format_version": 2,
+  "kind": "asset_bundle",
   "id": "asset.native",
   "version": "1.0.0",
+  "tree": ".",
   "assets": { "entries": [
     { "id": "asset.lib.libthing", "path": "lib/libthing.so", "type": "data" },
     { "id": "asset.lib.thing", "path": "lib/thing.o", "type": "data" }

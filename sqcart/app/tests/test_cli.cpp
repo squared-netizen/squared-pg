@@ -284,22 +284,38 @@ int main()
         std::ofstream(plain / "settings.json") << "{}";
 
         const auto out = (root / "assets.sq").string();
-        auto c = invoke({"create", plain.string(), "-o", out});
+
+        // --kind is required as of format 2. There is no default and no
+        // detection: format 1 guessed asset-bundle, or cartridge if a
+        // main.lua turned up, and both branches required knowing what those
+        // roles mean.
+        auto missing = invoke({"create", plain.string(), "-o", out});
+        CHECK(missing.code == ExitCode::usage);
+        CHECK(contains(missing.err, "needs --kind"));
+
+        // A malformed token is refused; an unrecognised one is not, because
+        // "unrecognised" is not a judgement this tool is entitled to make.
+        auto bad = invoke({"create", plain.string(), "--kind", "Asset-Bundle", "-o", out});
+        CHECK(bad.code == ExitCode::usage);
+
+        auto c = invoke({"create", plain.string(), "--kind", "asset_bundle", "-o", out});
         CHECK(c.code == ExitCode::ok);
         CHECK(fs::is_regular_file(plain / "SQ-INF" / "manifest.json"));
 
         // What it wrote must open, and the derived id must be spec-legal:
-        // lowercase dotted segments, kind-prefixed (§5.2).
+        // lowercase dotted segments (§5.2). The prefix is `local.`, not
+        // `asset.` -- which prefixes belong to which roles is ecosystem
+        // policy, and this tool has no standing to enforce it.
         auto opened = sqcart::Cartridge::open(plain);
         CHECK(opened.has_value());
         if (opened) {
-            CHECK(opened->manifest().id() == "asset.my_game_assets");
-            CHECK(opened->manifest().kind() == sqcart::Kind::asset_bundle);
-            auto assets = opened->manifest().as_assets();
-            CHECK(assets.has_value());
-            if (assets) {
-                CHECK(assets->get().entries.size() == 2);
-            }
+            CHECK(opened->manifest().id() == "local.my_game_assets");
+            CHECK(opened->manifest().kind() == "asset_bundle");
+            CHECK(opened->manifest().tree() == ".");
+            // Seeded empty. Declaring assets would mean knowing an asset
+            // bundle's schema, and filling a consumer section on someone
+            // else's behalf is exactly the guessing format 2 removed.
+            CHECK(opened->manifest().consumers().empty());
         }
 
         // And it must be conforming, not merely parseable.
@@ -308,18 +324,20 @@ int main()
 
         // Running create twice must not silently reseed a manifest someone
         // may have hand-edited.
-        auto again = invoke({"create", plain.string(), "-o", out});
+        auto again = invoke({"create", plain.string(), "--kind", "asset_bundle", "-o", out});
         CHECK(again.code == ExitCode::failure);
         CHECK(contains(again.err, "already has"));
 
         // --force is the escape hatch.
-        auto forced = invoke({"create", plain.string(), "--force", "--in-place"});
+        auto forced = invoke({"create", plain.string(), "--kind", "asset_bundle",
+                              "--force", "--in-place"});
         CHECK(forced.code == ExitCode::ok);
 
         // Determinism: the same folder seeded twice yields identical bytes,
         // so a created manifest is a function of the tree and the flags only.
         const auto first = slurp(plain / "SQ-INF" / "manifest.json");
-        auto again2 = invoke({"create", plain.string(), "--force", "--in-place"});
+        auto again2 = invoke({"create", plain.string(), "--kind", "asset_bundle",
+                              "--force", "--in-place"});
         CHECK(again2.code == ExitCode::ok);
         CHECK(slurp(plain / "SQ-INF" / "manifest.json") == first);
 
@@ -327,25 +345,34 @@ int main()
     }
 
     {
-        // Kind is auto-detected when an entry module is present.
-        const fs::path root = temp_root("test_cli") / "sqcart_cli_create_game";
+        // A kind this tool has never heard of is seeded without complaint.
+        //
+        // This replaces a test asserting that `create` detected `cartridge`
+        // from a game/main.lua and filled in an entry module. That detection
+        // was the deepest piece of ecosystem knowledge in the CLI, and the
+        // inverted assertion is a better one: the tool works for a role
+        // nobody has defined yet, which is what §0.1 asks of it.
+        const fs::path root = temp_root("test_cli") / "sqcart_cli_create_unknown";
         fs::remove_all(root);
         fs::create_directories(root / "mygame" / "game");
         std::ofstream(root / "mygame" / "game" / "main.lua") << "print(1)\n";
 
-        auto c = invoke({"create", (root / "mygame").string(), "--in-place"});
+        auto c = invoke({"create", (root / "mygame").string(),
+                         "--kind", "holodisk_volume", "--in-place"});
         CHECK(c.code == ExitCode::ok);
 
         auto opened = sqcart::Cartridge::open(root / "mygame");
         CHECK(opened.has_value());
         if (opened) {
-            CHECK(opened->manifest().kind() == sqcart::Kind::cartridge);
-            auto body = opened->manifest().as_cartridge();
-            CHECK(body.has_value());
-            if (body) {
-                CHECK(body->get().entry.module == "game/main.lua");
-            }
+            CHECK(opened->manifest().kind() == "holodisk_volume");
+            CHECK(opened->manifest().id() == "local.mygame");
+            CHECK(opened->manifest().consumers().empty());
         }
+
+        // And it verifies. Conformance is now a statement about the container
+        // and the envelope, which is the only part this library can speak to.
+        auto v = invoke({"verify", (root / "mygame").string()});
+        CHECK(v.code == ExitCode::ok);
         fs::remove_all(root);
     }
 
@@ -361,10 +388,19 @@ int main()
         CHECK(contains(e.err, "no files"));
 
         std::ofstream(root / "empty" / "a.txt") << "a";
+
+        // "nonsense" is a perfectly good kind token, and is accepted. Format 1
+        // rejected it here and listed the known kinds in the error, which was
+        // this tool asserting it knew the ecosystem's roles.
         auto k = invoke({"create", (root / "empty").string(), "--kind", "nonsense",
                          "--in-place"});
-        CHECK(k.code == ExitCode::usage);
-        CHECK(contains(k.err, "asset-bundle"));
+        CHECK(k.code == ExitCode::ok);
+
+        // What is still refused is a token that is not well formed.
+        auto bad = invoke({"create", (root / "empty").string(), "--kind", "Not A Kind",
+                           "--force", "--in-place"});
+        CHECK(bad.code == ExitCode::usage);
+        CHECK(contains(bad.err, "well-formed"));
 
         auto n = invoke({"create"});
         CHECK(n.code == ExitCode::usage);

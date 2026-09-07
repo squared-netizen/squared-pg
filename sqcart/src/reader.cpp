@@ -308,45 +308,18 @@ Result<void> check_features(const CartridgeState& st)
     }
     return {};
 }
-
-/// Stage 7 of §12.1: every path the manifest names must exist.
-Result<void> check_declared_payload(const CartridgeState& st)
-{
-    const Manifest& m = *st.manifest;
-
-    auto require = [&](const EntryPath& p, const char* what) -> Result<void> {
-        if (p.empty() || find_entry(st, p)) {
-            return {};
-        }
-        return unexpected(Error{ErrorCode::payload_missing,
-                                std::string("manifest references a missing ") + what, p, m.id(),
-                                false});
-    };
-
-    if (auto body = m.as_cartridge()) {
-        if (auto r = require(body->get().entry.module, "entry module"); !r) {
-            return r;
-        }
-        for (const auto& [target, path] : body->get().entry.bytecode_cache) {
-            if (auto r = require(path, "bytecode cache entry"); !r) {
-                return r;
-            }
-        }
-    }
-    if (auto body = m.as_assets()) {
-        for (const auto& asset : body->get().entries) {
-            if (auto r = require(asset.path, "asset"); !r) {
-                return r;
-            }
-        }
-    }
-    if (auto body = m.as_plugin()) {
-        if (auto r = require(body->get().entry, "plugin entry"); !r) {
-            return r;
-        }
-    }
-    return {};
-}
+// check_declared_payload() lived here.
+//
+// It enforced format spec §12.1 step 7 for three kinds: a cartridge's entry
+// module and bytecode cache, an asset bundle's declared paths, a plugin's
+// entry. All three read a kind body, and reading a kind body means knowing a
+// consumer's schema -- you cannot check that `entry.module` names a present
+// entry without first knowing that `entry.module` is a path.
+//
+// Format 2 moves the check to the consumer, which can give a better error
+// anyway because it knows what the reference was for. Deleting rather than
+// weakening it: a payload check that consults `consumers` by guessing at
+// member names would be the same coupling with worse manners.
 
 /// Stages 4-8 of §12.1, common to every form once the index exists.
 Result<void> finish_open(CartridgeState& st)
@@ -364,9 +337,6 @@ Result<void> finish_open(CartridgeState& st)
     }
 
     if (auto r = check_features(st); !r) {
-        return r;
-    }
-    if (auto r = check_declared_payload(st); !r) {
         return r;
     }
 

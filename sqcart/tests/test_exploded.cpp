@@ -47,7 +47,7 @@ int main()
     }
 
     CHECK(ex->exploded());
-    CHECK(ex->manifest().kind() == Kind::kit);
+    CHECK(ex->manifest().kind() == "kit");
     CHECK(ex->contains("SQ-INF/manifest.json"));
     CHECK(ex->contains("bridge/src/bridge.cpp"));
     CHECK(!ex->contains("tree/src/nonexistent.lua"));

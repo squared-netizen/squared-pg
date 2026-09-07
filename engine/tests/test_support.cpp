@@ -92,7 +92,7 @@ void substitution() {
 }
 
 void ownership() {
-    sqcart::OwnershipRules rules;
+    OwnershipRules rules;
     rules.generated = {"mk/squared_generated.mk", "sq_kit/**"};
     rules.user      = {"**"};
 
@@ -105,7 +105,7 @@ void ownership() {
 
     // §2.7.10: a path matching nothing defaults to seeded. Defaulting to
     // generated would mean the safe case is the one you have to remember.
-    sqcart::OwnershipRules empty;
+    OwnershipRules empty;
     CHECK(detail::classify_path(empty, "anything", &diagnostics) == OwnershipClass::seeded);
 }
 

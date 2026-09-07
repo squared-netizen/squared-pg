@@ -338,6 +338,8 @@ void open_host(lua_State* state, const HostInfo& info) {
     set_string("program", info.program);
     set_string("workflow_id", info.workflow_id);
     set_string("cwd", info.cwd);
+    set_string("executable", info.executable);
+    set_string("installation", info.installation);
 
     lua_createtable(state, static_cast<int>(info.workflow_path.size()), 0);
     for (std::size_t i = 0; i < info.workflow_path.size(); ++i) {

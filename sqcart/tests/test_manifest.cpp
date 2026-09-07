@@ -14,60 +14,29 @@ using namespace sqcart;
 
 
 // ---------------------------------------------------------------------------
-// requires_capabilities (§5.4)
+// requires_capabilities used to be checked here.
 //
-// The consumer-facing sibling of requires_features. sqcart validates shape and
-// nothing else: it must not learn what a token means, or it would need to be
-// taught every consumer's vocabulary and every new consumer capability would
-// become a sqcart release.
+// It was an envelope field this library shape-checked (`name` or
+// `name@range`) and never resolved. That was defensible while the argument
+// held that a *foreign* tool could enumerate what a cartridge demanded of it
+// without knowing whose namespace the tokens belonged to.
+//
+// The argument did not survive contact with the data. Every token ever
+// written is squared-pg's -- `capability.project.plan@^1.0` -- so the field
+// was addressed to exactly one consumer while sitting outside that
+// consumer's section. It now lives at `consumers.<id>.requires.capabilities`,
+// with `engine` alongside it for the same reason: `engine.id` restated the
+// consumer key it should have been inside.
+//
+// What is lost is the shape check, and losing it is right. A malformed token
+// now reaches the consumer, which owns the grammar and can say which
+// capability is missing and what provides it. This library could only ever
+// say that a string it did not understand looked wrong.
+//
+// requires_features stays in the envelope and is still checked, because it
+// names container capabilities that guard *this reader* and fail at open.
 // ---------------------------------------------------------------------------
 
-static void requires_capabilities_checks()
-{
-    const auto with = [](const char* capabilities) {
-        return std::string(R"({"format":"squared-cartridge","format_version":1,)")
-             + R"("kind":"kit","id":"kit.probe","version":"1.0.0",)"
-             + R"("requires_capabilities":)" + capabilities + ","
-             + R"("kit":{"external":{"id":"x","version":"1.0.0"},"provides":[]}})";
-    };
-
-    {
-        auto m = Manifest::parse(with(R"(["capability.template.substitute@^1.0","capability.project.plan"])"));
-        CHECK(m.has_value());
-        if (m) {
-            CHECK(m->requires_capabilities().size() == 2);
-            CHECK(m->requires_capabilities()[0] == "capability.template.substitute@^1.0");
-            CHECK(m->requires_capabilities()[1] == "capability.project.plan");
-        }
-    }
-
-    // Absent is legal and means "nothing beyond the baseline".
-    {
-        auto m = Manifest::parse(
-            R"({"format":"squared-cartridge","format_version":1,"kind":"kit","id":"kit.probe",)"
-            R"("version":"1.0.0","kit":{"external":{"id":"x","version":"1.0.0"},"provides":[]}})");
-        CHECK(m.has_value());
-        if (m) CHECK(m->requires_capabilities().empty());
-    }
-
-    // Shape violations. Each is something the manifest author can fix; letting
-    // one through would push the failure to a consumer that can only say it
-    // does not recognise the token, not what is wrong with it.
-    CHECK(!Manifest::parse(with(R"("not-an-array")")).has_value());
-    CHECK(!Manifest::parse(with(R"([""])")).has_value());
-    CHECK(!Manifest::parse(with(R"(["Capability.Upper"])")).has_value());
-    CHECK(!Manifest::parse(with(R"(["trailing."])")).has_value());
-    CHECK(!Manifest::parse(with(R"(["double..dot"])")).has_value());
-    CHECK(!Manifest::parse(with(R"(["9leading"])")).has_value());
-    CHECK(!Manifest::parse(with(R"(["trailing_at@"])")).has_value());
-
-    // A repeat is an authoring mistake; a silently deduplicated list hides it.
-    CHECK(!Manifest::parse(with(R"(["capability.a","capability.a"])")).has_value());
-
-    // sqcart must NOT reject a token it has never heard of. Whether a
-    // capability exists is the consumer's question.
-    CHECK(Manifest::parse(with(R"(["something.nobody.implements@^99.0"])")).has_value());
-}
 
 int main(int argc, char** argv)
 {
@@ -77,15 +46,15 @@ int main(int argc, char** argv)
     auto open = Cartridge::open(sq_path);
     CHECK(open.has_value());
     if (!open) {
-        requires_capabilities_checks();
-
+    
     return test::report("test_manifest");
     }
     const Manifest& m = open->manifest();
 
     CHECK(m.id() == "kit.testcart");
-    CHECK(m.kind() == Kind::kit);
-    CHECK(m.format_version() == 1);
+    CHECK(m.kind() == "kit");
+    CHECK(m.format_version() == kFormatVersion);
+    CHECK(m.tree() == ".");
     if (m.title()) {
         CHECK(*m.title() == "Testcart Integration Kit");
     }
@@ -95,27 +64,32 @@ int main(int argc, char** argv)
     CHECK(m.authors().size() == 1);
     CHECK(m.authors()[0].name == "sqcart maintainers");
 
-    // Exactly the kit body is engaged; the other five accessors are empty.
-    CHECK(m.as_kit().has_value());
-    CHECK(m.as_cartridge().has_value() == false);
-    CHECK(m.as_template().has_value() == false);
-    CHECK(m.as_package().has_value() == false);
-    CHECK(m.as_assets().has_value() == false);
-    CHECK(m.as_plugin().has_value() == false);
-
-    if (m.as_kit()) {
-        const KitBody& kit = m.as_kit()->get();
-        CHECK(kit.external.id == "testcart");
-        CHECK(kit.external.version == ">=1.0.0 <2.0.0");
-        CHECK(kit.provides.size() == 1 && kit.provides[0] == "testcart.bridge");
+    // The consumer section is carried, addressed and unopened. The fixture
+    // names `sqcart_test` rather than a real consumer deliberately: it is a
+    // namespace this library has never heard of, which is the whole claim.
+    CHECK(m.consumers().size() == 1);
+    if (m.consumers().size() == 1) {
+        CHECK(m.consumers()[0] == "sqcart_test");
     }
+
+    auto section = m.consumer("sqcart_test");
+    CHECK(section.has_value());
+    if (section) {
+        // Text, not structure. The assertion is that the bytes came through,
+        // not that this library understood any of them.
+        CHECK(section->find("\"external\"") != std::string_view::npos);
+        CHECK(section->find("testcart.bridge") != std::string_view::npos);
+        CHECK(section->front() == '{' && section->back() == '}');
+    }
+
+    // A namespace nobody wrote is absent, not empty. The distinction matters:
+    // a consumer finding nothing addressed to it must say so, not proceed
+    // with defaults it invented.
+    CHECK(!m.consumer("squared_pg").has_value());
+    CHECK(!m.consumer("").has_value());
 
     CHECK(!m.raw_json().empty());
     CHECK(m.raw_json().find("\"kind\"") != std::string_view::npos);
-
-    // A wrong-kind guess is empty, never a throw (no raw pointers).
-    auto c = m.as_cartridge();
-    CHECK(!c.has_value());
 
     return test::report("test_manifest");
 }

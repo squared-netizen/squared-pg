@@ -137,7 +137,7 @@ ExitCode cmd_info(const Invocation& inv, Environment& env)
 
     field("id", m.id());
     field("version", m.version());
-    field("kind", to_string(m.kind()));
+    field("kind", std::string{m.kind()});
     field("format", std::to_string(m.format_version()));
     if (auto t = m.title()) {
         field("title", *t);
@@ -145,9 +145,7 @@ ExitCode cmd_info(const Invocation& inv, Environment& env)
     if (auto l = m.license()) {
         field("license", *l);
     }
-    if (const auto& e = m.engine()) {
-        field("engine", e->id + " " + e->version);
-    }
+    field("tree", m.tree());
     field("form", c->exploded() ? "exploded" : "archive");
     field("entries", std::to_string(c->entries().size()));
 
@@ -161,25 +159,15 @@ ExitCode cmd_info(const Invocation& inv, Environment& env)
         field("requires", f);
     }
 
-    // Kind-specific highlights: the fields a human actually wants when they
-    // ask what a cartridge is.
-    if (auto b = m.as_kit()) {
-        field("external", b->get().external.id + " " + b->get().external.version);
-        for (const auto& a : b->get().integration_areas) {
-            field("integrates", a);
-        }
-    } else if (auto b = m.as_cartridge()) {
-        field("entrypoint", b->get().entry.module);
-        field("lua abi", b->get().entry.lua_abi);
-    } else if (auto b = m.as_template()) {
-        field("tree", b->get().tree);
-        for (const auto& p : b->get().platforms) {
-            field("platform", p);
-        }
-    } else if (auto b = m.as_plugin()) {
-        field("entrypoint", b->get().entry);
-    } else if (auto b = m.as_assets()) {
-        field("assets", std::to_string(b->get().entries.size()));
+    // Consumer sections (§5.6). Names only.
+    //
+    // This is where format 1 printed kind-specific highlights -- a kit's
+    // external dependency, a template's platforms, a cartridge's entry point.
+    // Printing them required knowing those schemas, which this tool no longer
+    // does. What it can honestly show is who the cartridge is addressed to;
+    // `sqcart show` prints the manifest in full for anyone who needs more.
+    for (const auto& name : m.consumers()) {
+        field("consumer", std::string{name});
     }
     return ExitCode::ok;
 }

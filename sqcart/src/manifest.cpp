@@ -9,6 +9,8 @@
 // backend type escapes into a public header (FR-CON-3).
 
 #include <cstddef>
+#include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,7 +21,7 @@
 #include "impl.hpp"
 
 namespace sqcart {
-namespace {
+namespace detail_manifest {
 
 /// Shape check for a capability token: `name` or `name@range`.
 ///
@@ -52,7 +54,91 @@ namespace {
     return !segment_start;  // must not end on a '.'
 }
 
-}  // namespace
+/// A single identity segment: `[a-z][a-z0-9_]*`.
+///
+/// The shared grammar behind `kind` and consumer identities. Factored out
+/// because two call sites spelling the same rule twice is two chances for
+/// them to drift.
+[[nodiscard]] bool valid_identity_segment(std::string_view s)
+{
+    if (s.empty()) return false;
+    if (!(s.front() >= 'a' && s.front() <= 'z')) return false;
+    for (char c : s) {
+        const bool lower = c >= 'a' && c <= 'z';
+        const bool digit = c >= '0' && c <= '9';
+        if (!lower && !digit && c != '_') return false;
+    }
+    return true;
+}
+
+/// Shape check for a consumer identity (§5.6).
+///
+/// Dotted segments, because a consumer is usually named by one: `squared_pg`,
+/// `squared_framework`. Length-capped like every other token here, since an
+/// identity is a map key and a map key is attacker-controlled.
+[[nodiscard]] bool valid_consumer_id(std::string_view id)
+{
+    if (id.empty() || id.size() > 128) return false;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t dot = id.find('.', start);
+        if (!valid_identity_segment(id.substr(start, dot - start))) return false;
+        if (dot == std::string_view::npos) return true;
+        start = dot + 1;
+    }
+}
+
+/// Shape check for the envelope's `tree` (§5.1).
+///
+/// Exactly two legal shapes, and no normalisation: either "." or a relative
+/// directory path ending in '/'. A bare "tree" without the separator is
+/// refused rather than corrected, because accepting both spellings would put
+/// two ways of writing one path into every manifest in the ecosystem, and the
+/// reader would then have to canonicalise on the way out to keep them from
+/// diverging in error messages and indexes.
+///
+/// Refuses `..` and `.` components, absolute paths, backslashes, colons and
+/// control characters, matching the entry-path rules of §3.3 -- a payload root
+/// that could escape the cartridge would defeat every path check downstream
+/// of it. `SQ-INF/` is refused outright: the reserved directory is never
+/// payload (§4), so a root pointing into it can only be a mistake.
+[[nodiscard]] bool valid_tree_root(std::string_view tree)
+{
+    if (tree == ".") return true;
+    if (tree.empty() || tree.size() > 1024) return false;
+    if (tree.front() == '/') return false;
+    if (tree.back() != '/') return false;
+
+    if (tree.starts_with(kMetaDir)) return false;
+
+    std::size_t start = 0;
+    while (start < tree.size()) {
+        const std::size_t slash = tree.find('/', start);
+        const std::string_view segment = tree.substr(start, slash - start);
+        if (segment.empty()) return false;               // "" from "a//b" or a leading '/'
+        if (segment == "." || segment == "..") return false;
+        for (char c : segment) {
+            const auto u = static_cast<unsigned char>(c);
+            if (u < 0x20 || c == '\\' || c == ':') return false;
+        }
+        start = slash + 1;
+    }
+    return true;
+}
+
+}  // namespace detail_manifest
+
+using detail_manifest::valid_capability_token;
+using detail_manifest::valid_consumer_id;
+using detail_manifest::valid_tree_root;
+
+bool valid_kind_token(std::string_view token) noexcept
+{
+    // One segment, not dotted. A kind is a role name; a dotted role name
+    // would imply a hierarchy, and a hierarchy is something a reader would
+    // then be asked to interpret.
+    return token.size() <= 64 && detail_manifest::valid_identity_segment(token);
+}
 
 namespace {
 
@@ -128,56 +214,8 @@ bool get_req_str(yyjson_val* obj, const char* key, std::string& out)
 }
 
 // String array member. Returns false on wrong type.
-bool get_str_arr(yyjson_val* obj, const char* key, std::vector<std::string>& out)
-{
-    yyjson_val* v = yyjson_obj_get(obj, key);
-    if (v == nullptr) {
-        return true;
-    }
-    if (!is_arr(v)) {
-        return false;
-    }
-    size_t idx, max;
-    yyjson_val* e;
-    yyjson_arr_foreach(v, idx, max, e)
-    {
-        if (!is_str(e)) {
-            return false;
-        }
-        out.emplace_back(yyjson_get_str(e));
-    }
-    return true;
-}
 
 // Required object member.
-yyjson_val* get_req_obj(yyjson_val* obj, const char* key)
-{
-    yyjson_val* v = yyjson_obj_get(obj, key);
-    if (is_obj(v)) {
-        return v;
-    }
-    return nullptr;
-}
-
-bool parse_engine(yyjson_val* obj, std::optional<CompatRef>& out)
-{
-    yyjson_val* e = get_req_obj(obj, "engine");
-    if (e == nullptr) {
-        return true; // optional; absent is fine
-    }
-    CompatRef ref;
-    std::string id, version;
-    if (!get_req_str(e, "id", id)) {
-        return false;
-    }
-    if (!get_req_str(e, "version", version)) {
-        return false;
-    }
-    ref.id = std::move(id);
-    ref.version = std::move(version);
-    out = std::move(ref);
-    return true;
-}
 
 bool parse_authors(yyjson_val* obj, std::vector<Author>& out)
 {
@@ -219,282 +257,6 @@ bool parse_authors(yyjson_val* obj, std::vector<Author>& out)
 // input. FR-MAN-10 makes the schema the tie-breaker, so the schema shape is
 // what is parsed. Nothing has shipped with the flat form, so no alias is
 // carried.
-bool parse_requires(yyjson_val* body, std::optional<std::string>& framework,
-                    std::vector<std::string>& packages, std::vector<std::string>& kits,
-                    std::vector<std::string>* engine_capabilities = nullptr)
-{
-    yyjson_val* r = yyjson_obj_get(body, "requires");
-    if (r == nullptr) {
-        return true;   // Absent means "requires nothing", not malformed.
-    }
-    if (!is_obj(r)) {
-        return false;
-    }
-    if (!get_opt_str(r, "framework", framework)) {
-        return false;
-    }
-    if (!get_str_arr(r, "packages", packages)) {
-        return false;
-    }
-    if (!get_str_arr(r, "kits", kits)) {
-        return false;
-    }
-    if (engine_capabilities != nullptr &&
-        !get_str_arr(r, "engine_capabilities", *engine_capabilities)) {
-        return false;
-    }
-    return true;
-}
-
-bool parse_ownership(yyjson_val* obj, OwnershipRules& out)
-{
-    yyjson_val* o = yyjson_obj_get(obj, "ownership");
-    if (o == nullptr) {
-        return true;
-    }
-    if (!is_obj(o)) {
-        return false;
-    }
-    return get_str_arr(o, "generated", out.generated) && get_str_arr(o, "user", out.user)
-           && get_str_arr(o, "shared", out.shared);
-}
-
-// ---- kind bodies ---------------------------------------------------------
-
-bool parse_cartridge_body(yyjson_val* body, CartridgeBody& out)
-{
-    yyjson_val* entry = get_req_obj(body, "entry");
-    if (entry == nullptr) {
-        return false;
-    }
-    if (!get_req_str(entry, "module", out.entry.module)) {
-        return false;
-    }
-    if (!get_req_str(entry, "type", out.entry.type)) {
-        return false;
-    }
-    if (!get_req_str(entry, "lua_abi", out.entry.lua_abi)) {
-        return false;
-    }
-    get_opt_str(entry, "target", out.entry.target);
-
-    if (!parse_engine(body, out.framework)) {
-        return false;
-    }
-    if (!get_str_arr(body, "packages", out.packages)) {
-        return false;
-    }
-    get_opt_str(body, "orientation", out.orientation);
-    if (!get_str_arr(body, "permissions", out.permissions)) {
-        return false;
-    }
-    return true;
-}
-
-bool parse_template_body(yyjson_val* body, TemplateBody& out)
-{
-    if (!get_str_arr(body, "project_types", out.project_types)) {
-        return false;
-    }
-    if (!get_str_arr(body, "platforms", out.platforms)) {
-        return false;
-    }
-    if (!get_req_str(body, "tree", out.tree)) {
-        return false;
-    }
-    yyjson_val* params = yyjson_obj_get(body, "parameters");
-    if (params != nullptr) {
-        if (!is_arr(params)) {
-            return false;
-        }
-        size_t idx, max;
-        yyjson_val* e;
-        yyjson_arr_foreach(params, idx, max, e)
-        {
-            if (!is_obj(e)) {
-                return false;
-            }
-            TemplateBody::Parameter p;
-            if (!get_req_str(e, "name", p.name)) {
-                return false;
-            }
-            if (!get_req_str(e, "type", p.type)) {
-                return false;
-            }
-            yyjson_val* req = yyjson_obj_get(e, "required");
-            if (req != nullptr && yyjson_get_type(req) == YYJSON_TYPE_BOOL) {
-                p.required = yyjson_get_bool(req);
-            }
-            get_opt_str(e, "pattern", p.pattern);
-            get_opt_str(e, "description", p.description);
-            out.parameters.push_back(std::move(p));
-        }
-    }
-    // Template requires block. The schema gives templates a richer `kits`
-    // shape than other kinds -- {required, optional} rather than a flat list
-    // -- so this cannot reuse parse_requires wholesale.
-    if (yyjson_val* r = yyjson_obj_get(body, "requires"); r != nullptr) {
-        if (!is_obj(r)) {
-            return false;
-        }
-        if (!get_opt_str(r, "framework", out.framework_range)) {
-            return false;
-        }
-        if (!get_str_arr(r, "packages", out.required_packages)) {
-            return false;
-        }
-        if (yyjson_val* k = yyjson_obj_get(r, "kits"); k != nullptr) {
-            if (!is_obj(k)) {
-                return false;
-            }
-            if (!get_str_arr(k, "required", out.required_kits)) {
-                return false;
-            }
-            if (!get_str_arr(k, "optional", out.optional_kits)) {
-                return false;
-            }
-        }
-    }
-    if (!parse_ownership(body, out.ownership)) {
-        return false;
-    }
-    return true;
-}
-
-bool parse_kit_body(yyjson_val* body, KitBody& out)
-{
-    yyjson_val* ext = get_req_obj(body, "external");
-    if (ext == nullptr) {
-        return false;
-    }
-    std::string id, version;
-    if (!get_req_str(ext, "id", id) || !get_req_str(ext, "version", version)) {
-        return false;
-    }
-    out.external.id = std::move(id);
-    out.external.version = std::move(version);
-
-    if (!get_str_arr(body, "provides", out.provides)) {
-        return false;
-    }
-    if (!get_str_arr(body, "platforms", out.platforms)) {
-        return false;
-    }
-    if (!get_str_arr(body, "compatible_templates", out.compatible_templates)) {
-        return false;
-    }
-    if (!parse_requires(body, out.framework_range, out.required_packages, out.required_kits)) {
-        return false;
-    }
-    if (!get_str_arr(body, "integration_areas", out.integration_areas)) {
-        return false;
-    }
-    // FR-KIND-2: integration_areas is required non-empty. It is the basis of
-    // the engine's pre-mutation conflict check (§2.7.4); a kit that declares
-    // nothing cannot be checked against another kit at all.
-    if (out.integration_areas.empty()) {
-        return false;
-    }
-    if (!parse_ownership(body, out.ownership)) {
-        return false;
-    }
-    return true;
-}
-
-bool parse_package_body(yyjson_val* body, PackageBody& out)
-{
-    if (!get_str_arr(body, "provides", out.provides)) {
-        return false;
-    }
-    if (!get_str_arr(body, "platforms", out.platforms)) {
-        return false;
-    }
-    {
-        std::vector<std::string> ignored_kits;
-        if (!parse_requires(body, out.framework_range, out.required_packages, ignored_kits)) {
-            return false;
-        }
-    }
-    if (!get_req_str(body, "build_system", out.build_system)) {
-        return false;
-    }
-    if (!get_str_arr(body, "build_targets", out.build_targets)) {
-        return false;
-    }
-    yyjson_val* feats = yyjson_obj_get(body, "features");
-    if (feats != nullptr) {
-        if (!is_obj(feats)) {
-            return false;
-        }
-        size_t idx, max;
-        yyjson_val *k, *v;
-        yyjson_obj_foreach(feats, idx, max, k, v)
-        {
-            if (yyjson_get_type(v) != YYJSON_TYPE_BOOL) {
-                return false;
-            }
-            out.features.emplace(yyjson_get_str(k), yyjson_get_bool(v));
-        }
-    }
-    return true;
-}
-
-bool parse_assets_body(yyjson_val* body, AssetsBody& out)
-{
-    yyjson_val* entries = yyjson_obj_get(body, "entries");
-    if (entries != nullptr) {
-        if (!is_arr(entries)) {
-            return false;
-        }
-        size_t idx, max;
-        yyjson_val* e;
-        yyjson_arr_foreach(entries, idx, max, e)
-        {
-            if (!is_obj(e)) {
-                return false;
-            }
-            AssetsBody::Entry a;
-            if (!get_req_str(e, "id", a.id) || !get_req_str(e, "path", a.path)
-                || !get_req_str(e, "type", a.type)) {
-                return false;
-            }
-            get_opt_str(e, "format", a.format);
-            if (!get_str_arr(e, "platforms", a.platforms)) {
-                return false;
-            }
-            out.entries.push_back(std::move(a));
-        }
-    }
-    {
-        std::optional<std::string> ignored_framework;
-        std::vector<std::string>   ignored_kits;
-        if (!parse_requires(body, ignored_framework, out.required_packages, ignored_kits)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool parse_plugin_body(yyjson_val* body, PluginBody& out)
-{
-    if (!get_req_str(body, "extends", out.extends)) {
-        return false;
-    }
-    yyjson_val* av = yyjson_obj_get(body, "api_version");
-    if (av != nullptr && yyjson_get_type(av) == YYJSON_TYPE_NUM) {
-        out.api_version = static_cast<int>(yyjson_get_uint(av));
-    }
-    if (!get_req_str(body, "entry", out.entry)) {
-        return false;
-    }
-    if (!get_str_arr(body, "provides_services", out.provides_services)) {
-        return false;
-    }
-    if (!get_str_arr(body, "required_engine_capabilities", out.required_engine_capabilities)) {
-        return false;
-    }
-    return true;
-}
 
 // Carrier of parsed manifest data in public types only. parse_root() fills
 // one; Manifest::parse() (a member with access to the private Impl) copies
@@ -502,24 +264,21 @@ bool parse_plugin_body(yyjson_val* body, PluginBody& out)
 // function.
 struct ParsedData {
     CartridgeId id;
-    Kind kind{Kind::cartridge};
+    std::string kind;
     std::string version;
-    int format_version{1};
+    int format_version{kFormatVersion};
+    EntryPath tree;
 
     std::optional<std::string> title;
     std::optional<std::string> description;
     std::optional<std::string> license;
-    std::optional<CompatRef> engine;
     std::vector<std::string> requires_features;
-    std::vector<std::string> requires_capabilities;
     std::vector<Author> authors;
 
-    std::unique_ptr<CartridgeBody> cartridge;
-    std::unique_ptr<TemplateBody> template_;
-    std::unique_ptr<KitBody> kit;
-    std::unique_ptr<PackageBody> package;
-    std::unique_ptr<AssetsBody> assets;
-    std::unique_ptr<PluginBody> plugin;
+    /// Consumer identity -> its section, re-serialised. std::map rather than
+    /// unordered_map so consumers() is sorted without a sort, and because the
+    /// count is small enough that hashing buys nothing.
+    std::map<std::string, std::string, std::less<>> consumers;
 
     std::string raw_json;
 };
@@ -536,27 +295,66 @@ Result<ParsedData> parse_root(yyjson_val* root, std::string raw)
         return unexpected(malformed("manifest requires a string 'id'"));
     }
 
-    yyjson_val* kind_val = yyjson_obj_get(root, "kind");
-    if (!is_str(kind_val)) {
+    // The token is checked for shape and kept verbatim. It is deliberately
+    // not compared against a list: this library does not know the ecosystem's
+    // roles, and a cartridge of a kind it has never seen is a cartridge it
+    // must still be able to open, index and report.
+    if (!get_req_str(root, "kind", i.kind)) {
         return unexpected(malformed("manifest requires a string 'kind'"));
     }
-    auto kind = kind_from_string(yyjson_get_str(kind_val));
-    if (!kind) {
-        return unexpected(
-            Error{ErrorCode::kind_invalid, "unknown manifest kind", std::nullopt, i.id, false});
+    if (!valid_kind_token(i.kind)) {
+        return unexpected(Error{ErrorCode::kind_invalid,
+                                "'kind' is not a well-formed token: " + i.kind,
+                                std::nullopt, i.id, false});
     }
-    i.kind = *kind;
 
     if (!get_req_str(root, "version", i.version)) {
         return unexpected(malformed("manifest requires a string 'version'"));
     }
 
+    // The format tag and version are checked here rather than in validate(),
+    // which is where they used to live. validate() runs on an already-open
+    // Cartridge, so a manifest from an unsupported format version was being
+    // parsed to completion against this version's rules and only reported as
+    // a diagnostic afterwards -- and only if the caller ran validate() at
+    // all. Every field read after this point is read on the strength of the
+    // manifest claiming to be a format this reader implements, so that claim
+    // has to be settled first.
+    std::string format_tag;
+    if (!get_req_str(root, "format", format_tag)) {
+        return unexpected(malformed("manifest requires a string 'format'"));
+    }
+    if (format_tag != kFormatTag) {
+        return unexpected(Error{ErrorCode::format_unsupported,
+                                "'format' is not " + std::string{kFormatTag} + ": " + format_tag,
+                                std::nullopt, i.id, false});
+    }
+
     yyjson_val* fv = yyjson_obj_get(root, "format_version");
-    if (fv != nullptr) {
-        if (yyjson_get_type(fv) != YYJSON_TYPE_NUM) {
-            return unexpected(malformed("'format_version' must be a number"));
-        }
-        i.format_version = static_cast<int>(yyjson_get_uint(fv));
+    if (fv == nullptr) {
+        return unexpected(malformed("manifest requires 'format_version'"));
+    }
+    if (yyjson_get_type(fv) != YYJSON_TYPE_NUM) {
+        return unexpected(malformed("'format_version' must be a number"));
+    }
+    i.format_version = static_cast<int>(yyjson_get_uint(fv));
+    if (i.format_version != kFormatVersion) {
+        return unexpected(Error{ErrorCode::format_unsupported,
+                                "unsupported format_version "
+                                    + std::to_string(i.format_version) + "; this reader implements "
+                                    + std::to_string(kFormatVersion),
+                                std::nullopt, i.id, false});
+    }
+
+    // Payload root (§5.1). Required, and an envelope field rather than a kind
+    // body field, so the payload can be located without knowing the kind.
+    if (!get_req_str(root, "tree", i.tree)) {
+        return unexpected(malformed("manifest requires a string 'tree'"));
+    }
+    if (!valid_tree_root(i.tree)) {
+        return unexpected(malformed(
+            "'tree' must be \".\" or a relative directory path ending in '/', "
+            "outside SQ-INF/, with no '.' or '..' components: " + i.tree));
     }
 
     if (!get_opt_str(root, "title", i.title) || !get_opt_str(root, "description", i.description)
@@ -564,99 +362,62 @@ Result<ParsedData> parse_root(yyjson_val* root, std::string raw)
         return unexpected(malformed("manifest metadata field has wrong type"));
     }
 
-    if (!parse_engine(root, i.engine)) {
-        return unexpected(malformed("manifest 'engine' is malformed"));
-    }
-    if (!get_str_arr(root, "requires_features", i.requires_features)) {
-        return unexpected(malformed("'requires_features' must be a string array"));
-    }
-    if (!get_str_arr(root, "requires_capabilities", i.requires_capabilities)) {
-        return unexpected(malformed("'requires_capabilities' must be a string array"));
-    }
-    // Shape only. sqcart checks that a token could name something and that the
-    // list does not repeat itself; it does not and must not know whether the
-    // token names anything real. That is the consumer's question, and a reader
-    // that answered it would have to be taught every consumer's vocabulary.
-    for (std::size_t a = 0; a < i.requires_capabilities.size(); ++a) {
-        if (!valid_capability_token(i.requires_capabilities[a])) {
-            return unexpected(malformed("'requires_capabilities' entry is not a valid token: "
-                                        + i.requires_capabilities[a]));
-        }
-        for (std::size_t b = 0; b < a; ++b) {
-            if (i.requires_capabilities[b] == i.requires_capabilities[a]) {
-                return unexpected(malformed("'requires_capabilities' repeats: "
-                                            + i.requires_capabilities[a]));
-            }
-        }
-    }
+    // No `engine` and no `requires_capabilities` here.
+    //
+    // Both moved into `consumers` (§5.6). Note what that costs and what it
+    // buys: this library no longer shape-checks a capability token, so a
+    // malformed one reaches the consumer instead of being caught here. That
+    // is correct. The consumer owns the namespace, knows the grammar, and can
+    // say which capability is missing and what provides it -- three things
+    // this library could never do, having only ever been able to say that a
+    // string it did not understand was shaped wrongly.
+
     if (!parse_authors(root, i.authors)) {
-        return unexpected(malformed("'authors' is malformed"));
+        return unexpected(malformed("manifest 'authors' is malformed"));
     }
 
-    // Kind body is the member matching kind(). Foreign kind bodies present
-    // alongside the declared kind are a kind_invalid violation.
-    yyjson_val* body = nullptr;
-    switch (i.kind) {
-        case Kind::cartridge:
-            body = yyjson_obj_get(root, "cartridge");
-            break;
-        case Kind::project_template:
-            body = yyjson_obj_get(root, "template");
-            break;
-        case Kind::kit:
-            body = yyjson_obj_get(root, "kit");
-            break;
-        case Kind::package:
-            body = yyjson_obj_get(root, "package");
-            break;
-        case Kind::asset_bundle:
-            body = yyjson_obj_get(root, "assets");
-            break;
-        case Kind::plugin:
-            body = yyjson_obj_get(root, "plugin");
-            break;
-    }
-    if (body == nullptr) {
-        return unexpected(Error{ErrorCode::kind_invalid,
-                                "manifest declares kind but has no matching body", std::nullopt,
-                                i.id, false});
-    }
+    // Consumer sections (§5.6). Absent is legal: a cartridge addressed to
+    // nobody in particular is a valid archive, and a pure asset bundle may
+    // genuinely have nothing to say to a consumer.
+    //
+    // Each value is re-serialised and stored as text. Storing the yyjson_val
+    // would be cheaper and is not possible: the document is freed before
+    // Manifest is returned, which is what keeps the backend out of the public
+    // header (FR-CON-3).
+    if (yyjson_val* consumers = yyjson_obj_get(root, "consumers"); consumers != nullptr) {
+        if (!is_obj(consumers)) {
+            return unexpected(malformed("'consumers' must be an object"));
+        }
 
-    bool ok = false;
-    switch (i.kind) {
-        case Kind::cartridge: {
-            i.cartridge = std::make_unique<CartridgeBody>();
-            ok = parse_cartridge_body(body, *i.cartridge);
-            break;
+        std::size_t idx = 0, max = 0;
+        yyjson_val *key = nullptr, *val = nullptr;
+        yyjson_obj_foreach(consumers, idx, max, key, val)
+        {
+            const std::string name{yyjson_get_str(key), yyjson_get_len(key)};
+            if (!valid_consumer_id(name)) {
+                return unexpected(malformed(
+                    "'consumers' key is not a well-formed consumer identity: " + name));
+            }
+            // An object, not an array or a scalar. The constraint exists so a
+            // section is extensible without a version bump: a consumer adding
+            // a field adds a member, and one reading an unknown member
+            // ignores it. A bare array would make every addition positional.
+            if (!is_obj(val)) {
+                return unexpected(malformed("consumer section '" + name + "' must be an object"));
+            }
+            if (i.consumers.find(name) != i.consumers.end()) {
+                return unexpected(malformed("'consumers' repeats the identity " + name));
+            }
+
+            std::size_t len = 0;
+            char* text = yyjson_val_write(val, 0, &len);
+            if (text == nullptr) {
+                return unexpected(malformed("consumer section '" + name
+                                            + "' could not be serialised"));
+            }
+            i.consumers.emplace(name, std::string{text, len});
+            std::free(text);
         }
-        case Kind::project_template: {
-            i.template_ = std::make_unique<TemplateBody>();
-            ok = parse_template_body(body, *i.template_);
-            break;
-        }
-        case Kind::kit: {
-            i.kit = std::make_unique<KitBody>();
-            ok = parse_kit_body(body, *i.kit);
-            break;
-        }
-        case Kind::package: {
-            i.package = std::make_unique<PackageBody>();
-            ok = parse_package_body(body, *i.package);
-            break;
-        }
-        case Kind::asset_bundle: {
-            i.assets = std::make_unique<AssetsBody>();
-            ok = parse_assets_body(body, *i.assets);
-            break;
-        }
-        case Kind::plugin: {
-            i.plugin = std::make_unique<PluginBody>();
-            ok = parse_plugin_body(body, *i.plugin);
-            break;
-        }
-    }
-    if (!ok) {
-        return unexpected(malformed("kind body is malformed"));
     }
 
     i.raw_json = std::move(raw);
@@ -698,16 +459,10 @@ Result<Manifest> Manifest::parse(std::string_view json, const Limits& /*limits*/
     i.title = std::move(d.title);
     i.description = std::move(d.description);
     i.license = std::move(d.license);
-    i.engine = std::move(d.engine);
     i.requires_features = std::move(d.requires_features);
-    i.requires_capabilities = std::move(d.requires_capabilities);
+    i.tree = std::move(d.tree);
     i.authors = std::move(d.authors);
-    i.cartridge = std::move(d.cartridge);
-    i.template_ = std::move(d.template_);
-    i.kit = std::move(d.kit);
-    i.package = std::move(d.package);
-    i.assets = std::move(d.assets);
-    i.plugin = std::move(d.plugin);
+    i.consumers = std::move(d.consumers);
     i.raw_json = std::move(d.raw_json);
     return m;
 }
@@ -723,7 +478,7 @@ const CartridgeId& Manifest::id() const noexcept
     return impl_->id;
 }
 
-Kind Manifest::kind() const noexcept
+std::string_view Manifest::kind() const noexcept
 {
     return impl_->kind;
 }
@@ -736,6 +491,11 @@ const std::string& Manifest::version() const noexcept
 int Manifest::format_version() const noexcept
 {
     return impl_->format_version;
+}
+
+const EntryPath& Manifest::tree() const noexcept
+{
+    return impl_->tree;
 }
 
 std::optional<std::string_view> Manifest::title() const noexcept
@@ -762,72 +522,37 @@ std::optional<std::string_view> Manifest::license() const noexcept
     return std::nullopt;
 }
 
-const std::optional<CompatRef>& Manifest::engine() const noexcept
-{
-    return impl_->engine;
-}
 
 std::span<const std::string> Manifest::requires_features() const noexcept
 {
     return impl_->requires_features;
 }
 
-std::span<const std::string> Manifest::requires_capabilities() const noexcept
-{
-    return impl_->requires_capabilities;
-}
 
 std::span<const Author> Manifest::authors() const noexcept
 {
     return impl_->authors;
 }
 
-std::optional<std::reference_wrapper<const CartridgeBody>> Manifest::as_cartridge() const noexcept
+std::vector<std::string_view> Manifest::consumers() const
 {
-    if (impl_->cartridge) {
-        return std::cref(*impl_->cartridge);
+    std::vector<std::string_view> out;
+    out.reserve(impl_->consumers.size());
+    for (const auto& [name, _] : impl_->consumers) {
+        out.emplace_back(name);
     }
-    return std::nullopt;
+    return out;   // std::map iterates in key order, so this is sorted
 }
 
-std::optional<std::reference_wrapper<const TemplateBody>> Manifest::as_template() const noexcept
+std::optional<std::string_view> Manifest::consumer(std::string_view id) const noexcept
 {
-    if (impl_->template_) {
-        return std::cref(*impl_->template_);
+    // std::less<> on the map makes this a heterogeneous lookup: no temporary
+    // std::string is constructed to answer a question about a string_view.
+    const auto it = impl_->consumers.find(id);
+    if (it == impl_->consumers.end()) {
+        return std::nullopt;
     }
-    return std::nullopt;
-}
-
-std::optional<std::reference_wrapper<const KitBody>> Manifest::as_kit() const noexcept
-{
-    if (impl_->kit) {
-        return std::cref(*impl_->kit);
-    }
-    return std::nullopt;
-}
-
-std::optional<std::reference_wrapper<const PackageBody>> Manifest::as_package() const noexcept
-{
-    if (impl_->package) {
-        return std::cref(*impl_->package);
-    }
-    return std::nullopt;
-}
-
-std::optional<std::reference_wrapper<const AssetsBody>> Manifest::as_assets() const noexcept
-{
-    if (impl_->assets) {
-        return std::cref(*impl_->assets);
-    }
-    return std::nullopt;
-}
-
-std::optional<std::reference_wrapper<const PluginBody>> Manifest::as_plugin() const noexcept
-{
-    if (impl_->plugin) {
-        return std::cref(*impl_->plugin);
-    }
-    return std::nullopt;
+    return std::string_view{it->second};
 }
 
 std::string_view Manifest::raw_json() const noexcept

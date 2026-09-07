@@ -1,10 +1,11 @@
-# Squared Cartridge Specification, Version 1.0
+# Squared Cartridge Specification, Version 2.0
 
 **Status:** Draft
 **Format identifier:** `squared-cartridge`
-**`format_version`:** `1`
+**`format_version`:** `2`
 **File extension:** `.sq`
 **Media type:** `application/vnd.squared.cartridge+zip` (provisional)
+**Supersedes:** version 1.0. See §0.2.
 
 ---
 
@@ -39,6 +40,47 @@ systems need to read this format. Therefore:
 
 Nothing in this document permits a cartridge to carry generator
 implementation details into a generated project.
+
+### 0.2 Relationship to version 1.0
+
+Version 2.0 is **not backward compatible** and no compatibility path is
+provided. A conforming reader implements exactly one `format_version`
+and MUST refuse any other, in either direction (§12.1 step 4).
+
+Three changes account for the break:
+
+- **Kind bodies are replaced by `consumers` (§5.6).** Version 1.0
+  defined six typed bodies — `template`, `kit`, `package`,
+  `asset-bundle`, `plugin`, `cartridge` — and every field in every one
+  of them was a `squared-pg` or Squared framework concept. A reader
+  implementing this specification therefore had to know the generator's
+  vocabulary, which made §0.1 false in practice: a framework runtime
+  linking a conforming reader acquired `integration_areas` and
+  `project_types` whether it wanted them or not. Version 2.0 moves all
+  of it into namespaced sections a reader carries and never opens.
+- **`kind` is an opaque token (§5.2).** It was a closed set of six. A
+  closed set obliges a reader to know the ecosystem's roles, which is
+  the same defect one level up.
+- **`tree` is a required envelope member (§5.1).** Version 1.0 gave the
+  payload root to templates only, as a kind body field, and left every
+  other kind to a convention the reader could not see.
+
+The break is deliberate and was taken while the ecosystem was small
+enough for the migration to be mechanical. `tree` is required rather
+than defaulted because a defaulted field is invisible in the manifests
+an author learns the format from.
+
+What this costs is worth stating plainly. Version 1.0 could check that
+a cartridge's entry module named a present entry, that an asset
+bundle's declared paths existed, and that a template's ownership globs
+classified every file exactly once. Those were useful checks and they
+are gone, because none of them can be made without knowing a
+consumer's schema. They belong to the consumer now, which can give a
+better diagnostic anyway — it knows what the reference was for.
+
+Readers MUST NOT attempt to upgrade a version 1.0 manifest in place.
+The correct response to one is `cartridge.format_unsupported`, naming
+the version found and the version implemented.
 
 ---
 
@@ -256,53 +298,115 @@ example `SQ-INF/x-vendor-name/`.
 `SQ-INF/manifest.json` is a JSON document encoded as UTF-8 **without**
 a byte order mark. It MUST be a JSON object.
 
-The manifest has a fixed **envelope** common to all kinds, and one
-**kind body** keyed by the value of `kind`.
+The manifest has a fixed **envelope**, common to every kind and fully
+defined here, and an optional **`consumers`** object carrying sections
+this specification does not define (§5.6).
+
+That division is the whole of version 2.0. The envelope is what any
+reader can act on without knowing who the cartridge is for; everything
+else is addressed to someone in particular and carried unopened.
 
 ### 5.1 Envelope
 
 ```json
 {
   "format": "squared-cartridge",
-  "format_version": 1,
+  "format_version": 2,
 
   "kind": "kit",
   "id": "kit.sdl3",
   "version": "1.2.0",
+  "tree": "tree/",
 
   "title": "SDL3 Integration Kit",
   "description": "Bridges the Squared framework to SDL3.",
 
-  "engine": { "id": "squared-pg", "version": ">=0.1.0 <0.2.0" },
   "requires_features": [],
 
   "authors": [ { "name": "Example Studio" } ],
   "license": "MIT",
 
-  "kit": { }
+  "consumers": {
+    "squared_pg": {
+      "requires": { "engine": ">=0.1.0 <0.2.0" }
+    }
+  }
 }
 ```
 
 | Field | Type | Status | Notes |
 |---|---|---|---|
 | `format` | string | REQUIRED | MUST equal `"squared-cartridge"` |
-| `format_version` | integer | REQUIRED | MUST equal `1` for this specification |
-| `kind` | string | REQUIRED | One of the values in §6 |
+| `format_version` | integer | REQUIRED | MUST equal `2` for this specification |
+| `kind` | string | REQUIRED | Opaque role token, §5.2.1 |
 | `id` | string | REQUIRED | Resource identity, §5.2 |
 | `version` | string | REQUIRED | Semantic version, §5.3 |
+| `tree` | string | REQUIRED | Payload root, §5.1.1 |
 | `title` | string | OPTIONAL | Human-facing display name |
 | `description` | string | OPTIONAL | Short prose description |
-| `engine` | object | OPTIONAL | Consuming-engine compatibility |
-| `requires_features` | array of string | OPTIONAL | Critical feature tokens, §5.4 |
+| `requires_features` | array of string | OPTIONAL | Container features the READER must implement, §5.4 |
 | `authors` | array of object | OPTIONAL | `name`, optional `email`, `url` |
 | `license` | string | OPTIONAL | SPDX identifier where one applies |
 | `presentation` | object | OPTIONAL | Paths to thumbnail, icon, and display hints |
 | `provenance` | object | OPTIONAL | §5.5 |
-| *`<kind>`* | object | REQUIRED | The kind body, §6 |
+| `consumers` | object | OPTIONAL | Consumer sections, §5.6 |
 
-A manifest MUST NOT contain a kind body other than the one matching its
-`kind`. A reader encountering a foreign kind body MUST reject the
-cartridge; this prevents a resource from masquerading as two roles.
+Members not listed here are ignored and preserved (§5.4). A reader MUST
+NOT reject a manifest for carrying a member it does not recognise, and
+MUST NOT ascribe meaning to one — in particular, a top-level member
+named after a kind carries no significance in this version.
+
+`format`, `format_version` and `tree` MUST be validated before any
+other member is read (§12.1). Every field after them is interpreted
+under the rules of the version the manifest claims, so that claim is
+not something a reader may defer.
+
+#### 5.1.1 `tree` — the payload root
+
+`tree` names the directory at which the cartridge's payload begins,
+relative to the cartridge root. It has exactly two legal shapes:
+
+- `"."` — the payload begins at the cartridge root.
+- A relative directory path ending in `/`, for example `"tree/"` or
+  `"a/b/"`.
+
+A reader MUST refuse any other form. In particular it MUST refuse a
+path without the trailing separator: `"tree"` is not an accepted
+spelling of `"tree/"`, and a reader MUST NOT normalise one into the
+other. Accepting both spellings would put two ways of writing one path
+into the ecosystem and oblige every reader to canonicalise on the way
+out, or let the two forms diverge in indexes, error messages and
+provenance records.
+
+A reader MUST additionally refuse a `tree` that:
+
+- is absolute, or contains a `.` or `..` component, or contains an
+  empty segment, or contains a character excluded from entry paths by
+  §3.3. Entry paths are validated relative to this prefix, so a payload
+  root that can escape the cartridge defeats every path check below it;
+- begins with `SQ-INF/`. The reserved directory is never payload (§4).
+
+`SQ-INF/` is excluded from the payload regardless of `tree`, including
+when `tree` is `"."`. The exclusion is §4's, and does not depend on the
+payload root happening to point elsewhere.
+
+A `tree` naming a directory the cartridge does not contain is **not** an
+error. A manifest-only cartridge is legal, and a reader that refused
+one could not represent an asset bundle awaiting its assets. A
+validator SHOULD report it as an informational diagnostic, because the
+far more common cause is a misspelling that would otherwise surface as
+a missing-file error somewhere with nothing pointing back at the
+manifest.
+
+**Why the envelope.** A reader must be able to find the payload without
+knowing the kind, and must be able to do so for kinds this version has
+not defined — which, since §5.2.1 makes `kind` opaque, is all of them.
+Version 1.0 placed the field on templates alone and gave the other five kinds prose conventions
+(`bridge/`, `platform/`, `include/`, `assets/`, `lua/`) that no reader
+could act on, so implementations guessed: look for entries under
+`tree/`, otherwise assume the root. That guess was correct for every
+resource that then existed and silently wrong for any cartridge
+shipping an unrelated `tree/` directory. The declaration replaces it.
 
 ### 5.2 Identity
 
@@ -311,22 +415,38 @@ cartridge; this prevents a resource from masquerading as two roles.
 least two segments and no more than eight. `id` is compared
 byte-for-byte; there is no case folding and no aliasing.
 
-For generator-resource kinds, `id` MUST begin with the kind token:
+#### 5.2.1 `kind`
 
-```text
-template.android.cpp
-kit.sdl3
-package.squared.gui
-asset.font.default
-plugin.holodisk
-```
+`kind` is a single identity segment: `[a-z][a-z0-9_]*`, no dots.
 
-For `kind: "cartridge"`, `id` MUST be a reverse-DNS identifier under a
-domain the author controls:
+**This specification does not enumerate legal kinds, and a conforming
+reader MUST NOT reject a `kind` it does not recognise.** A reader
+validates the token's shape and nothing else.
 
-```text
-org.example.starfall
-```
+Version 1.0 defined a closed set of six. The set was wrong to be
+closed for the same reason the kind bodies were wrong to exist: which
+roles the ecosystem has is the ecosystem's question, and a reader that
+answers it cannot open a cartridge for a role invented after it
+shipped. `kind` is closer to a media type than to a schema selector —
+it tells a human or a tool what a cartridge claims to be, without
+either needing to know the claim's contents.
+
+Consumers MAY require particular kinds, and MUST report an unusable
+one themselves rather than expecting the reader to have refused it.
+
+Kind tokens in use at the time of writing, listed as information and
+not as a constraint: `cartridge`, `template`, `kit`, `package`,
+`asset_bundle`, `plugin`.
+
+#### 5.2.2 Identifier prefixes
+
+Prefix conventions — `kit.` for kits, `template.` for templates and so
+on — are **ecosystem policy, not format rules**. Version 1.0 made them
+normative here; enforcing them requires knowing which prefix belongs to
+which role, which is the coupling this version removes.
+
+A conforming reader MUST NOT require or infer any relationship between
+`id` and `kind`. Consumers MAY impose one.
 
 The pair `(id, version)` is the complete identity of a cartridge.
 Nothing else — not the filename, not the directory, not the archive
@@ -399,168 +519,159 @@ support update workflows and debugging, not to describe a build machine.
 
 ---
 
-## 6. Kinds
+### 5.6 `consumers`
 
-A cartridge declares exactly one kind. The kind determines the expected
-payload layout and the schema of the kind body. Payload layout is a
-convention enforced by the kind body's declarations, not by hard-coded
-directory names in the reader.
-
-### 6.1 `cartridge` — a distributable Squared application
-
-Payload convention: `game/`, `assets/`, optional `docs/`.
+`consumers` is an OPTIONAL object carrying data addressed to consuming
+tools. Its keys are consumer identities; its values are sections whose
+contents this specification does not define and a conforming reader
+does not interpret.
 
 ```json
-"cartridge": {
-  "entry": {
-    "module": "game/main.lua",
-    "type": "lua-source",
-    "lua_abi": "lua54"
+"consumers": {
+  "squared_pg": {
+    "project_types": ["application"],
+    "working_directory": "sq_app",
+    "parameters": [
+      { "name": "project_name", "type": "identifier", "required": true }
+    ],
+    "ownership": {
+      "generated": ["mk/squared_generated.mk"],
+      "user": ["sq_app/**"]
+    }
   },
-  "framework": { "version": ">=1.0.0 <2.0.0" },
-  "packages": ["package.squared.core@^1.0.0"],
-  "display": { "orientation": "landscape" },
-  "permissions": []
-}
-```
-
-`entry.module` MUST reference an entry present in the cartridge.
-`permissions` is REQUIRED to be present and MAY be empty; an absent
-`permissions` array MUST be treated as empty, never as "unrestricted".
-
-### 6.2 `template` — a generated-workspace foundation
-
-Payload convention: `tree/` holding the workspace skeleton.
-
-```json
-"template": {
-  "project_types": ["application"],
-  "platforms": ["android"],
-  "tree": "tree/",
-  "processing": { "engine": "sq-template-v1", "delimiters": ["{{", "}}"] },
-  "parameters": [
-    { "name": "project_name", "type": "string", "required": true,
-      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-    { "name": "package_name", "type": "string", "required": true }
-  ],
-  "requires": {
-    "framework": ">=1.0.0",
-    "kits":     { "required": ["kit.android"], "optional": ["kit.sdl3"] },
-    "packages": ["package.squared.core"]
-  },
-  "ownership": {
-    "generated": ["CMakeLists.txt", "sq_app_android/**"],
-    "user":      ["sq_app/src/**", "sq_app/include/**"],
-    "shared":    ["README.md", ".clang-format"]
+  "squared_framework": {
+    "entry": { "module": "game/main.lua", "lua_abi": "lua54" }
   }
 }
 ```
 
-`ownership` is normative and is the manifest-level expression of
-§2.7.10 and §2.7.11. Patterns are glob patterns over paths relative to
-the generated workspace root. Every materialised path MUST match
-exactly one classification; overlapping patterns are a validation error.
-A regeneration workflow MUST NOT overwrite a path classified `user`.
+#### What a reader MUST check
 
-A template MUST NOT declare parameters it does not use, and MUST NOT
-obtain missing parameter values by any means — the engine returns a
-structured validation error and Lua decides (§2.7.3).
+1. `consumers`, if present, is an object.
+2. Each key is a consumer identity: dotted segments matching
+   `[a-z][a-z0-9_]*`, at most 128 characters.
+3. Each value is an object.
+4. The whole is within the reader's `Limits` (§3.4) for nesting depth
+   and size.
 
-### 6.3 `kit` — external framework or platform integration
+#### What a reader MUST NOT do
 
-Payload convention: `bridge/`, `platform/`, `build/`.
+A reader MUST NOT interpret, validate, transform, reorder or reject a
+section's contents. It MUST NOT require any particular key to be
+present, and a section addressed to a consumer the reader has never
+heard of is not an error — it is the mechanism working.
+
+A reader MUST make each section retrievable by identity, and MUST
+preserve member order within a section. Insignificant whitespace need
+not be preserved.
+
+#### Why an object, and why namespaced
+
+The values are objects rather than string pairs because a consumer's
+data is not flat. `parameters` is an array of objects and `ownership`
+is an object of arrays; expressing either as key/value strings means
+encoding JSON inside a JSON string, and the consumer then parses JSON
+out of a string it got from a JSON parser. An object permits flat
+key/value for consumers that want it while not forbidding structure to
+those that don't.
+
+Namespacing costs one level of nesting and removes a whole class of
+collision. Two consumers both wanting a member called `entry` is not a
+hypothetical; `squared-pg` and the Squared framework runtime are
+different programs reading the same cartridge.
+
+#### Absent is not empty
+
+A consumer finding no section addressed to it MUST report that, rather
+than proceeding with defaults it invented. "This cartridge was not
+prepared for me" and "this cartridge asks nothing of me" are different
+facts and lead to different, correct behaviours.
+
+#### `engine` and `requires_capabilities` moved here
+
+Both were envelope members through version 1.0 and survive only as
+consumer data:
 
 ```json
-"kit": {
-  "external": { "id": "sdl3", "version": ">=3.0.0" },
-  "provides": ["graphics", "input", "windowing"],
-  "platforms": ["desktop", "android"],
-  "compatible_templates": ["template.android.cpp", "template.desktop.cpp"],
-  "requires": {
-    "framework": ">=1.0.0",
-    "packages": ["package.squared.core"],
-    "kits": []
-  },
-  "integration_areas": [
-    "build.cmake.targets",
-    "app.entrypoint",
-    "platform.android.manifest"
-  ],
-  "ownership": { "generated": ["sq_bridge/**"] }
-}
-```
-
-`integration_areas` is REQUIRED. It is the declared set of generated
-project areas the kit writes to, and it is the mechanism by which
-§2.7.4's conflict rule becomes checkable: if two selected kits declare
-the same integration area and neither declares the other compatible,
-the engine MUST report a structured compatibility error **before** any
-filesystem mutation.
-
-### 6.4 `package` — reusable Squared framework functionality
-
-Payload convention: `include/`, `src/`, `build/`.
-
-```json
-"package": {
-  "provides": ["graphics-api", "rendering-services"],
-  "platforms": ["desktop", "android"],
-  "requires": {
-    "framework": ">=1.0.0",
-    "packages": ["package.squared.core@^1.0.0"],
-    "kits": []
-  },
-  "layout": { "include": "include/", "src": "src/", "build": "build/" },
-  "build": { "system": "cmake", "targets": ["Squared::Graphics"] },
-  "features": {
-    "vulkan": { "default": true },
-    "opengl": { "default": false }
+"consumers": {
+  "squared_pg": {
+    "requires": {
+      "engine": ">=0.1.0 <0.2.0",
+      "capabilities": ["capability.project.plan@^1.0"]
+    }
   }
 }
 ```
 
-### 6.5 `asset-bundle` — reusable project data
+`engine` carried an `id` naming the tool it was addressed to, which is
+what a `consumers` key already says — the member was restating the
+section it belonged inside. And every `requires_capabilities` token
+that has been written names a `squared-pg` capability, in a namespace
+a reader can shape-check but never resolve.
 
-Payload convention: `assets/`.
+A reader therefore no longer validates a capability token's grammar. A
+malformed one reaches the consumer, which owns the namespace and can
+report which capability is missing and what provides it. A reader
+could only ever report that a string it did not understand was shaped
+wrongly.
 
-```json
-"assets": {
-  "requires": { "packages": ["package.squared.graphics"] },
-  "entries": [
-    { "id": "asset.texture.player",
-      "path": "assets/textures/player.png",
-      "type": "texture", "format": "png",
-      "platforms": ["desktop", "android"] }
-  ]
-}
-```
+**`requires_features` stays in the envelope**, and the contrast is the
+point of §5.4:
 
-Each declared asset carries its own identity. This is what lets Lua
-request `asset.texture.player` without knowing which bundle provides it
-or where it sits on disk. An `entries` element whose `path` is absent
-from the cartridge is a validation error.
+| | Guards | Fails |
+|---|---|---|
+| `requires_features` | the **reader** | at `open()`, before anything else |
+| a consumer's `requires` | the **consumer** | when that consumer resolves it |
 
-### 6.6 `plugin` — a `squared-pg` extension
+A cartridge whose reader is too old cannot be opened at all, and only
+this specification can define what a reader must implement. A cartridge
+whose consumer is too old opens fine and must be refused later, by the
+consumer, in code this document does not govern.
 
-Payload convention: `lua/`, optional `resources/`.
+---
 
-```json
-"plugin": {
-  "extends": "squared-pg",
-  "api_version": 1,
-  "entry": "lua/init.lua",
-  "provides_services": ["template-processor.mustache"],
-  "requires": { "engine_capabilities": ["service.template.processor.v1"] }
-}
-```
+## 6. Kinds — retired
 
-This is the packaging half of the extension service model in §2.4.3. A
-plugin declares its identity, version, compatibility and exposed
-services, which is exactly what that section requires of an extension
-service. A missing optional plugin MUST be reported and MUST NOT
-prevent the engine reaching the Ready state.
+This section defined six kind bodies in version 1.0: `cartridge`,
+`template`, `kit`, `package`, `asset-bundle` and `plugin`.
 
-Plugins are Lua and data only in v1. See §8.
+It is retained as a numbered heading, with no normative content, so
+that every later section keeps the number it has carried since 1.0.
+Cross-references to §7 through §14 appear in source comments, in
+consuming projects and in this document; renumbering to close a gap
+would invalidate all of them to save one line of explanation.
+
+**`kind` is now an opaque token (§5.2.1) and kind bodies are now
+consumer sections (§5.6).**
+
+### 6.1 Where each body went
+
+Every field of every version 1.0 kind body now belongs in a
+`consumers` section:
+
+| Version 1.0 kind body | Where it lives now |
+|---|---|
+| `template` | `consumers.squared_pg` |
+| `kit` | `consumers.squared_pg` |
+| `package` | `consumers.squared_pg` |
+| `asset-bundle` | `consumers.squared_pg` |
+| `plugin` | `consumers.squared_pg` |
+| `cartridge` | `consumers.squared_framework` |
+
+Their schemas are normative in the documents owned by those consumers,
+not here. This specification has no opinion about whether a template
+must declare `parameters`, because it does not know what a template is.
+
+
+### 6.2 Payload layout
+
+Version 1.0 also gave each kind a customary payload layout — `bridge/`
+and `platform/` for kits, `include/` and `src/` for packages, and so
+on. Those conventions were prose a reader could not act on, and the
+guesswork they invited is what `tree` (§5.1.1) replaces.
+
+Layout below the payload root is a consumer's concern. A consumer that
+needs sub-roots declares them in its own section.
 
 ---
 
@@ -724,24 +835,51 @@ allocation proportional to attacker-controlled input.
 1. Container — ZIP profile (§3.1), first-entry rule (§3.2).
 2. Paths — every entry path against §3.3, before any read.
 3. Limits — §3.4, enforced during read, not after.
-4. Manifest — well-formed JSON, envelope schema, `format_version`.
+4. Manifest envelope — well-formed JSON; then, in order, `format`,
+   `format_version` and `tree` (§5.1.1). A reader MUST reject a
+   `format_version` it does not implement here, before reading any
+   further member, and MUST NOT accept an older version by ignoring
+   fields it lacks. Every member below this point is read on the
+   strength of the manifest claiming a format the reader implements.
+   The remaining envelope members follow.
 5. Features — `requires_features` against reader capability.
-6. Kind — kind body schema, single-kind rule.
-7. Payload — declared paths exist; prohibited entries absent (§8).
+6. Consumers — `consumers` is an object, its keys are well-formed
+   identities, its values are objects (§5.6). Contents are not
+   inspected. Version 1.0 checked a kind body schema and a single-kind
+   rule here; both are retired with the bodies (§6).
+7. Payload — prohibited entries absent (§8). Version 1.0 also checked
+   that manifest-declared paths existed, which required knowing which
+   members of a kind body were paths. That check is a consumer's now.
 8. Integrity — `hashes.json` if present.
 9. Compatibility — engine, framework and dependency ranges. Requires
    a resolution context and is therefore the Package, Kit and Template
    Services' concern rather than the reader's.
 
-Steps 1–8 are decidable from the cartridge alone. Step 9 is not, which
-is why it belongs to the engine services and not to `sqcart`.
+Steps 1–8 are decidable from the cartridge alone, **and decidable
+without knowing any consumer**. That second property is what version
+2.0 restored: several 1.0 checks were decidable from the cartridge yet
+required a consumer's schema to perform, which made them look like
+container rules while acting as coupling.
+
+Step 9 is decidable from neither, which is why it belongs to the
+consuming engine's services.
+
+Step 4's ordering is normative rather than an optimisation. A reader
+that defers the version check to a later validation pass parses a
+foreign manifest to completion against the wrong version's rules, and
+reports the mismatch only if the caller asks for validation at all —
+so a cartridge from an unknown format opens successfully and fails
+somewhere with no reference to the manifest.
 
 ### 12.2 Conformance levels
 
 - **Strict** — every MUST enforced. Required for anything entering a
   generation pipeline or being executed.
 - **Lenient** — steps 1–4 enforced; later violations reported as
-  diagnostics. For inspection and authoring tools only.
+  diagnostics. For inspection and authoring tools only. Note that
+  step 4 includes the version check, so lenient conformance does not
+  admit a foreign `format_version`: there is no mode in which a reader
+  interprets a format it does not implement.
 
 A reader MUST default to strict and MUST require an explicit caller
 opt-in for lenient.
@@ -761,7 +899,7 @@ Cartridge errors map onto the engine error categories of §2.4.8.
 | `cartridge.manifest_malformed` | `validation_error` | Not valid JSON, or envelope violation |
 | `cartridge.format_unsupported` | `compatibility_error` | Unknown `format_version` |
 | `cartridge.feature_unsupported` | `compatibility_error` | Unimplemented `requires_features` token |
-| `cartridge.kind_invalid` | `validation_error` | Unknown kind, or foreign kind body |
+| `cartridge.kind_invalid` | `validation_error` | Malformed `kind` token (§5.2.1). Never raised for an *unrecognised* kind |
 | `cartridge.payload_missing` | `validation_error` | Manifest references an absent entry |
 | `cartridge.native_code_prohibited` | `validation_error` | §8 violation |
 | `cartridge.integrity_failed` | `resource_error` | Digest mismatch |
@@ -791,7 +929,7 @@ neither capability is in the C++20 standard library.
 
 `std::filesystem` for exploded-form traversal, `std::span` over mapped
 entry bytes, `std::expected` for the result channel, `std::variant` for
-the kind body, `std::ranges` for the sort in §9.2, `std::array` for
+the consumer sections, `std::ranges` for the sort in §9.2, `std::array` for
 digest storage. No manual `new`/`delete`; the miniz archive handle is
 owned by a `std::unique_ptr` with a custom deleter.
 
@@ -838,11 +976,18 @@ appears across the integrity API.
 Reserved under `SQ-INF/`: `manifest.json`, `hashes.json`,
 `thumbnail.png`, `icon.png`, `licenses/`, `signatures/`, `targets/`.
 
-Reserved kind tokens: `cartridge`, `template`, `kit`, `package`,
-`asset-bundle`, `plugin`.
+**No kind tokens are reserved.** `kind` is opaque (§5.2.1) and this
+specification does not enumerate roles. The tokens in use today are
+listed there as information.
 
-Reserved `id` prefixes: `template.`, `kit.`, `package.`, `asset.`,
-`plugin.`, `squared.`, `sq.`.
+**No `id` prefixes are reserved.** Prefix conventions are ecosystem
+policy (§5.2.2), enforced by consumers if at all. Version 1.0 reserved
+`template.`, `kit.`, `package.`, `asset.`, `plugin.`, `squared.` and
+`sq.`; enforcing them required knowing which prefix belonged to which
+role.
+
+Consumer identities are not reserved either, and collisions between
+them are resolved socially rather than by this document.
 
 ---
 
@@ -874,7 +1019,34 @@ provisional answer above, marked here so it is not mistaken for settled.
    document — is more faithful to the independence requirement but
    doubles the attack surface for path-safety bugs.
 
-5. **Whether `cartridge` belongs in this specification at all.** The
+5. **Whether the envelope still keeps too much.** *Settled during 2.0
+   drafting, recorded because the reasoning generalises.* `engine` and
+   `requires_capabilities` were kept on the argument that a foreign tool
+   could act on them without knowing whose namespace they named. The data
+   refuted it: `engine.id` was `"squared-pg"` in every manifest in
+   existence, and every capability token was in that same namespace. Both
+   moved into `consumers` (§5.6).
+
+   The test that settled it is reusable: **if a member's value identifies
+   the consumer it is addressed to, the member belongs inside that
+   consumer's section.** `requires_features` passes the test — it names
+   what a *reader* must implement, and readers are what this document
+   defines. `presentation` and `provenance` also pass, though `provenance`
+   is worth revisiting: its `generator`, `template` and `kits` members are
+   squared-pg vocabulary, and it survives only because a foreign tool
+   genuinely can display "made by X version Y" without understanding any
+   of it.
+
+6. **Whether the shared schema is a real loss.** Version 1.0's §6 was
+   a contract two independent implementations could be written
+   against, which is the JAR precedent: jar manifests do standardise
+   attributes. Version 2.0 gives that up. Nothing now mechanically
+   enforces that two tools agree on what a `squared_pg` section
+   contains, and the consuming project's own conformance tests become
+   the only enforcement. This was accepted deliberately; it should not
+   be forgotten.
+
+7. **Whether `cartridge` belongs in this specification at all.** The
    generator kinds are squared-pg's concern; the runtime application
    kind is the framework's. They share a container, which is the
    argument for one document. If the framework's cartridge needs

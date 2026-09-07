@@ -64,10 +64,11 @@ fs::path make_workspace()
 
     std::ofstream(root / "cart" / "SQ-INF" / "manifest.json") << R"({
   "format": "squared-cartridge",
-  "format_version": 1,
-  "kind": "asset-bundle",
+  "format_version": 2,
+  "kind": "asset_bundle",
   "id": "asset.linktest",
   "version": "1.0.0",
+  "tree": ".",
   "assets": {
     "entries": [
       { "id": "asset.real", "path": "src/real.txt", "type": "data" }

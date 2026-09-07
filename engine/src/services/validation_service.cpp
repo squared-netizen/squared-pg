@@ -12,6 +12,23 @@
 namespace squared::pg {
 namespace {
 
+/// Strings out of a Value array, skipping anything that is not one.
+///
+/// A local copy: resolve_services.cpp has the same helper in its own
+/// anonymous namespace. Two four-line functions is cheaper than a header for
+/// them, and this file gained its first need for one only when format 2 moved
+/// these fields out of typed bodies.
+[[nodiscard]] std::vector<std::string> string_list(const Value& value) {
+    std::vector<std::string> out;
+    if (const Array* array = value.as_array(); array != nullptr) {
+        out.reserve(array->size());
+        for (const Value& item : *array) {
+            if (auto s = item.as_string()) out.emplace_back(*s);
+        }
+    }
+    return out;
+}
+
 [[nodiscard]] EngineError missing_inputs(const std::vector<std::string>& missing) {
     EngineError error = make_error(ErrorCategory::configuration, "configuration.input.missing",
                                    "the generation request is missing required inputs");
@@ -156,7 +173,7 @@ Result<void> ValidationService::validate_parameters(const ResolvedResource& proj
     std::vector<std::string> missing;
     Value invalid = Value::array();
 
-    for (const sqcart::TemplateBody::Parameter& spec : TemplateService::parameters(project_template)) {
+    for (const TemplateParameter& spec : TemplateService::parameters(project_template)) {
         const Value* supplied = parameters.find(spec.name);
         if (supplied == nullptr || supplied->is_null()) {
             if (spec.required) missing.push_back(spec.name);
@@ -237,8 +254,7 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
     // (`integration_arity`), defaulting to `single` — the conservative
     // reading, since a false conflict is reported and a missed one corrupts.
     const Value arity_map =
-        detail::manifest_extension(set.project_template.cartridge->manifest(), "template",
-                                   "integration_arity");
+        detail::manifest_extension(set.project_template.cartridge->manifest(), "integration_arity");
 
     std::map<std::string, std::vector<std::string>> contributors;
     for (const ResolvedResource& kit : set.kits) {
@@ -267,7 +283,7 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
     std::set<std::string> present;
     for (const ResolvedResource& kit : set.kits) present.insert(kit.id().str());
     for (const ResolvedResource& kit : set.kits) {
-        const Value conflicts = detail::manifest_extension(kit.cartridge->manifest(), "kit", "conflicts_with");
+        const Value conflicts = detail::manifest_extension(kit.cartridge->manifest(), "conflicts_with");
         if (const Array* array = conflicts.as_array()) {
             for (const Value& item : *array) {
                 auto other = item.as_string();
@@ -290,9 +306,9 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
     std::set<std::string> resolved_packages;
     for (const ResolvedResource& package : set.packages) resolved_packages.insert(package.id().str());
     for (const ResolvedResource& kit : set.kits) {
-        auto body = kit.cartridge->manifest().as_kit();
-        if (!body) continue;
-        for (const std::string& required : body->get().required_packages) {
+        const std::vector<std::string> required_packages =
+            string_list(detail::manifest_extension(kit.cartridge->manifest(), "requires.packages"));
+        for (const std::string& required : required_packages) {
             if (resolved_packages.count(required) == 0) {
                 diagnostics.push_back(
                     Diagnostic{Severity::warning,
@@ -305,9 +321,11 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
 
     // --- required kits -----------------------------------------------------
     {
-        auto body = set.project_template.cartridge->manifest().as_template();
-        if (body) {
-            for (const std::string& required : body->get().required_kits) {
+        const std::vector<std::string> required_kits = string_list(
+            detail::manifest_extension(set.project_template.cartridge->manifest(),
+                                       "requires.kits.required"));
+        {
+            for (const std::string& required : required_kits) {
                 if (present.count(required) == 0) {
                     EngineError error =
                         make_error(ErrorCategory::compatibility, "template.kit.required",
@@ -316,7 +334,7 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
                     error.resource    = set.project_template.id().str();
                     error.recoverable = true;
                     Value detail      = Value::object();
-                    detail.set("required_kits", Value::strings(body->get().required_kits));
+                    detail.set("required_kits", Value::strings(required_kits));
                     detail.set("selected", Value::strings(std::vector<std::string>(present.begin(),
                                                                                    present.end())));
                     error.diagnostics = std::move(detail);

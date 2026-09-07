@@ -15,6 +15,18 @@ local args = {}
 -- Options that may be given more than once accumulate into a list. Everything
 -- else takes the last value, because "the last one wins" is what every shell
 -- user already expects from a repeated flag.
+-- Options that take no value. A switch not listed here swallows the next
+-- argument, which for `sqpg promote --explain name` would silently consume
+-- the workspace name and then complain that promote needs one.
+local switches = {
+  help = true,
+  json = true,
+  quiet = true,
+  verbose = true,
+  explain = true,
+  ["no-git"] = true,
+}
+
 local repeatable = {
   kit = true,
   package = true,
@@ -29,6 +41,7 @@ local aliases = {
   o = "out",
   p = "param",
   h = "help",
+  j = "jobs",
 }
 
 --- Split `key=value` into two parts. Returns nil when there is no `=`.
@@ -91,7 +104,7 @@ function args.parse(argv)
       if value == nil then
         -- Boolean switches take no value. Treating a following argument as a
         -- value for them would swallow the next command.
-        if name == "help" or name == "json" or name == "quiet" or name == "verbose" then
+        if switches[name] then
           value = "true"
         else
           value = argv[index + 1]

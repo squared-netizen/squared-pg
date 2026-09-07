@@ -23,7 +23,7 @@ install → run, on a phone, with no Gradle and no Java.
 
 ## 0. Done since this was written
 
-- **Tooling ported to bash** (D-043). `release.sh`, `clang-check.sh`,
+- **Tooling ported to bash** (D-044). `release.sh`, `clang-check.sh`,
   `lua-check.sh`. The fish versions had two bugs that only appeared when run,
   and could not be run where they were written. The bash form is testable by
   whoever writes it, which is the whole point.
@@ -41,13 +41,13 @@ install → run, on a phone, with no Gradle and no Java.
 
 *This is the item most likely to be skipped and most expensive to skip.*
 
-Fifteen decisions — **D-028 through D-042** — are recorded in
+Sixteen decisions — **D-029 through D-044** — are recorded in
 `docs/spec/_meta/Spec decisions.md`, and most of them end with "amend §X".
 None of the amendments has been made. The specification and the implementation
 now disagree in fifteen documented places, which means the spec has stopped
 being the thing you can read to understand the system.
 
-The largest is **D-029**: §2.8.1–2.8.3 describe a manifest envelope the engine
+The largest is **D-030**: §2.8.1–2.8.3 describe a manifest envelope the engine
 does not implement, because the engine reads cartridges instead. §2.8 needs
 rewriting to say that generator resources *are* cartridges.
 
@@ -183,7 +183,7 @@ behind them, and a design with one implementation is a hypothesis.
 1. Tag the alpha, watch CI. *(hours)*
 2. **`kit.sfml`** — validates `render.backend`, and gives the framework a
    backend to be designed against.
-3. Run the spec audit and apply D-028…D-042. *(a focused pass; cheap in code,
+3. Run the spec audit and apply D-029…D-044. *(a focused pass; cheap in code,
    expensive to postpone)*
 4. **Q-23** against a working SFML backend: how a project acquires the
    framework offline, and what that makes of package materialisation.
