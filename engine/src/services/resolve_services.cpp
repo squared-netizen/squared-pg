@@ -142,6 +142,30 @@ namespace {
         return Unexpected{not_found(category, std::string{code_prefix} + ".not_found", ref, index, kind)};
     }
 
+    // Ambiguity is refused here, not at index time (D-058). The index holds
+    // the first copy and warns; a request for that identity has to fail,
+    // because the two copies may differ in ways nothing downstream would
+    // notice and picking one would be a silent override.
+    //
+    // The error names both paths. "Two resources declare the same identity"
+    // without saying which two leaves the reader to rediscover what the tool
+    // already knew.
+    if (const ResourceConflict* conflict = index.conflict_for(ref.id); conflict != nullptr) {
+        EngineError error = make_error(ErrorCategory::resource, "resource.identity.duplicate",
+                                       "two resources declare the identity " + ref.id.str() + '@' +
+                                           conflict->version.to_string() +
+                                           "; refusing to guess which was meant");
+        error.resource    = ref.id.str();
+        Value detail      = Value::object();
+        detail.set("first", conflict->kept.string());
+        detail.set("second", conflict->discarded.string());
+        detail.set("hint",
+                   "remove one, or point the resource roots at only one of them; "
+                   "`sqpg list` works and will show what is indexed");
+        error.diagnostics = std::move(detail);
+        return Unexpected{std::move(error)};
+    }
+
     const ResourceRecord* record = index.select(ref.id, *range);
     if (record == nullptr) {
         return Unexpected{

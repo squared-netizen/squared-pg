@@ -106,7 +106,53 @@ void indexing() {
 
 }  // namespace
 
+/// A duplicate identity warns; it does not stop the index (D-058).
+///
+/// It used to fail `build_index`, which meant a duplicate anywhere stopped
+/// the tool before it did anything -- including `sqpg list`, the command you
+/// reach for to find out where the duplicate is. An index that refuses to be
+/// inspected because it contains a problem is the worst shape for diagnosing
+/// that problem.
+void duplicate_identity_is_deferred() {
+    ResourceIndex index;
+
+    ResourceRecord first;
+    first.id       = ResourceId::parse("template.probe").value();
+    first.version  = Version::parse("1.0.0").value();
+    first.kind     = ResourceKind::project_template;
+    first.location = "/a/template.probe";
+
+    ResourceRecord second = first;
+    second.location = "/b/template.probe";
+
+    CHECK(!index.insert(first).has_value());          // no conflict
+
+    const auto clash = index.insert(second);
+    CHECK(clash.has_value());
+    if (clash) {
+        // Both paths, because "two resources declare the same identity"
+        // without saying which two leaves the reader to rediscover what the
+        // tool already knew.
+        CHECK(clash->kept == std::filesystem::path{"/a/template.probe"});
+        CHECK(clash->discarded == std::filesystem::path{"/b/template.probe"});
+    }
+
+    // The index is usable. This is the whole point: the first copy is held,
+    // the second dropped, and everything that does not touch the ambiguous
+    // identity keeps working.
+    CHECK(index.size() == 1);
+    CHECK(index.of_kind(ResourceKind::project_template).size() == 1);
+
+    // And resolution can find out. §2.8.1's prohibition on silent override is
+    // kept here rather than at insert: refused where a wrong answer would do
+    // harm, not where any answer would do.
+    CHECK(index.conflict_for(first.id) != nullptr);
+    CHECK(index.conflict_for(ResourceId::parse("template.other").value()) == nullptr);
+    CHECK(index.conflicts().size() == 1);
+}
+
 int main() {
+    duplicate_identity_is_deferred();
     states();
     registry();
     indexing();

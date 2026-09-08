@@ -98,8 +98,13 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
         if (!opened) {
             // A malformed resource is reported and skipped. Failing the whole
             // engine because one third-party kit is broken would make the
-            // generator unusable for a reason the user did not cause; a
-            // *duplicate identity* is different and does fail (§2.8.1).
+            // generator unusable for a reason the user did not cause.
+            //
+            // A duplicate identity is handled the same way as of D-058:
+            // reported here, refused at resolution. §2.8.1's prohibition on
+            // silent override is kept where it matters -- nothing is
+            // overridden silently, it is refused at the point where a wrong
+            // answer would do harm.
             diagnostics.push_back(Diagnostic{Severity::warning,
                                              "skipping unreadable resource: " + opened.error().message,
                                              {},
@@ -190,8 +195,21 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
                                              record.id.str(), location.string()});
         }
 
-        if (auto inserted = index_.insert(std::move(record)); !inserted) {
-            return inserted;
+        // A duplicate identity is reported and the first copy kept, rather
+        // than failing the index. Failing meant a duplicate anywhere stopped
+        // the tool before it did anything -- including `sqpg list`, the
+        // command you reach for to find out where the duplicate is (D-058).
+        //
+        // The warning names both paths, because "two resources declare the
+        // same identity" without saying which two is a fact you then have to
+        // go and rediscover.
+        if (auto conflict = index_.insert(std::move(record)); conflict) {
+            diagnostics.push_back(Diagnostic{
+                Severity::warning,
+                "duplicate identity " + conflict->id.str() + '@' + conflict->version.to_string()
+                    + "; keeping " + conflict->kept.string() + ", ignoring "
+                    + conflict->discarded.string(),
+                conflict->id.str(), conflict->discarded.string()});
         }
     }
 

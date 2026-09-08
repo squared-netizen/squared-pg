@@ -404,23 +404,27 @@ Value ResourceRecord::to_public_value() const {
     return out;
 }
 
-Result<void> ResourceIndex::insert(ResourceRecord record) {
+std::optional<ResourceConflict> ResourceIndex::insert(ResourceRecord record) {
     const auto clash = std::find_if(records_.begin(), records_.end(), [&](const ResourceRecord& existing) {
         return existing.id == record.id && existing.version == record.version;
     });
     if (clash != records_.end()) {
-        EngineError error = make_error(ErrorCategory::resource, "resource.identity.duplicate",
-                                       "two resources declare the same identity and version: " +
-                                           record.id.str() + '@' + record.version.to_string());
-        error.resource    = record.id.str();
-        Value detail      = Value::object();
-        detail.set("first", clash->location.string());
-        detail.set("second", record.location.string());
-        error.diagnostics = std::move(detail);
-        return Unexpected{std::move(error)};
+        // The first wins and the second is dropped. Discovery order is
+        // deterministic (§2.8.4), so which one that is stays stable across
+        // machines -- important only because an unstable answer would make
+        // the conflict report itself unreproducible.
+        ResourceConflict conflict{record.id, record.version, clash->location, record.location};
+        conflicts_.push_back(conflict);
+        return conflict;
     }
     records_.push_back(std::move(record));
-    return {};
+    return std::nullopt;
+}
+
+const ResourceConflict* ResourceIndex::conflict_for(const ResourceId& id) const {
+    const auto found = std::find_if(conflicts_.begin(), conflicts_.end(),
+                                    [&](const ResourceConflict& c) { return c.id == id; });
+    return found == conflicts_.end() ? nullptr : &*found;
 }
 
 std::vector<const ResourceRecord*> ResourceIndex::versions_of(const ResourceId& id) const {

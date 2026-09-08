@@ -181,16 +181,31 @@ assemble)
 
     # Link the namespace directories beside generator/, so `resources/` reads
     # as the resource directory rather than as a place two repositories meet.
-    if [ -d resources/.squared/resources ]; then
+    #
+    # Two layouts accepted. The `squared` repository originally held its four
+    # kinds under a `resources/` directory of its own, which made the link
+    # target `.squared/resources/kits`; flattening them to its root makes it
+    # `.squared/kits`. Both are supported so the two repositories can be
+    # updated in either order -- the pins already make their versions
+    # independent, and a bootstrap that only understood one of them would turn
+    # a `git mv` in another repository into a coordinated release.
+    inner=""
+    if [ -d resources/.squared/templates ]; then
+        inner=""
+    elif [ -d resources/.squared/resources/templates ]; then
+        inner="resources/"
+    fi
+
+    if [ -d resources/.squared ] && [ -d "resources/.squared/${inner}templates" ]; then
         for kind in templates kits packages assets; do
             target="resources/$kind"
             if [ -e "$target" ] && [ ! -L "$target" ]; then
                 printf '  %-10s %s exists and is not a link; leaving it\n' "$kind" "$target"
                 continue
             fi
-            ln -sfn ".squared/resources/$kind" "$target"
+            ln -sfn ".squared/${inner}$kind" "$target"
         done
-        printf '  linked     templates kits packages assets -> .squared/resources/\n'
+        printf '  linked     templates kits packages assets -> .squared/%s\n' "$inner"
     fi
 
     # No symlink and no copy. The engine scans squared/resources directly

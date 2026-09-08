@@ -859,3 +859,66 @@ Emptying a tier recreates it. An environment without its tiers is broken and
 the next `sqpg new` would fail on a missing directory. `--environment` does
 not recreate `.sqpg`: restoring it would mean copying back a binary the caller
 just asked to delete, and it is one `sqpg initialize` away.
+
+---
+
+## D-058 — A duplicate identity warns at indexing and fails at resolution
+
+[[2.8 Templates]]
+
+§2.8.1 made a duplicate `(id, version)` an initialization failure. The index
+now keeps the first copy, records the conflict, and reports it as a warning;
+a *request* for that identity fails.
+
+**The prohibition is preserved where it matters.** Nothing is silently
+overridden: an ambiguous identity is refused at the point where a wrong answer
+would do harm, rather than at the point where any answer would do.
+
+What the old rule cost, from a real session: a duplicate produced by a
+mis-shaped install stopped `sqpg` before it did anything — including
+`sqpg list`, which is the command you reach for to find out where the
+duplicate is. **An index that refuses to be inspected because it contains a
+problem is the worst possible shape for diagnosing that problem.**
+
+Both diagnostics name both paths. "Two resources declare the same identity"
+without saying which two leaves the reader to rediscover what the tool already
+knew.
+
+Which copy is kept is the first in discovery order, which §2.8.4 already
+requires to be deterministic — not because the first deserves to win, but
+because an unstable answer would make the conflict report itself
+unreproducible.
+
+---
+
+## D-059 — `resources/` reads as the resource directory
+
+[[2.7 Project generation model]]
+
+```
+resources/
+  .squared/     the squared clone, hidden
+  templates/ kits/ packages/ assets/   -> links into it
+  generator/    squared-pg's own
+```
+
+Three layouts were tried. The root (wrong: `squared` is not source), then
+`resources/squared/` (wrong: `resources/squared/resources/kits` is three
+levels to say one thing).
+
+The error in both was letting the directory tree record which repository each
+file came from. Git already knows that, and the layout's job is to say what
+things *are*.
+
+The engine tests `is_directory`, which follows symlinks, so a linked namespace
+scans exactly like a real one and the index cannot tell the difference. Host
+roots went back to two.
+
+`sqpg initialize` copies named entries with `-L` rather than `resources/.` —
+the latter carried the hidden clone along and gave an installed tree holding
+every template twice, through the links and through the clone they point into.
+
+`tools/bootstrap.sh` accepts the four kinds at `.squared/` or at
+`.squared/resources/`, so the `squared` repository can flatten its own layout
+whenever without a coordinated release. The pins already make the two versions
+independent; a bootstrap that understood only one would have undone that.
