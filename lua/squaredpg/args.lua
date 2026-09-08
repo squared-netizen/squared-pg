@@ -27,6 +27,12 @@ local switches = {
   sandbox = true,
   environment = true,
   ["no-git"] = true,
+  -- `version` is also a value-taking option for `new`. As a bare switch it
+  -- reports the engine's version, which is what `sqpg --version` means
+  -- everywhere else; the value form still works because a switch only
+  -- swallows the next argument when it is absent from this table, and
+  -- `--version=1.2.3` carries its value inline.
+  version = true,
 }
 
 local repeatable = {

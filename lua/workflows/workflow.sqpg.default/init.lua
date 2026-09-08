@@ -19,6 +19,7 @@ local envmod = require("squaredpg.env")
 local drive = require("squaredpg.drive")
 local lifecycle = require("squaredpg.lifecycle")
 local destruct = require("squaredpg.destruct")
+local doctor = require("squaredpg.doctor")
 
 local usage = [[
 sqpg -- offline-first project generator for the Squared framework
@@ -30,6 +31,7 @@ usage:
   sqpg show <id>                              resolve one resource and describe it
   sqpg inspect <workspace>                    read a workspace metadata record
   sqpg verify [workspace]                     check a workspace against its record
+  sqpg doctor                                 report what is assembled, installed and stale
   sqpg describe                               engine version, services, capabilities
   sqpg operations                             enumerate the control surface
 
@@ -75,6 +77,17 @@ if #parsed.errors > 0 then
     report.err("sqpg: " .. message)
   end
   return 2
+end
+
+-- `sqpg --version` before the help branch, which would otherwise absorb it:
+-- a bare --version has no command, and "no command" prints usage.
+--
+-- The version lives on `engine`, not on `sqpg`, and it is a function rather
+-- than a string. `sqpg` carries host facts -- cwd, executable, installation;
+-- `engine` carries the engine's own, which is where a version belongs.
+if parsed.options.version ~= nil and parsed.command == nil then
+  report.out("sqpg " .. engine.version())
+  return 0
 end
 
 if parsed.options.help or parsed.command == nil or parsed.command == "help" then
@@ -447,6 +460,10 @@ function commands.demote()
     root    = parsed.options.root,
     explain = parsed.options.explain ~= nil,
   }, report)
+end
+
+function commands.doctor()
+  return doctor.run({}, report)
 end
 
 function commands.selfdestruct()

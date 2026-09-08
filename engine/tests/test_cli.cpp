@@ -501,6 +501,40 @@ void selfdestruct_token_tracks_the_inventory() {
     CHECK(!fs::exists(sysroot.child("sandbox/one")));
 }
 
+/// doctor reports rather than repairs, and never refuses to run.
+///
+/// It exists because of a failure where every individual command reported
+/// success: a pushed change to another repository was silently reverted by
+/// `bootstrap.sh` checking out a stale pin, `--update` wrote that same pin
+/// back, and a commit went in claiming an adoption that had not happened.
+/// The tool knew enough to say so and had nowhere to say it.
+void doctor_reports_without_repairing() {
+    Sysroot sysroot("doctor");
+
+    // Before `initialize`, which is the state where a diagnostic is most
+    // needed and where a command that assumed an environment would be least
+    // useful.
+    const Run cold = sqpg(sysroot, "doctor");
+    CHECK(cold.contains("doctor"));
+    CHECK(cold.contains("environment"));
+    CHECK(cold.contains("not initialised"));
+    CHECK(cold.contains("sqpg initialize"));      // names the fix
+    CHECK(!fs::exists(sysroot.child(".sqpg")));   // and does not apply it
+
+    CHECK(sqpg(sysroot, "initialize").code == 0);
+
+    const Run warm = sqpg(sysroot, "doctor");
+    CHECK(warm.contains("resources"));
+    CHECK(warm.contains("no duplicates"));
+    CHECK(warm.contains(sysroot.path().string()));
+
+    // It runs from inside a workspace too. A diagnostic that only worked
+    // from one directory would be missing when it was wanted.
+    const fs::path made = seed_workspace(sysroot, "d");
+    const Run inside = sqpg(sysroot, "doctor --workspace '" + made.string() + "'");
+    CHECK(inside.contains("components") || inside.contains("resources"));
+}
+
 void unknown_commands_and_help() {
     Sysroot sysroot("help");
 
@@ -508,6 +542,13 @@ void unknown_commands_and_help() {
     CHECK(bare.contains("sqpg new"));
     CHECK(bare.contains("initialize"));
     CHECK(bare.contains("--explain"));
+
+    // --version reports the version, not the usage text. It has to be
+    // handled before the help branch, which absorbs anything with no command.
+    const Run version = sqpg(sysroot, "--version");
+    CHECK(version.code == 0);
+    CHECK(version.contains("sqpg 0."));
+    CHECK(!version.contains("usage:"));
 
     const Run nonsense = sqpg(sysroot, "frobnicate");
     CHECK(nonsense.code != 0);
@@ -529,6 +570,7 @@ int main() {
     workspace_detection_uses_the_record();
     selfdestruct_needs_both_factors();
     selfdestruct_token_tracks_the_inventory();
+    doctor_reports_without_repairing();
     unknown_commands_and_help();
     return test::report("test_cli");
 }

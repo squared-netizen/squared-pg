@@ -6,6 +6,8 @@
 #   ./tools/bootstrap.sh          clone or update to the pinned revisions
 #   ./tools/bootstrap.sh --check  report what is present and what is pinned
 #   ./tools/bootstrap.sh --update record the current checkouts as the new pins
+#   ./tools/bootstrap.sh --latest fetch, move each component to its default
+#                                 branch, and record that as the new pin
 #
 # squared-pg is three repositories:
 #
@@ -78,7 +80,49 @@ SQUARED_REMOTE="${SQUARED_REMOTE:-https://github.com/squared-netizen/squared.git
 mode="assemble"
 case "${1:-}" in
     --check)  mode="check" ;;
-    --update) mode="update" ;;
+    --latest)
+    # The mode that was missing.
+    #
+    # Without it there was no way to move a pin forward: `bootstrap.sh`
+    # checks out the pin, and `--update` records whatever is checked out --
+    # so running them in sequence writes the old pin straight back. That is
+    # circular, and it silently reverted a pushed change while every
+    # individual step reported success (D-060).
+    #
+    # `git pull` was not the answer either: bootstrap leaves each component
+    # on a detached HEAD at the pinned commit, and pull refuses there.
+    for pair in "sqcart sqcart SQCART_VERSION" \
+                "squared resources/.squared SQUARED_VERSION"; do
+        set -- $pair
+        name="$1"; dir="$2"; pin_file="$3"
+        [ -d "$dir/.git" ] || { printf '  %-10s absent; run without --latest first\n' "$name"; continue; }
+
+        if ! git -C "$dir" diff --quiet 2>/dev/null; then
+            printf '  %-10s uncommitted changes; leaving it alone\n' "$name"
+            continue
+        fi
+
+        git -C "$dir" fetch --quiet --all --tags
+        # The remote's own default branch, not an assumed "main": a component
+        # is free to call it something else, and guessing would fail in a way
+        # that looks like a network problem.
+        head_ref="$(git -C "$dir" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo origin/main)"
+        branch="${head_ref#origin/}"
+        git -C "$dir" checkout --quiet "$branch" 2>/dev/null \
+            || git -C "$dir" checkout --quiet -B "$branch" "$head_ref"
+        git -C "$dir" merge --quiet --ff-only "$head_ref" 2>/dev/null || true
+        git -C "$dir" rev-parse HEAD > "$pin_file"
+        printf '  %-10s -> %s (%s)\n' "$name" "$(git -C "$dir" rev-parse --short HEAD)" "$branch"
+    done
+
+    printf '\nRe-linking.\n'
+    "$0" >/dev/null
+    printf '\nPins updated. Commit the version files, and check the build:\n\n'
+    printf '  make -j4 && make check\n'
+    ;;
+
+update) mode="update" ;;
+    --latest) mode="latest" ;;
     -h|--help)
         sed -n '3,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
         exit 0 ;;
@@ -162,12 +206,58 @@ check)
     report squared resources/.squared "$squared_pin"
     ;;
 
-update)
-    for pair in "SQCART_VERSION sqcart" "SQUARED_VERSION resources/.squared"; do
+latest)
+    # The mode that was missing.
+    #
+    # Without it there was no way to move a pin forward: `bootstrap.sh`
+    # checks out the pin, and `--update` records whatever is checked out --
+    # so running them in sequence writes the old pin straight back. That is
+    # circular, and it silently reverted a pushed change while every
+    # individual step reported success (D-060).
+    #
+    # `git pull` was not the answer either: bootstrap leaves each component
+    # on a detached HEAD at the pinned commit, and pull refuses there.
+    for pair in "sqcart sqcart SQCART_VERSION" \
+                "squared resources/.squared SQUARED_VERSION"; do
         set -- $pair
+        name="$1"; dir="$2"; pin_file="$3"
+        [ -d "$dir/.git" ] || { printf '  %-10s absent; run without --latest first\n' "$name"; continue; }
+
+        if ! git -C "$dir" diff --quiet 2>/dev/null; then
+            printf '  %-10s uncommitted changes; leaving it alone\n' "$name"
+            continue
+        fi
+
+        git -C "$dir" fetch --quiet --all --tags
+        # The remote's own default branch, not an assumed "main": a component
+        # is free to call it something else, and guessing would fail in a way
+        # that looks like a network problem.
+        head_ref="$(git -C "$dir" rev-parse --abbrev-ref origin/HEAD 2>/dev/null || echo origin/main)"
+        branch="${head_ref#origin/}"
+        git -C "$dir" checkout --quiet "$branch" 2>/dev/null \
+            || git -C "$dir" checkout --quiet -B "$branch" "$head_ref"
+        git -C "$dir" merge --quiet --ff-only "$head_ref" 2>/dev/null || true
+        git -C "$dir" rev-parse HEAD > "$pin_file"
+        printf '  %-10s -> %s (%s)\n' "$name" "$(git -C "$dir" rev-parse --short HEAD)" "$branch"
+    done
+
+    printf '\nRe-linking.\n'
+    "$0" >/dev/null
+    printf '\nPins updated. Commit the version files, and check the build:\n\n'
+    printf '  make -j4 && make check\n'
+    ;;
+
+update)
+    for pair in "SQCART_VERSION sqcart sqcart" \
+                "SQUARED_VERSION resources/.squared squared"; do
+        set -- $pair
+        # Three fields: the pin file, the directory, and the component's name.
+        # The name is carried rather than derived, because basename of
+        # resources/.squared is ".squared", which is a directory rather than a
+        # component and reads like a typo in the output.
         if [ -d "$2/.git" ]; then
             git -C "$2" rev-parse HEAD > "$1"
-            printf '  %-10s pinned to %s\n' "$(basename "$2")" "$(cat "$1")"
+            printf '  %-10s pinned to %s\n' "$3" "$(cat "$1")"
         fi
     done
     printf '\nCommit the version files: they are the record of what this tree was\n'
