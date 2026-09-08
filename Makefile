@@ -74,8 +74,21 @@ TESTS    := test_version test_identity test_value test_support test_lifecycle te
             test_android test_cli
 TEST_BIN := $(patsubst %,$(BUILD)/%,$(TESTS))
 
-.PHONY: all check smoke clean sqcart
+# Components assembled by tools/bootstrap.sh.
+#
+# Checked before anything is compiled. Without this the first symptom of an
+# un-assembled tree is a compiler error about a missing sqcart header, which
+# names the wrong problem and sends the reader into the include paths.
+ifeq ($(wildcard sqcart/include/sqcart/sqcart.hpp),)
+$(error sqcart/ is not present. Run ./tools/bootstrap.sh to assemble this tree)
+endif
+
+.PHONY: all check smoke clean sqcart components
 all: $(BUILD)/sqpg $(TEST_BIN) sqcart
+
+# What is assembled, and what it is pinned to.
+components:
+	@./tools/bootstrap.sh --check
 
 # sqcart's CLI, built by its own makefile.
 #

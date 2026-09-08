@@ -126,7 +126,12 @@ void initialize_creates_and_installs() {
     CHECK(fs::is_directory(sysroot.child(".sqpg/resources/templates")));
     CHECK(fs::is_directory(sysroot.child(".sqpg/lua/squaredpg")));
 
-    CHECK(first.contains("export PATH="));
+    // It tells you how to reach the tool, without asserting which of the two
+    // ways it chose -- a symlink where a PATH directory exists, an export
+    // otherwise. Pinning the wording here would make the test fail on a
+    // machine with ~/.local/bin, which is most of them.
+    CHECK(first.contains("put the tool on your PATH"));
+    CHECK(first.contains("ln -sf") || first.contains("export PATH="));
 
     // Idempotent. The natural response to "did that work?" is to run it again.
     const Run second = sqpg(sysroot, "initialize");

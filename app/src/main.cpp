@@ -158,10 +158,47 @@ struct HostConfig {
     config.resource_roots = split_list(std::getenv("SQUARED_PG_RESOURCES"));
     config.workflow_roots = split_list(std::getenv("SQUARED_PG_WORKFLOWS"));
     if (config.resource_roots.empty()) {
-        config.resource_roots.push_back((root / "resources" / "templates").string());
-        config.resource_roots.push_back((root / "resources" / "kits").string());
-        config.resource_roots.push_back((root / "resources" / "packages").string());
-        config.resource_roots.push_back((root / "resources" / "assets").string());
+        // Two trees, and the split between them is not arbitrary.
+        //
+        // `resources/` holds the **framework's** resources -- templates that
+        // produce Squared applications, and the kits, packages and assets
+        // those applications link. It is owned by the `squared` repository and
+        // assembled into place by tools/bootstrap.sh.
+        //
+        // `resources/generator/` holds resources for authoring the
+        // **generator's own inputs**: template.kit produces a cartridge, not a
+        // program, and makes sense to someone who has never heard of the
+        // Squared framework. It stays with squared-pg because it describes
+        // squared-pg's formats.
+        //
+        // The test that separates them: would this resource mean anything to
+        // someone who does not use the framework? If yes, it is a generator
+        // resource.
+        //
+        // Both are scanned, and a missing one is not an error -- a squared-pg
+        // checkout without `squared/` assembled still authors cartridges, and
+        // saying so with an empty index is better than refusing to start.
+        // Three trees, and a missing one is never an error: a squared-pg
+        // checkout with no `squared/` assembled still authors cartridges, and
+        // an empty index says so more usefully than a refusal to start.
+        //
+        //   squared/resources/    the framework, in a source checkout. Owned
+        //                         by the `squared` repository and placed by
+        //                         tools/bootstrap.sh.
+        //   resources/            the framework, in an installed environment,
+        //                         where `sqpg initialize` has merged the two
+        //                         trees under one root.
+        //   resources/generator/  squared-pg's own: template.kit produces a
+        //                         cartridge rather than a program, and means
+        //                         something to someone who has never heard of
+        //                         the Squared framework. That is the test
+        //                         separating the two, and the reason this
+        //                         tree stays with the tool.
+        for (const char* kind : {"templates", "kits", "packages", "assets"}) {
+            config.resource_roots.push_back((root / "squared" / "resources" / kind).string());
+            config.resource_roots.push_back((root / "resources" / kind).string());
+            config.resource_roots.push_back((root / "resources" / "generator" / kind).string());
+        }
     }
     if (config.workflow_roots.empty()) {
         // §2.14.3 search order: repository, then user configuration. The

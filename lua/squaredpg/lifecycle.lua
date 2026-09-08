@@ -90,7 +90,9 @@ local function install_into(root, options, report)
   local binary = sqpg.executable
   local bin_dir = root .. "/.sqpg/bin"
 
-  if source == nil or source == "" or not env.is_dir(source .. "/resources") then
+  local has_resources = env.is_dir(source .. "/resources")
+                     or env.is_dir(source .. "/squared/resources")
+  if source == nil or source == "" or not has_resources then
     report.err("sqpg: cannot locate the installation to copy from")
     report.err("      expected resources/ and lua/ beside the running binary")
     return false
@@ -129,7 +131,14 @@ local function install_into(root, options, report)
     -- so a re-run replaces contents rather than nesting a copy inside the
     -- previous one.
     { ("cp -a %s/. %s/"):format(env.quote(source .. "/lua"), env.quote(root .. "/.sqpg/lua")) },
-    { ("cp -a %s/. %s/"):format(env.quote(source .. "/resources"), env.quote(root .. "/.sqpg/resources")) },
+    -- Both resource trees merge under one root in an installed environment.
+    -- The engine scans `resources/` and `resources/generator/` there, so the
+    -- installed layout is the same shape whether the framework came from a
+    -- sibling repository or was already beside the tool.
+    { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
+        env.quote(source .. "/squared/resources"), env.quote(root .. "/.sqpg/resources")) },
+    { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
+        env.quote(source .. "/resources"), env.quote(root .. "/.sqpg/resources")) },
     { ("cp -f %s %s/sqpg"):format(env.quote(binary), env.quote(bin_dir)) },
   }
   if sqcart_src ~= nil then
@@ -215,8 +224,34 @@ function lifecycle.initialize(options, report)
   end
 
   report.out("")
-  report.out("put the tool on your PATH:")
-  report.out(("  export PATH=\"%s/.sqpg/bin:$PATH\""):format(root))
+  -- A symlink into a directory already on PATH beats an rc-file edit on every
+  -- axis: it works the same in bash, fish and zsh, it survives changing
+  -- shell, and uninstalling stays `rm -rf ~/sqsysroot` plus one obvious
+  -- dangling link rather than an edit buried in a config file nobody
+  -- remembers making. Suggested only when such a directory exists.
+  local link_dir = nil
+  for _, candidate in ipairs({ os.getenv("HOME") .. "/.local/bin",
+                               os.getenv("HOME") .. "/bin" }) do
+    if env.is_dir(candidate) then
+      link_dir = candidate
+      break
+    end
+  end
+
+  if link_dir ~= nil then
+    report.out("put the tool on your PATH:")
+    report.out(("  ln -sf %s/.sqpg/bin/sqpg %s/sqpg"):format(root, link_dir))
+    report.out(("  ln -sf %s/.sqpg/bin/sqcart %s/sqcart"):format(root, link_dir))
+    report.out("")
+    report.out(("  (%s is already on your PATH; this works in any shell)"):format(link_dir))
+  else
+    report.out("put the tool on your PATH:")
+    report.out(("  export PATH=\"%s/.sqpg/bin:$PATH\""):format(root))
+    report.out("")
+    report.out(("  or, to avoid editing a shell profile: mkdir -p %s/.local/bin"):format(
+      os.getenv("HOME") or "~"))
+    report.out("  and run this again for a symlink you can remove by deleting it.")
+  end
   report.out("")
   report.out("then:")
   report.out(("  cd %s/sandbox"):format(root))
