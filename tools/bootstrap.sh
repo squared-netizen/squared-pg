@@ -13,6 +13,17 @@
 #   sqcart       the cartridge container library and its tool
 #   squared      the framework: templates, kits, packages, assets
 #
+# They are assembled as:
+#
+#   sqcart/                  a sibling of engine/ -- it is vendored source,
+#                            compiled into this build
+#   resources/squared/       under resources/, because it *is* resources.
+#                            Nothing here compiles it; the engine reads it.
+#
+# The asymmetry is the point. sqcart is code this project links; squared is
+# data this project indexes, and data belongs where the engine looks for it
+# rather than beside the source directories.
+#
 # ## Why a script rather than submodules
 #
 # Both work. A submodule pins by construction and clones with one flag; a
@@ -126,15 +137,15 @@ case "$mode" in
 check)
     printf 'squared-pg components:\n'
     report sqcart  sqcart  "$sqcart_pin"
-    report squared squared "$squared_pin"
+    report squared resources/squared "$squared_pin"
     ;;
 
 update)
-    for pair in "SQCART_VERSION sqcart" "SQUARED_VERSION squared"; do
+    for pair in "SQCART_VERSION sqcart" "SQUARED_VERSION resources/squared"; do
         set -- $pair
         if [ -d "$2/.git" ]; then
             git -C "$2" rev-parse HEAD > "$1"
-            printf '  %-10s pinned to %s\n' "$2" "$(cat "$1")"
+            printf '  %-10s pinned to %s\n' "$(basename "$2")" "$(cat "$1")"
         fi
     done
     printf '\nCommit the version files: they are the record of what this tree was\n'
@@ -144,7 +155,7 @@ update)
 assemble)
     printf 'bootstrap.sh: assembling into %s\n' "$here"
     assemble sqcart  sqcart  "$SQCART_REMOTE"  "$sqcart_pin"
-    assemble squared squared "$SQUARED_REMOTE" "$squared_pin"
+    assemble squared resources/squared "$SQUARED_REMOTE" "$squared_pin"
 
     # No symlink and no copy. The engine scans squared/resources directly
     # alongside resources/generator, because a link would put the generator's

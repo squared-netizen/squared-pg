@@ -1,10 +1,1 @@
-# The sqcart revision this tree is built and tested against.
-#
-# A commit, a tag, or a branch. tools/bootstrap.sh checks it out; --update
-# records the current checkout here.
-#
-# This file is the difference between a reproducible tree and "whatever main
-# was that day". When sqcart moves to cartridge format 3 and this engine still
-# implements 2, an unpinned clone builds cleanly and then refuses every
-# cartridge, blaming the cartridge.
-main
+a9d83363a7b7f154351912a66ba3199b00b6e61d

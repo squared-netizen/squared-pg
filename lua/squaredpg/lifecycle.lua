@@ -91,7 +91,7 @@ local function install_into(root, options, report)
   local bin_dir = root .. "/.sqpg/bin"
 
   local has_resources = env.is_dir(source .. "/resources")
-                     or env.is_dir(source .. "/squared/resources")
+                     or env.is_dir(source .. "/resources/squared/resources")
   if source == nil or source == "" or not has_resources then
     report.err("sqpg: cannot locate the installation to copy from")
     report.err("      expected resources/ and lua/ beside the running binary")
@@ -136,7 +136,7 @@ local function install_into(root, options, report)
     -- installed layout is the same shape whether the framework came from a
     -- sibling repository or was already beside the tool.
     { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
-        env.quote(source .. "/squared/resources"), env.quote(root .. "/.sqpg/resources")) },
+        env.quote(source .. "/resources/squared/resources"), env.quote(root .. "/.sqpg/resources")) },
     { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
         env.quote(source .. "/resources"), env.quote(root .. "/.sqpg/resources")) },
     { ("cp -f %s %s/sqpg"):format(env.quote(binary), env.quote(bin_dir)) },

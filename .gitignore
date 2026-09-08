@@ -29,3 +29,5 @@ cmake_install.cmake
 # Belt and braces: test fixtures live in build/ dirs
 !sqcart/tests/**/build/
 !sqcart/tests/**/build/**
+sqcart/
+resources/squared/

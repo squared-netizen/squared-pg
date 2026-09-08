@@ -19,8 +19,17 @@ const std::string kSource{SQUARED_PG_TEST_SOURCE_DIR};
 
 std::unique_ptr<Engine> ready_engine() {
     EngineConfig cfg;
-    cfg.resource_roots.emplace_back(kSource + "/resources/templates");
-    cfg.resource_roots.emplace_back(kSource + "/resources/kits");
+    // The same three trees the host scans (app/src/main.cpp): the framework's
+    // resources arrive from the `squared` repository as a sibling directory,
+    // squared-pg's own live under resources/generator/, and `resources/` is
+    // the un-split or installed shape. A missing root is not an error, so
+    // listing all three costs nothing and keeps the tests honest about where
+    // resources actually come from after the split.
+    for (const char* kind : {"templates", "kits", "packages", "assets"}) {
+        cfg.resource_roots.emplace_back(kSource + "/resources/squared/resources/" + kind);
+        cfg.resource_roots.emplace_back(kSource + "/resources/" + kind);
+        cfg.resource_roots.emplace_back(kSource + "/resources/generator/" + kind);
+    }
     auto engine = Engine::create(std::move(cfg));
     (void)engine->initialize();
     return engine;

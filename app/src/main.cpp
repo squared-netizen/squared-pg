@@ -182,9 +182,15 @@ struct HostConfig {
         // checkout with no `squared/` assembled still authors cartridges, and
         // an empty index says so more usefully than a refusal to start.
         //
-        //   squared/resources/    the framework, in a source checkout. Owned
-        //                         by the `squared` repository and placed by
-        //                         tools/bootstrap.sh.
+        //   resources/squared/resources/
+        //                         the framework, in a source checkout. The
+        //                         `squared` repository, cloned under
+        //                         resources/ by tools/bootstrap.sh -- it is
+        //                         data the engine indexes, not code this
+        //                         project compiles, so it belongs where
+        //                         resources live rather than beside engine/.
+        //                         The repeated `resources` is the clone's own
+        //                         directory, not a mistake.
         //   resources/            the framework, in an installed environment,
         //                         where `sqpg initialize` has merged the two
         //                         trees under one root.
@@ -195,7 +201,8 @@ struct HostConfig {
         //                         separating the two, and the reason this
         //                         tree stays with the tool.
         for (const char* kind : {"templates", "kits", "packages", "assets"}) {
-            config.resource_roots.push_back((root / "squared" / "resources" / kind).string());
+            config.resource_roots.push_back(
+                (root / "resources" / "squared" / "resources" / kind).string());
             config.resource_roots.push_back((root / "resources" / kind).string());
             config.resource_roots.push_back((root / "resources" / "generator" / kind).string());
         }

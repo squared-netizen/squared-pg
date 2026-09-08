@@ -28,8 +28,17 @@ const std::string kSource{SQUARED_PG_TEST_SOURCE_DIR};
 
 std::unique_ptr<Engine> ready_engine() {
     EngineConfig cfg;
-    cfg.resource_roots.emplace_back(kSource + "/resources/templates");
-    cfg.resource_roots.emplace_back(kSource + "/resources/kits");
+    // The same three trees the host scans (app/src/main.cpp): the framework's
+    // resources arrive from the `squared` repository as a sibling directory,
+    // squared-pg's own live under resources/generator/, and `resources/` is
+    // the un-split or installed shape. A missing root is not an error, so
+    // listing all three costs nothing and keeps the tests honest about where
+    // resources actually come from after the split.
+    for (const char* kind : {"templates", "kits", "packages", "assets"}) {
+        cfg.resource_roots.emplace_back(kSource + "/resources/squared/resources/" + kind);
+        cfg.resource_roots.emplace_back(kSource + "/resources/" + kind);
+        cfg.resource_roots.emplace_back(kSource + "/resources/generator/" + kind);
+    }
     auto engine = Engine::create(std::move(cfg));
     (void)engine->initialize();
     return engine;
@@ -122,9 +131,25 @@ void binary_payload_is_copied_verbatim() {
     CHECK(std::filesystem::exists(icon));
 
     const std::string generated = read(icon);
-    const std::string source = read(std::filesystem::path{kSource} /
-                                    "resources/templates/template.android.cpp/tree/sq_android/res/"
-                                    "mipmap-hdpi/ic_launcher.png");
+
+    // The template's own copy, wherever the framework resources happen to
+    // live. After the repository split they arrive from `squared` as a
+    // sibling; before it, and in an installed environment, they sit under
+    // resources/. Searching rather than hardcoding one, because a test that
+    // silently read an empty file would compare two empty strings and pass.
+    const std::string relative =
+        "resources/templates/template.android.cpp/tree/sq_android/res/mipmap-hdpi/"
+        "ic_launcher.png";
+    std::filesystem::path source_path;
+    for (const char* prefix : {"resources/squared/", ""}) {
+        const auto candidate = std::filesystem::path{kSource} / (std::string{prefix} + relative);
+        if (std::filesystem::exists(candidate)) {
+            source_path = candidate;
+            break;
+        }
+    }
+    CHECK(!source_path.empty());
+    const std::string source = read(source_path);
 
     // Byte-identical. §2.8.8: substitution into a binary payload would corrupt
     // it in a way nothing downstream would notice, so the NUL-byte check has
