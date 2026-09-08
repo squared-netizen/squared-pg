@@ -517,7 +517,8 @@ void Engine::Impl::register_operations() {
                              "filesystem"},
                             {"capability.project.generate", "capability.transaction.rename"},
                             true,
-                            {"filesystem.workspace.exists", "transaction.commit_failed",
+                            {"filesystem.workspace.exists", "filesystem.workspace.nested",
+                             "transaction.commit_failed",
                              "filesystem.space"}},
         [](Impl& self, const Value& params) {
             std::vector<Diagnostic> diagnostics;

@@ -769,3 +769,43 @@ rather than refusing. Refusing would make `git` a hard dependency of the tier
 system and would refuse most sandbox trees, which have no repository to be
 dirty, while protecting against a loss that cannot occur — the rename is
 reversible and the working tree is carried intact.
+
+---
+
+## D-055 — `.sqpg` for the tool; `.squared` means a workspace record
+
+[[2.7 Project generation model]] · [[2.1 Architectural model]]
+
+The environment's tool directory is `~/sqsysroot/.sqpg/`. A workspace's
+provenance record stays at `<workspace>/.squared/metadata.json`.
+
+The two had the same name, and the collision produced a defect rather than
+merely confusion. `env.find_workspace` tested for `.squared-pg` — a directory
+that has never existed — because the name `.squared` was visibly taken by the
+tool directory when that code was written. The check never once matched, and
+every workspace found came through a fallback that tested for a Makefile
+beside an `mk/` directory. That matches any C project laid out that way and
+misses a real workspace without one; it worked by coincidence.
+
+**A workspace is now recognised by its record and by nothing else.**
+
+Three things ride along, all from the same root:
+
+- **`sqpg initialize` installs `sqcart`.** It copied the binary, the
+  workflows and the resources, and omitted the one tool an authoring
+  workspace's `check` and `dist` targets shell out to — so the second entry in
+  the generated Makefile's lookup path could never succeed and every author
+  set `$SQCART` by hand. Absence is reported, not fatal: a squared-pg without
+  sqcart is still a working generator.
+- **The top-level build produces `sqcart`.** It compiled sqcart's sources into
+  the engine library but never linked its CLI, so a fresh clone could not
+  author a cartridge and nothing said why. A sub-make, not duplicated link
+  rules: sqcart is self-contained and vendoring its link line would mean two
+  places to change when it gains a source file.
+- **Generation refuses a target inside an existing workspace.** The way in is
+  `sqpg new x` from inside a workspace, where `-o` defaults to `./x` and
+  nothing looked upward. The result could not be promoted and sat inside the
+  outer workspace's provenance scope. Every ancestor is checked, not only the
+  parent.
+
+Migration is `rm -rf ~/sqsysroot/.squared && sqpg initialize`.

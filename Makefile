@@ -71,11 +71,27 @@ C_OBJ       := $(patsubst %,$(BUILD)/%.o,$(C_SRC))
 LUA_OBJ     := $(patsubst %,$(BUILD)/%.o,$(LUA_SRC))
 
 TESTS    := test_version test_identity test_value test_support test_lifecycle test_generate \
-            test_android
+            test_android test_cli
 TEST_BIN := $(patsubst %,$(BUILD)/%,$(TESTS))
 
-.PHONY: all check smoke clean
-all: $(BUILD)/sqpg $(TEST_BIN)
+.PHONY: all check smoke clean sqcart
+all: $(BUILD)/sqpg $(TEST_BIN) sqcart
+
+# sqcart's CLI, built by its own makefile.
+#
+# The top-level build compiles sqcart's *sources* into libsquaredpg.a but
+# never linked its command-line tool, so a fresh clone produced a generator
+# that could not author a cartridge -- and nothing said so. `sqpg initialize`
+# then had nothing to install, which is why every authoring workspace needed
+# $SQCART set by hand (D-055).
+#
+# A sub-make rather than duplicated link rules: sqcart is a self-contained
+# project with its own build, and vendoring its link line here would mean two
+# places to change when it gains a source file.
+sqcart:
+	@$(MAKE) --no-print-directory -C sqcart $(SQCART_BUILD)/sqcart
+
+SQCART_BUILD ?= build
 
 $(BUILD)/%.cpp.o: %.cpp
 	@mkdir -p $(dir $@)
@@ -106,6 +122,8 @@ $(BUILD)/sqpg: app/src/main.cpp $(BINDING_OBJ) $(BUILD)/libsquaredpg.a $(BUILD)/
 
 # Tests reach the real resources/ tree rather than a fixture copy: the point of
 # these tests is that the shipped template and kits generate correctly.
+$(BUILD)/test_cli: $(BUILD)/sqpg
+
 $(BUILD)/test_%: engine/tests/test_%.cpp $(BUILD)/libsquaredpg.a
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -DSQUARED_PG_TEST_SOURCE_DIR=\"$(CURDIR)\" -Iengine/tests \

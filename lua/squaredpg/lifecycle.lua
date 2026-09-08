@@ -67,18 +67,18 @@ hooks without reading them first.
 -- so a second run upgrades. Running this twice must be safe, because the
 -- natural response to "did that work?" is to run it again.
 --
--- **The install target is `.squared/`, laid out exactly like a source tree**:
+-- **The install target is `.sqpg/`, laid out exactly like a source tree**:
 --
---     .squared/bin/sqpg
---     .squared/lua/workflows/...
---     .squared/lua/squaredpg/...
---     .squared/resources/templates/...
---     .squared/resources/kits/...
+--     .sqpg/bin/sqpg
+--     .sqpg/lua/workflows/...
+--     .sqpg/lua/squaredpg/...
+--     .sqpg/resources/templates/...
+--     .sqpg/resources/kits/...
 --
 -- Not a coincidence and not a copy of a convention. The host locates its
 -- installation by walking up from the executable looking for `lua/workflows`
--- and `resources` together, so a binary at `.squared/bin/sqpg` finds
--- `.squared` and needs no configuration, no environment variable and no C++
+-- and `resources` together, so a binary at `.sqpg/bin/sqpg` finds
+-- `.sqpg` and needs no configuration, no environment variable and no C++
 -- change. The layout *is* the mechanism.
 --
 -- This does not edit a shell profile. A tool that writes to a user's rc files
@@ -88,7 +88,7 @@ hooks without reading them first.
 local function install_into(root, options, report)
   local source = sqpg.installation
   local binary = sqpg.executable
-  local bin_dir = root .. "/.squared/bin"
+  local bin_dir = root .. "/.sqpg/bin"
 
   if source == nil or source == "" or not env.is_dir(source .. "/resources") then
     report.err("sqpg: cannot locate the installation to copy from")
@@ -100,9 +100,27 @@ local function install_into(root, options, report)
   -- no-op and at worst a truncated executable, so the whole step is skipped
   -- and reported -- which is what `sqpg initialize` run from an installed
   -- tool should do anyway.
-  if env.resolve(source) == env.resolve(root .. "/.squared") then
+  if env.resolve(source) == env.resolve(root .. "/.sqpg") then
     report.out("  tools      already installed here; nothing copied")
     return true
+  end
+
+  -- sqcart travels with sqpg. An authoring workspace's `make check` and
+  -- `make dist` both shell out to it, and until now `initialize` copied
+  -- everything except the one tool those targets need -- so the second entry
+  -- in the generated Makefile's lookup path could never succeed and every
+  -- author had to set $SQCART by hand.
+  --
+  -- Not fatal when absent. sqcart is built by its own makefile, and a
+  -- squared-pg built without it is still a working generator; only cartridge
+  -- authoring needs it.
+  local sqcart_src = nil
+  for _, candidate in ipairs({ source .. "/sqcart/build/sqcart",
+                               source .. "/bin/sqcart" }) do
+    if env.exists(candidate) then
+      sqcart_src = candidate
+      break
+    end
   end
 
   local steps = {
@@ -110,13 +128,17 @@ local function install_into(root, options, report)
     -- cp -a onto an existing target, with the trailing slash on the source,
     -- so a re-run replaces contents rather than nesting a copy inside the
     -- previous one.
-    { ("cp -a %s/. %s/"):format(env.quote(source .. "/lua"), env.quote(root .. "/.squared/lua")) },
-    { ("cp -a %s/. %s/"):format(env.quote(source .. "/resources"), env.quote(root .. "/.squared/resources")) },
+    { ("cp -a %s/. %s/"):format(env.quote(source .. "/lua"), env.quote(root .. "/.sqpg/lua")) },
+    { ("cp -a %s/. %s/"):format(env.quote(source .. "/resources"), env.quote(root .. "/.sqpg/resources")) },
     { ("cp -f %s %s/sqpg"):format(env.quote(binary), env.quote(bin_dir)) },
   }
+  if sqcart_src ~= nil then
+    steps[#steps + 1] = { ("cp -f %s %s/sqcart"):format(env.quote(sqcart_src),
+                                                        env.quote(bin_dir)) }
+  end
 
-  env.mkdir_p(root .. "/.squared/lua")
-  env.mkdir_p(root .. "/.squared/resources")
+  env.mkdir_p(root .. "/.sqpg/lua")
+  env.mkdir_p(root .. "/.sqpg/resources")
 
   for _, step in ipairs(steps) do
     if options.explain then
@@ -180,11 +202,21 @@ function lifecycle.initialize(options, report)
   if not install_into(root, options, report) then
     return 1
   end
-  report.out(("tools        %s/.squared"):format(root))
+  report.out(("tools        %s/.sqpg"):format(root))
+  -- Reported rather than assumed. sqcart is built by its own makefile and a
+  -- squared-pg without it is still a working generator, so its absence is a
+  -- fact to state, not a failure -- but an author who finds out later, from a
+  -- `make check` in a workspace, has to work backwards to here.
+  if env.exists(root .. "/.sqpg/bin/sqcart") then
+    report.out("sqcart       installed")
+  else
+    report.out("sqcart       NOT FOUND -- cartridge authoring needs it")
+    report.out("             build it with `make -C sqcart`, then run this again")
+  end
 
   report.out("")
   report.out("put the tool on your PATH:")
-  report.out(("  export PATH=\"%s/.squared/bin:$PATH\""):format(root))
+  report.out(("  export PATH=\"%s/.sqpg/bin:$PATH\""):format(root))
   report.out("")
   report.out("then:")
   report.out(("  cd %s/sandbox"):format(root))

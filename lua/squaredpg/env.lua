@@ -9,7 +9,7 @@
 --   ~/sqsysroot/
 --     project/      promoted work. Version controlled, backed up, precious.
 --     sandbox/      experiments. Nothing here is irreplaceable.
---     .squared/     tools. Binaries, resources, workflows.
+--     .sqpg/        tools. Binaries, resources, workflows.
 --
 -- The invariant that generates every rule below is: **nothing in sandbox is
 -- irreplaceable**. Not "sandbox has no git" -- that is a consequence, and
@@ -104,20 +104,27 @@ end
 
 --- The four directories `initialize` creates, in creation order.
 --
--- `.squared` last: it is the marker an initialised environment is recognised
--- by, so creating it before the tiers exist would let a failure halfway
--- through leave something that looks complete.
+-- `.sqpg` last: it is the marker an initialised environment is recognised by,
+-- so creating it before the tiers exist would let a failure halfway through
+-- leave something that looks complete.
+--
+-- Named `.sqpg`, not `.squared`. A generated workspace keeps its metadata in
+-- `<workspace>/.squared/metadata.json`, and having one name mean "the
+-- installed tool" in one place and "this workspace's record" in another was
+-- already confusing enough to produce a bug: find_workspace below tested for
+-- `.squared-pg`, a directory that has never existed, and the mistake survived
+-- because a fallback caught it (D-055).
 function env.layout(root)
   return {
     { path = root,                 name = "",         summary = "environment root" },
     { path = root .. "/project",   name = "project",  summary = "promoted work; version controlled" },
     { path = root .. "/sandbox",   name = "sandbox",  summary = "experiments; nothing here is irreplaceable" },
-    { path = root .. "/.squared",  name = ".squared", summary = "tools, resources and workflows" },
+    { path = root .. "/.sqpg",     name = ".sqpg",    summary = "tools, resources and workflows" },
   }
 end
 
 function env.initialised(root)
-  return env.is_dir(root .. "/.squared")
+  return env.is_dir(root .. "/.sqpg")
       and env.is_dir(root .. "/project")
       and env.is_dir(root .. "/sandbox")
 end
@@ -163,21 +170,22 @@ end
 
 --- Nearest enclosing workspace, searching upward from `start`.
 --
--- A workspace is recognised by its Makefile plus its metadata directory. The
--- Makefile alone would match any C project; the metadata alone would match a
--- workspace whose build file a user deleted, which is a case worth failing
--- loudly rather than half-supporting.
+-- A workspace is recognised by its **metadata record**, and by nothing else.
+--
+-- This used to test for a `.squared-pg` directory that has never existed --
+-- the engine writes `.squared/metadata.json` -- so the check never once
+-- matched. Every workspace found so far came through a fallback that tested
+-- for a Makefile beside an `mk/` directory, which matches any C project laid
+-- out that way and misses a real workspace that has no `mk/`.
+--
+-- It worked by coincidence, which is the same shape of defect as a provenance
+-- table nothing reads. The record is the only thing that actually says "a
+-- generator made this", so it is the only thing worth asking (D-055).
 function env.find_workspace(start)
   local here = env.resolve(start or ".")
   if here == nil then return nil end
   while true do
-    if env.exists(here .. "/Makefile") and env.is_dir(here .. "/.squared-pg") then
-      return here
-    end
-    if env.exists(here .. "/Makefile") and env.is_dir(here .. "/mk") then
-      -- Generated workspaces before metadata was recorded, and workspaces a
-      -- user has adopted by hand. Accepted, because refusing to lint a
-      -- project over a missing bookkeeping directory would be officious.
+    if env.exists(here .. "/.squared/metadata.json") then
       return here
     end
     local parent = here:match("^(.*)/[^/]+$")

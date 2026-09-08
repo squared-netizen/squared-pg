@@ -113,6 +113,42 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
         return Unexpected{std::move(error)};
     }
 
+    // A target inside an existing workspace is refused too.
+    //
+    // Nothing prevented it before, and the result is a workspace the tier
+    // commands cannot reach: `promote` takes a name in sandbox/, not a path,
+    // so `sandbox/format/w` is invisible to it. The nested tree also sits
+    // inside the outer workspace's provenance scope, where `workspace.verify`
+    // will eventually report every file of it as untracked.
+    //
+    // The usual way in is a `sqpg new x` run from inside a workspace, where
+    // `-o` defaults to `./x` and nothing looks up. That is an easy mistake and
+    // an annoying one to undo, because the fix is moving a tree by hand.
+    //
+    // Recognised by the metadata record and by nothing else: a Makefile beside
+    // an `mk/` directory describes half the C projects in existence, and this
+    // check must not refuse to generate into somebody's unrelated source tree.
+    for (std::filesystem::path ancestor = target.parent_path();
+         !ancestor.empty() && ancestor != ancestor.root_path();
+         ancestor = ancestor.parent_path()) {
+        const std::filesystem::path record =
+            ancestor / std::filesystem::path{std::string{MetadataService::kMetadataFile}};
+        if (!filesystem_.exists(record)) continue;
+
+        EngineError error = make_error(ErrorCategory::filesystem, "filesystem.workspace.nested",
+                                       "the output location is inside an existing workspace: "
+                                           + ancestor.string());
+        error.path        = target.string();
+        error.recoverable = true;
+        Value detail      = Value::object();
+        detail.set("workspace", ancestor.string());
+        detail.set("hint",
+                   "a workspace inside a workspace cannot be promoted or verified on its own; "
+                   "generate outside it, or pass -o with a path that is not nested");
+        error.diagnostics = std::move(detail);
+        return Unexpected{std::move(error)};
+    }
+
     const std::filesystem::path staging = staging_path_for(target);
     if (filesystem_.exists(staging)) {
         // A leftover staging directory means a previous run was interrupted

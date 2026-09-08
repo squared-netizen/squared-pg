@@ -1,0 +1,193 @@
+{
+  "record_version": 1,
+  "generator": "squared-pg",
+  "generator_version": "0.1.0-alpha.1",
+  "project": {
+    "name": "droid",
+    "working_directory": "sq_app",
+    "platforms": [],
+    "framework_version": "1.0.0"
+  },
+  "resources": {
+    "template": {
+      "id": "template.android.cpp",
+      "version": "0.1.0"
+    },
+    "kits": [
+      {
+        "id": "kit.opengl",
+        "version": "0.1.0"
+      }
+    ],
+    "packages": [],
+    "assets": []
+  },
+  "layers": {
+    "application": [
+      "sq_app"
+    ]
+  },
+  "provenance": [
+    {
+      "path": ".clang-format",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "34a466cd0b67428c0e496769324ea0c49c649c01d902245391f5d080137c1eec"
+    },
+    {
+      "path": ".gitignore",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "99d19d4438c7cbf1f3daca618c175a1a897b15ae639f0e195ec0730c30649273"
+    },
+    {
+      "path": "AGENTS.md",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "e1728bed099ba3f72c0b4f98aaa056755d0dafd1f9e97be5017605755c774eab"
+    },
+    {
+      "path": "Makefile",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "e7ed06851bcbc6f35583ed70ce43b3c6e35976d00a89787c7aa8cfc4c3d0cbf4"
+    },
+    {
+      "path": "README.md",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "aee2bdb510054ed701a8ff06675703f9f5aabc596739f4958c49a1e2e2afb314"
+    },
+    {
+      "path": "mk/squared_android_package.mk",
+      "ownership": "generated",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "3594b3900b821512f8f5d173a5b289acdb57b21fd3cf171a40c577e0351979f7"
+    },
+    {
+      "path": "mk/squared_generated.mk",
+      "ownership": "generated",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "c9c6b92e6c8a298a3fd73d676dec01fb5d9740ebd7ac47cdfbf70102ca8da855"
+    },
+    {
+      "path": "sq_android/AndroidManifest.xml",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "3a8f1514b532041ba15881921bcad70b6156375c105758221781ed9865a985fe"
+    },
+    {
+      "path": "sq_android/README.md",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "e82cdfcb53c5c791e3c1587ae49252db6d61dbdc3975cd81ae1d976ab833a628"
+    },
+    {
+      "path": "sq_android/entry.cpp",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "c6a38a92f2b178acc6913f3064d57ce2cd75c2a1f41062d0b044ba75b7961090"
+    },
+    {
+      "path": "sq_android/res/drawable/ic_launcher_foreground.xml",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "2b4f6bd49012332a99a0478461a596a80bec55f9f9dc47de1b20afc1799f55e8"
+    },
+    {
+      "path": "sq_android/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "43fafa87ca7bad30343b10ebc7f5c5c1ef5e448c7094c9e2f129abee86c26222"
+    },
+    {
+      "path": "sq_android/res/mipmap-hdpi/ic_launcher.png",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "775939b7ebc4c7f0b5b19fe9cd111cf14d12b36258b1915cbca35759f52f783f"
+    },
+    {
+      "path": "sq_android/res/values/colors.xml",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "00d4f2b5d17986b275f12eaab21ef6e7211e03310688301c3e6146399db4412c"
+    },
+    {
+      "path": "sq_android/res/values/strings.xml",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "6d9110339e2cea1f25c44bb843cc1c5bdbec0286eadc72a9b3d52ce06bd0f940"
+    },
+    {
+      "path": "sq_app/README.md",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "6fe33df62468c111f4ee65ba14341f9a90868788ddb3da65e32da88e41e06709"
+    },
+    {
+      "path": "sq_app/include/app.hpp",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "a1a8ef33f6d4140067c6f434d9b9414019780b3e9b6111185f3e648dea3aa329"
+    },
+    {
+      "path": "sq_app/src/app.cpp",
+      "ownership": "seeded",
+      "origin": "template.android.cpp",
+      "origin_version": "0.1.0",
+      "phase": "template.instantiate",
+      "sha256": "5dd4e5355af38b5c8eabca0a7adc3fad92aa80d2f7e7681b0af604981295b506"
+    },
+    {
+      "path": "mk/kit_opengl.mk",
+      "ownership": "generated",
+      "origin": "kit.opengl",
+      "origin_version": "0.1.0",
+      "phase": "kit.apply",
+      "sha256": "4b1415cfbf40c91deeb42484e9788b34adfeead8c83c30aa5d5378abc523c743"
+    },
+    {
+      "path": "sq_kit/include/squared/kit/gl.hpp",
+      "ownership": "generated",
+      "origin": "kit.opengl",
+      "origin_version": "0.1.0",
+      "phase": "kit.apply",
+      "sha256": "d4aa42589a492439707767706ce1b035475293925c3d557d9c7ba705512f791f"
+    }
+  ],
+  "durability": "durable"
+}
