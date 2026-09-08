@@ -8,6 +8,71 @@ developer workspace you own outright.
 Termux on Android is a first-class target. A phone with a compiler and `make` is
 enough — to run the generator, and to build what it produces.
 
+## Quick start
+
+  first clone this repo:
+  ```bash
+gh repo clone squared-netizen/squared-pg
+```
+then upon success, run ~/path/to/repo-clone
+```bash
+tools/bootstrap.sh
+```
+that will clone the two sub repo's; squared and sqcart. both are necessary to use squared-pg, but sqcart is a useful utility standalone. while some of squared can be hand hacked together.
+
+Then you should get this on std out:
+```text
+Assembled. Build with:
+
+  make -j4 && make check
+```
+if your in the clone directory, run.
+```bash
+
+  make -j4 && make check
+```
+Then after the full build, don't worry you will see the progress, run:
+```bash
+
+./build/sqpg initialize
+
+```
+If all is successful you should see:
+
+```text
+build/sqpg initialize     [⏱ 2m51s] ♥ 8:37:21 AM
+environment /data/data/com.termux/files/home/sqsysroot
+  project    promoted work; version controlled
+  sandbox    experiments; nothing here is irreplaceable
+  .sqpg      tools, resources and workflows
+
+directories  1 created, 3 already present
+tools        /data/data/com.termux/files/home/sqsysroot/.sqpg
+sqcart       installed
+
+put the tool on your PATH:
+  ln -sf /data/data/com.termux/files/home/sqsysroot/.sqpg/bin/sqpg /data/data/com.termux/files/usr/bin/sqpg
+  ln -sf /data/data/com.termux/files/home/sqsysroot/.sqpg/bin/sqcart /data/data/com.termux/files/usr/bin/sqcart
+
+  (/data/data/com.termux/files/usr/bin is already on your PATH; this works in any shell)
+
+  removing them is `rm` on two links; nothing edits a shell profile.
+
+then:
+  cd /data/data/com.termux/files/home/sqsysroot/sandbox
+  sqpg new hello -t template.terminal.cpp -k kit.terminal
+  cd hello && make && ./build/hello
+
+```
+The two commands
+```bash
+ln -sf /data/data/com.termux/files/home/sqsysroot/.sqpg/bin/sqpg /data/data/com.termux/files/usr/bin/sqpg
+  ln -sf /data/data/com.termux/files/home/sqsysroot/.sqpg/bin/sqcart /data/data/com.termux/files/usr/bin/sqcart
+```
+matter. They allow you to actually use sqpg and sqcart.
+
+Good luck, have fun, don't die!
+
 ## Build
 
 ```sh
