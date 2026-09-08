@@ -1,39 +1,42 @@
 #!/usr/bin/env bash
 #
-# split.sh -- ONE TIME. Carve sqcart/ and the framework resources out of
-# squared-pg into their own repositories, keeping their history.
+# split.sh -- ONE TIME. Carve sqcart/ and the framework resources out of this
+# repository's history into two branches you can pull into their own clones.
 #
 #   ./tools/split.sh --dry-run    show what would happen, touch nothing
-#   ./tools/split.sh              do it, into ../sqcart-split and ../squared-split
+#   ./tools/split.sh              create the branches
 #
-# It writes to sibling directories and pushes nothing. Reviewing the result
-# and pushing is yours -- a script that force-pushes to a remote it inferred
-# is not a script anyone should run once, let alone twice.
+# ## It creates branches, not repositories
+#
+# An earlier draft cloned into sibling directories and stripped their remotes.
+# That was wrong for the situation this project is actually in: the `squared`
+# repository **already exists**, with commits, a README, a licence and a CI
+# workflow. A fresh clone would have had to replace it, and replacing a
+# repository to avoid a merge commit is a bad trade -- the CI and the clang
+# configs there are exactly what kit.format will eventually own.
+#
+# So this produces two local branches and stops. You pull them into the clones
+# you already have, from the side that owns the history. Nothing here touches
+# a network, and nothing here can lose a commit.
 #
 # ## What moves
 #
-#   sqcart/                     -> the sqcart repository, contents at its root
+#   sqcart/                     -> branch split/sqcart, contents at the root
 #   resources/{templates,kits,
-#              packages,assets} -> the squared repository, under resources/
+#              packages,assets} -> branch split/squared, under resources/
 #
 # ## What stays
 #
 #   resources/generator/        template.kit and its successors. They produce
-#                               cartridges, not programs, and mean something
-#                               to someone who has never heard of the Squared
-#                               framework -- which is the test.
+#                               cartridges rather than programs, and mean
+#                               something to someone who has never heard of
+#                               the Squared framework -- which is the test.
 #   everything else             engine, app, lua, docs, tools, third-party.
 #
-# ## Why filter-branch and not a fresh repo
-#
-# A fresh repository is one command and loses every commit message explaining
-# why the cartridge format is the way it is. That history is the most valuable
-# thing sqcart has: format 2 exists because of a specific argument, and the
-# argument is in the log.
-#
-# `git subtree split` is used rather than `filter-branch` or `filter-repo`:
-# it ships with git, needs no plugin, and produces exactly one branch of the
-# subdirectory's history.
+# `git subtree split` rather than filter-repo: it ships with git, needs no
+# plugin, and keeps the commit history. That history is the most valuable
+# thing sqcart has -- cartridge format 2 exists because of a specific
+# argument, and the argument is in the log.
 
 set -euo pipefail
 
@@ -43,7 +46,6 @@ cd "$here"
 dry=0
 [ "${1:-}" = "--dry-run" ] && dry=1
 
-say() { printf '%s\n' "$*"; }
 run() {
     if [ "$dry" -eq 1 ]; then
         printf '  would run: %s\n' "$*"
@@ -57,120 +59,125 @@ run() {
 # Preconditions
 # ---------------------------------------------------------------------------
 #
-# A split reads history and writes new repositories. Doing that from a tree
-# with uncommitted work means the split does not contain the work, and the
-# discrepancy will not show up until much later.
+# A split reads committed history. Work that is not committed does not travel,
+# and the discrepancy surfaces later, in the new repository, where it looks
+# like the split lost it.
 
-[ -d .git ] || { say "split.sh: not a git repository"; exit 1; }
+[ -d .git ] || { printf 'split.sh: not a git repository\n' >&2; exit 1; }
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
-    say "split.sh: this tree has uncommitted changes."
-    say "          Commit or stash them: the split reads committed history,"
-    say "          so anything uncommitted would silently not travel."
+    printf 'split.sh: this tree has uncommitted changes.\n' >&2
+    printf '          Commit or stash them first: the split reads committed\n' >&2
+    printf '          history, so anything uncommitted would silently not travel.\n' >&2
     exit 1
 fi
 
 if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
-    say "split.sh: untracked files present. They will NOT travel with the split."
-    say ""
-    git status --porcelain --untracked-files=normal | sed 's/^/          /'
-    say ""
-    say "          Commit what should move, delete what should not, then re-run."
+    printf 'split.sh: untracked files present. They will NOT travel.\n\n' >&2
+    git status --porcelain --untracked-files=normal | sed 's/^/          /' >&2
+    printf '\n          Commit what should move, delete what should not.\n' >&2
     exit 1
 fi
 
-say "split.sh: source $here"
-say "          HEAD $(git rev-parse --short HEAD)"
-say ""
+printf 'split.sh: source %s\n' "$here"
+printf '          HEAD %s\n\n' "$(git rev-parse --short HEAD)"
 
 # ---------------------------------------------------------------------------
-# sqcart
-# ---------------------------------------------------------------------------
 
-say "sqcart -> ../sqcart-split"
+printf 'sqcart -> branch split/sqcart\n'
+git branch -D split/sqcart >/dev/null 2>&1 || true
 run git subtree split --prefix=sqcart -b split/sqcart
-run rm -rf ../sqcart-split
-run git clone --quiet --branch split/sqcart --single-branch . ../sqcart-split
-if [ "$dry" -eq 0 ]; then
-    # The clone carries a remote pointing back at this working tree, which
-    # would be wrong the first time anyone pushed.
-    git -C ../sqcart-split remote remove origin
-    git -C ../sqcart-split branch -m split/sqcart main
-fi
-say ""
+printf '\n'
 
-# ---------------------------------------------------------------------------
-# squared
-# ---------------------------------------------------------------------------
-#
-# Harder than sqcart: the framework resources are four directories under
-# resources/, not one prefix, and resources/generator/ must stay behind.
-# `subtree split` takes one prefix, so this splits `resources` whole and then
-# removes the generator tree in a commit of its own -- which keeps the history
-# of every template and kit and costs one extra commit that says what it did.
-
-say "squared -> ../squared-split"
+printf 'framework resources -> branch split/squared\n'
+git branch -D split/squared >/dev/null 2>&1 || true
 run git subtree split --prefix=resources -b split/squared
-run rm -rf ../squared-split
-run git clone --quiet --branch split/squared --single-branch . ../squared-split
-if [ "$dry" -eq 0 ]; then
-    git -C ../squared-split remote remove origin
-    git -C ../squared-split branch -m split/squared main
+printf '\n'
 
-    # Reshape: the split branch has templates/ and kits/ at its root, and the
-    # squared repository wants them under resources/.
-    cd ../squared-split
+if [ "$dry" -eq 1 ]; then
+    printf 'Dry run. Nothing was written.\n'
+    exit 0
+fi
+
+# split/squared has templates/ kits/ packages/ assets/ AND generator/ at its
+# root, because subtree split takes one prefix and the framework resources are
+# four siblings of a directory that must not travel.
+#
+# Reshaping happens in a commit on the branch, rather than by excluding paths
+# during the split. An exclusion would be invisible afterwards; a commit says
+# what it did and why, to anyone auditing how the repository came to be.
+printf 'reshaping split/squared\n'
+work="$(mktemp -d "${TMPDIR:-/tmp}/split-squared.XXXXXX")"
+rmdir "$work"
+git worktree add --quiet "$work" split/squared
+(
+    cd "$work"
     mkdir -p resources
     for d in templates kits packages assets; do
         [ -e "$d" ] && git mv "$d" "resources/$d"
     done
-    # generator/ belongs to squared-pg, not to the framework.
     [ -e generator ] && git rm -rq generator
-    git -c user.email=split@local -c user.name=split commit -q \
-        -m "Reshape into the squared repository layout
+    git -c user.email=split@local -c user.name=split commit -q -m \
+"Reshape into the squared repository layout
 
-Move the four resource kinds under resources/, and drop generator/ --
-template.kit and its successors produce cartridges rather than programs and
-stay with squared-pg." || true
-    cd "$here"
-fi
-say ""
+Move the four resource kinds under resources/, and drop generator/.
 
-# ---------------------------------------------------------------------------
-
-if [ "$dry" -eq 1 ]; then
-    say "Dry run. Nothing was written."
-    exit 0
-fi
+generator/ holds template.kit and its successors, which produce cartridges
+rather than programs and mean something to a consumer that has never heard of
+the Squared framework. Those stay with squared-pg, which owns the formats they
+describe." || true
+)
+git worktree remove --force "$work"
+printf '  done\n\n'
 
 cat <<'EOF'
-Done. Two new repositories, neither pushed:
+Two branches exist in this repository. Nothing has been pushed.
 
-  ../sqcart-split
-  ../squared-split
+Look at them first:
 
-Check them before pushing anything:
+  git log  --oneline split/sqcart  | head
+  git log  --oneline split/squared | head
+  git ls-tree --name-only split/squared
 
-  git -C ../sqcart-split  log --oneline | head
-  git -C ../squared-split log --oneline | head
-  ls ../squared-split/resources
+--- sqcart -------------------------------------------------------------
 
-Then, for each:
+Create the repository on your host, clone it, then pull the branch in:
 
-  git remote add origin <url>
-  git push -u origin main
+  cd ~/github
+  git clone <sqcart url> sqcart
+  cd sqcart
+  git pull ~/projects/squared-pg split/sqcart --allow-unrelated-histories
+  git push
 
-Afterwards, in this repository:
+An empty new repository has nothing to merge with, so this is a
+fast-forward rather than a merge.
+
+--- squared ------------------------------------------------------------
+
+This one already has commits, so it is a real merge:
+
+  cd ~/github/squared
+  git pull ~/projects/squared-pg split/squared --allow-unrelated-histories
+  git push
+
+The merge joins two unrelated roots and will look odd in the log forever.
+It is the right trade: that repository already holds the README, the
+licence, the CI workflow and the clang configs, and replacing it to keep a
+tidy log would throw those away.
+
+--- then, here ---------------------------------------------------------
 
   git rm -r --cached sqcart resources/templates resources/kits \
                      resources/packages resources/assets
-  echo 'sqcart/'  >> .gitignore
-  echo 'squared/' >> .gitignore
-  ./tools/bootstrap.sh --update     # record what you just pushed
+  rm -rf sqcart resources/templates resources/kits \
+         resources/packages resources/assets
+  printf 'sqcart/\nsquared/\n' >> .gitignore
+  ./tools/bootstrap.sh                # clone them back as siblings
+  ./tools/bootstrap.sh --update       # record what you just pushed
+  make -j4 && make check
   git add -A && git commit -m "Split sqcart and squared into their own repositories"
 
-The local branches split/sqcart and split/squared are left in place. Delete
-them once you are satisfied:
+Delete the split branches once the pushes have landed:
 
   git branch -D split/sqcart split/squared
 EOF

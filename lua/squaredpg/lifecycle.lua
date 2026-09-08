@@ -229,10 +229,25 @@ function lifecycle.initialize(options, report)
   -- shell, and uninstalling stays `rm -rf ~/sqsysroot` plus one obvious
   -- dangling link rather than an edit buried in a config file nobody
   -- remembers making. Suggested only when such a directory exists.
+  -- $PREFIX/bin first: on Termux that is the only directory that is both on
+  -- PATH by default and writable, and ~/.local/bin does not exist there at
+  -- all. Suggesting it was wrong on the platform this tool targets first.
+  --
+  -- Checked for writability, not just existence. On a system install
+  -- $PREFIX/bin belongs to root, and printing a command that fails with
+  -- "permission denied" is worse than printing the export line.
   local link_dir = nil
-  for _, candidate in ipairs({ os.getenv("HOME") .. "/.local/bin",
-                               os.getenv("HOME") .. "/bin" }) do
-    if env.is_dir(candidate) then
+  local prefix = os.getenv("PREFIX")
+  local home = os.getenv("HOME") or ""
+  local candidates = {}
+  if prefix ~= nil and prefix ~= "" then
+    candidates[#candidates + 1] = prefix .. "/bin"
+  end
+  candidates[#candidates + 1] = home .. "/.local/bin"
+  candidates[#candidates + 1] = home .. "/bin"
+
+  for _, candidate in ipairs(candidates) do
+    if env.is_dir(candidate) and env.run("test -w " .. env.quote(candidate)) then
       link_dir = candidate
       break
     end
@@ -244,13 +259,14 @@ function lifecycle.initialize(options, report)
     report.out(("  ln -sf %s/.sqpg/bin/sqcart %s/sqcart"):format(root, link_dir))
     report.out("")
     report.out(("  (%s is already on your PATH; this works in any shell)"):format(link_dir))
+    report.out("")
+    report.out("  removing them is `rm` on two links; nothing edits a shell profile.")
   else
     report.out("put the tool on your PATH:")
     report.out(("  export PATH=\"%s/.sqpg/bin:$PATH\""):format(root))
     report.out("")
-    report.out(("  or, to avoid editing a shell profile: mkdir -p %s/.local/bin"):format(
-      os.getenv("HOME") or "~"))
-    report.out("  and run this again for a symlink you can remove by deleting it.")
+    report.out(("  or, to avoid editing a shell profile: mkdir -p %s/.local/bin"):format(home))
+    report.out("  put that on your PATH once, and run this again for a symlink.")
   end
   report.out("")
   report.out("then:")
