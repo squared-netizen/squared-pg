@@ -91,7 +91,6 @@ local function install_into(root, options, report)
   local bin_dir = root .. "/.sqpg/bin"
 
   local has_resources = env.is_dir(source .. "/resources")
-                     or env.is_dir(source .. "/resources/squared/resources")
   if source == nil or source == "" or not has_resources then
     report.err("sqpg: cannot locate the installation to copy from")
     report.err("      expected resources/ and lua/ beside the running binary")
@@ -131,14 +130,24 @@ local function install_into(root, options, report)
     -- so a re-run replaces contents rather than nesting a copy inside the
     -- previous one.
     { ("cp -a %s/. %s/"):format(env.quote(source .. "/lua"), env.quote(root .. "/.sqpg/lua")) },
-    -- Both resource trees merge under one root in an installed environment.
-    -- The engine scans `resources/` and `resources/generator/` there, so the
-    -- installed layout is the same shape whether the framework came from a
-    -- sibling repository or was already beside the tool.
-    { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
-        env.quote(source .. "/resources/squared/resources"), env.quote(root .. "/.sqpg/resources")) },
-    { ("cp -a %s/. %s/ 2>/dev/null || true"):format(
-        env.quote(source .. "/resources"), env.quote(root .. "/.sqpg/resources")) },
+    -- Named entries, not `resources/.`, and `-L` to dereference.
+    --
+    -- Dereferencing because in a source checkout the namespace directories
+    -- are symlinks into resources/.squared; copying the links would give an
+    -- installed environment that breaks the moment the checkout moves.
+    --
+    -- Named because `resources/.` would also copy `.squared` itself, and the
+    -- installed tree would carry every template and kit twice -- once through
+    -- the links and once through the clone they point into. Harmless to the
+    -- index, which would find the same identities at two paths, and confusing
+    -- to anyone who looked.
+    { ("cp -aL %s %s %s %s %s %s/ 2>/dev/null || true"):format(
+        env.quote(source .. "/resources/templates"),
+        env.quote(source .. "/resources/kits"),
+        env.quote(source .. "/resources/packages"),
+        env.quote(source .. "/resources/assets"),
+        env.quote(source .. "/resources/generator"),
+        env.quote(root .. "/.sqpg/resources")) },
     { ("cp -f %s %s/sqpg"):format(env.quote(binary), env.quote(bin_dir)) },
   }
   if sqcart_src ~= nil then

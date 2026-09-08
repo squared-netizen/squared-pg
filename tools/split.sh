@@ -171,7 +171,7 @@ tidy log would throw those away.
                      resources/packages resources/assets
   rm -rf sqcart resources/templates resources/kits \
          resources/packages resources/assets
-  printf 'sqcart/\nresources/squared/\n' >> .gitignore
+  printf 'sqcart/\nresources/.squared/\n' >> .gitignore
   ./tools/bootstrap.sh                # clone them back as siblings
   ./tools/bootstrap.sh --update       # record what you just pushed
   make -j4 && make check

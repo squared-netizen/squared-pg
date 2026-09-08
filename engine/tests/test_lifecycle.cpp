@@ -20,7 +20,6 @@ EngineConfig config() {
     // resources actually come from after the split.
     for (const char* kind : {"templates", "kits", "packages", "assets"}) {
         const std::string base{SQUARED_PG_TEST_SOURCE_DIR};
-        cfg.resource_roots.emplace_back(base + "/resources/squared/resources/" + kind);
         cfg.resource_roots.emplace_back(base + "/resources/" + kind);
         cfg.resource_roots.emplace_back(base + "/resources/generator/" + kind);
     }

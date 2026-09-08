@@ -35,7 +35,6 @@ std::unique_ptr<Engine> ready_engine() {
     // listing all three costs nothing and keeps the tests honest about where
     // resources actually come from after the split.
     for (const char* kind : {"templates", "kits", "packages", "assets"}) {
-        cfg.resource_roots.emplace_back(kSource + "/resources/squared/resources/" + kind);
         cfg.resource_roots.emplace_back(kSource + "/resources/" + kind);
         cfg.resource_roots.emplace_back(kSource + "/resources/generator/" + kind);
     }
@@ -141,7 +140,7 @@ void binary_payload_is_copied_verbatim() {
         "resources/templates/template.android.cpp/tree/sq_android/res/mipmap-hdpi/"
         "ic_launcher.png";
     std::filesystem::path source_path;
-    for (const char* prefix : {"resources/squared/", ""}) {
+    for (const char* prefix : {""}) {
         const auto candidate = std::filesystem::path{kSource} / (std::string{prefix} + relative);
         if (std::filesystem::exists(candidate)) {
             source_path = candidate;

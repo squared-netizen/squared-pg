@@ -178,31 +178,23 @@ struct HostConfig {
         // Both are scanned, and a missing one is not an error -- a squared-pg
         // checkout without `squared/` assembled still authors cartridges, and
         // saying so with an empty index is better than refusing to start.
-        // Three trees, and a missing one is never an error: a squared-pg
-        // checkout with no `squared/` assembled still authors cartridges, and
-        // an empty index says so more usefully than a refusal to start.
+        // Two trees under one root, and a missing one is never an error: a
+        // checkout with nothing assembled still authors cartridges, and an
+        // empty index says so more usefully than a refusal to start.
         //
-        //   resources/squared/resources/
-        //                         the framework, in a source checkout. The
-        //                         `squared` repository, cloned under
-        //                         resources/ by tools/bootstrap.sh -- it is
-        //                         data the engine indexes, not code this
-        //                         project compiles, so it belongs where
-        //                         resources live rather than beside engine/.
-        //                         The repeated `resources` is the clone's own
-        //                         directory, not a mistake.
-        //   resources/            the framework, in an installed environment,
-        //                         where `sqpg initialize` has merged the two
-        //                         trees under one root.
-        //   resources/generator/  squared-pg's own: template.kit produces a
-        //                         cartridge rather than a program, and means
-        //                         something to someone who has never heard of
-        //                         the Squared framework. That is the test
-        //                         separating the two, and the reason this
-        //                         tree stays with the tool.
+        //   resources/{templates,kits,...}   the framework. In a source
+        //       checkout these are symlinks into resources/.squared, the
+        //       `squared` clone placed by tools/bootstrap.sh; in an installed
+        //       environment they are real directories that `sqpg initialize`
+        //       copied. The engine cannot tell the difference and does not
+        //       need to.
+        //
+        //   resources/generator/{...}        squared-pg's own. template.kit
+        //       produces a cartridge rather than a program, and means
+        //       something to someone who has never heard of the Squared
+        //       framework. That is the test separating the two, and the
+        //       reason this tree stays with the tool.
         for (const char* kind : {"templates", "kits", "packages", "assets"}) {
-            config.resource_roots.push_back(
-                (root / "resources" / "squared" / "resources" / kind).string());
             config.resource_roots.push_back((root / "resources" / kind).string());
             config.resource_roots.push_back((root / "resources" / "generator" / kind).string());
         }

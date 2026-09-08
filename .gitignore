@@ -30,4 +30,8 @@ cmake_install.cmake
 !sqcart/tests/**/build/
 !sqcart/tests/**/build/**
 sqcart/
-resources/squared/
+resources/.squared/
+resources/templates
+resources/kits
+resources/packages
+resources/assets

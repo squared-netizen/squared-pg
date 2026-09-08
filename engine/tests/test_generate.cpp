@@ -26,7 +26,6 @@ std::unique_ptr<Engine> ready_engine() {
     // listing all three costs nothing and keeps the tests honest about where
     // resources actually come from after the split.
     for (const char* kind : {"templates", "kits", "packages", "assets"}) {
-        cfg.resource_roots.emplace_back(kSource + "/resources/squared/resources/" + kind);
         cfg.resource_roots.emplace_back(kSource + "/resources/" + kind);
         cfg.resource_roots.emplace_back(kSource + "/resources/generator/" + kind);
     }

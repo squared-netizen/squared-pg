@@ -16,13 +16,35 @@
 # They are assembled as:
 #
 #   sqcart/                  a sibling of engine/ -- it is vendored source,
-#                            compiled into this build
-#   resources/squared/       under resources/, because it *is* resources.
-#                            Nothing here compiles it; the engine reads it.
+#                            compiled into this build.
+#   resources/.squared/      the squared clone, hidden.
+#   resources/templates/     -> .squared/resources/templates
+#   resources/kits/          -> .squared/resources/kits
+#   resources/packages/      -> .squared/resources/packages
+#   resources/assets/        -> .squared/resources/assets
 #
 # The asymmetry is the point. sqcart is code this project links; squared is
-# data this project indexes, and data belongs where the engine looks for it
-# rather than beside the source directories.
+# data this project indexes, and data belongs where the engine looks for it.
+#
+# ## Why symlinks
+#
+# `resources/` must read as the resource directory:
+#
+#     resources/assets  generator  kits  packages  templates
+#
+# The `squared` repository owns a `resources/` directory of its own, so
+# cloning it under resources/ would give `resources/squared/resources/kits` --
+# three levels to say one thing, and a layout that only makes sense once you
+# know which repository each level came from.
+#
+# The clone is therefore hidden and the four namespace directories are linked
+# beside `generator/`. The engine tests `is_directory`, which follows
+# symlinks, so a linked namespace scans exactly like a real one and the index
+# cannot tell the difference.
+#
+# Moving files out of the clone would have been the other option. It would
+# leave the clone permanently dirty and break `git pull`, which makes updating
+# the framework a manual reconciliation rather than one command.
 #
 # ## Why a script rather than submodules
 #
@@ -137,11 +159,11 @@ case "$mode" in
 check)
     printf 'squared-pg components:\n'
     report sqcart  sqcart  "$sqcart_pin"
-    report squared resources/squared "$squared_pin"
+    report squared resources/.squared "$squared_pin"
     ;;
 
 update)
-    for pair in "SQCART_VERSION sqcart" "SQUARED_VERSION resources/squared"; do
+    for pair in "SQCART_VERSION sqcart" "SQUARED_VERSION resources/.squared"; do
         set -- $pair
         if [ -d "$2/.git" ]; then
             git -C "$2" rev-parse HEAD > "$1"
@@ -155,7 +177,21 @@ update)
 assemble)
     printf 'bootstrap.sh: assembling into %s\n' "$here"
     assemble sqcart  sqcart  "$SQCART_REMOTE"  "$sqcart_pin"
-    assemble squared resources/squared "$SQUARED_REMOTE" "$squared_pin"
+    assemble squared resources/.squared "$SQUARED_REMOTE" "$squared_pin"
+
+    # Link the namespace directories beside generator/, so `resources/` reads
+    # as the resource directory rather than as a place two repositories meet.
+    if [ -d resources/.squared/resources ]; then
+        for kind in templates kits packages assets; do
+            target="resources/$kind"
+            if [ -e "$target" ] && [ ! -L "$target" ]; then
+                printf '  %-10s %s exists and is not a link; leaving it\n' "$kind" "$target"
+                continue
+            fi
+            ln -sfn ".squared/resources/$kind" "$target"
+        done
+        printf '  linked     templates kits packages assets -> .squared/resources/\n'
+    fi
 
     # No symlink and no copy. The engine scans squared/resources directly
     # alongside resources/generator, because a link would put the generator's
