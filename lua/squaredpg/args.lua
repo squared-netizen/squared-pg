@@ -24,6 +24,8 @@ local switches = {
   quiet = true,
   verbose = true,
   explain = true,
+  sandbox = true,
+  environment = true,
   ["no-git"] = true,
 }
 

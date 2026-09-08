@@ -73,10 +73,16 @@ private:
 };
 
 /// Run sqpg with SQSYSROOT pointed at `sysroot`, capturing merged output.
-Run sqpg(const Sysroot& sysroot, const std::string& args) {
+Run sqpg(const Sysroot& sysroot, const std::string& args, const std::string& input = {}) {
     const std::string binary = std::string{SQUARED_PG_TEST_SOURCE_DIR} + "/build/sqpg";
-    const std::string command = "SQSYSROOT='" + sysroot.path().string() + "' '" + binary + "' "
-                              + args + " 2>&1";
+    // `printf | cmd` rather than a here-string: popen runs /bin/sh, which has
+    // no <<<. Piping is also the form the command documents, so the tests
+    // exercise the published invocation.
+    const std::string prefix =
+        input.empty() ? std::string{"</dev/null "}
+                      : "printf '%s\\n' '" + input + "' | ";
+    const std::string command = prefix + "SQSYSROOT='" + sysroot.path().string() + "' '" + binary
+                              + "' " + args + " 2>&1";
 
     Run run;
     FILE* pipe = popen(command.c_str(), "r");
@@ -401,6 +407,95 @@ void workspace_detection_uses_the_record() {
     CHECK(fooled.code != 0);
 }
 
+/// selfdestruct: nothing is removed without both factors.
+///
+/// The command exists because `rm -rf ~/sqsysroot` is one tab-completion away
+/// and has already cost a project. It only helps if it is worth reaching for,
+/// so the assertions below are mostly about what it *refuses* -- a
+/// confirmation flow that can be satisfied by accident is decoration.
+void selfdestruct_needs_both_factors() {
+    Sysroot sysroot("destruct");
+    CHECK(sqpg(sysroot, "initialize").code == 0);
+    const fs::path made = seed_workspace(sysroot, "doomed");
+
+    // First invocation reports and stops. Non-zero, so a `&&` chain does not
+    // continue into something that assumes the deletion happened.
+    const Run survey = sqpg(sysroot, "selfdestruct doomed");
+    CHECK(survey.code != 0);
+    CHECK(survey.contains("nothing has been deleted"));
+    CHECK(survey.contains("--confirm"));
+    CHECK(fs::is_directory(made));
+
+    // Extract the token it printed.
+    const std::size_t at = survey.output.find("--confirm ");
+    CHECK(at != std::string::npos);
+    std::string token;
+    if (at != std::string::npos) {
+        token = survey.output.substr(at + 10, 8);
+    }
+
+    // Token alone is not enough: the phrase must be typed.
+    const Run no_phrase = sqpg(sysroot, "selfdestruct doomed --confirm " + token);
+    CHECK(no_phrase.code != 0);
+    CHECK(fs::is_directory(made));
+
+    // Wrong phrase, right token.
+    const Run wrong = sqpg(sysroot, "selfdestruct doomed --confirm " + token, "yes");
+    CHECK(wrong.code != 0);
+    CHECK(fs::is_directory(made));
+
+    // Right phrase, wrong token. This is the case that matters most: a
+    // command line copied from an earlier session, after the tree changed.
+    const Run stale = sqpg(sysroot, "selfdestruct doomed --confirm deadbeef", "destroy doomed");
+    CHECK(stale.code != 0);
+    CHECK(stale.contains("does not match"));
+    CHECK(fs::is_directory(made));
+
+    // Both factors: it goes.
+    const Run done = sqpg(sysroot, "selfdestruct doomed --confirm " + token, "destroy doomed");
+    CHECK(done.code == 0);
+    CHECK(!fs::exists(made));
+
+    // No target is a usage error, never a guess. A destructive command that
+    // infers what you meant is the whole problem restated.
+    const Run bare = sqpg(sysroot, "selfdestruct");
+    CHECK(bare.code != 0);
+    CHECK(bare.contains("needs a target"));
+}
+
+/// The token tracks the inventory, and the inventory is what was shown.
+void selfdestruct_token_tracks_the_inventory() {
+    Sysroot sysroot("destruct2");
+    CHECK(sqpg(sysroot, "initialize").code == 0);
+    seed_workspace(sysroot, "one");
+
+    const Run first = sqpg(sysroot, "selfdestruct --sandbox");
+    const std::size_t at = first.output.find("--confirm ");
+    CHECK(at != std::string::npos);
+    const std::string token = at == std::string::npos ? "" : first.output.substr(at + 10, 8);
+
+    // A second workspace changes what the inventory reports, so the token
+    // must stop matching -- otherwise a stale command line would delete a
+    // tree the operator never saw listed.
+    seed_workspace(sysroot, "two");
+    const Run stale = sqpg(sysroot, "selfdestruct --sandbox --confirm " + token,
+                           "destroy the sandbox");
+    CHECK(stale.code != 0);
+    CHECK(fs::is_directory(sysroot.child("sandbox/one")));
+    CHECK(fs::is_directory(sysroot.child("sandbox/two")));
+
+    // The tier survives its own emptying: an environment without its tiers
+    // is broken, and the next `sqpg new` would fail on a missing directory.
+    const Run now = sqpg(sysroot, "selfdestruct --sandbox");
+    const std::size_t at2 = now.output.find("--confirm ");
+    const std::string token2 = at2 == std::string::npos ? "" : now.output.substr(at2 + 10, 8);
+    const Run cleared = sqpg(sysroot, "selfdestruct --sandbox --confirm " + token2,
+                             "destroy the sandbox");
+    CHECK(cleared.code == 0);
+    CHECK(fs::is_directory(sysroot.child("sandbox")));
+    CHECK(!fs::exists(sysroot.child("sandbox/one")));
+}
+
 void unknown_commands_and_help() {
     Sysroot sysroot("help");
 
@@ -427,6 +522,8 @@ int main() {
     kit_authoring_round_trip();
     nested_workspaces_are_refused();
     workspace_detection_uses_the_record();
+    selfdestruct_needs_both_factors();
+    selfdestruct_token_tracks_the_inventory();
     unknown_commands_and_help();
     return test::report("test_cli");
 }

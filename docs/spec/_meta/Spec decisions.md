@@ -809,3 +809,53 @@ Three things ride along, all from the same root:
   parent.
 
 Migration is `rm -rf ~/sqsysroot/.squared && sqpg initialize`.
+
+---
+
+## D-056 — `selfdestruct` competes with `rm -rf`; it does not replace it
+
+[[2.7 Project generation model]]
+
+A command that deletes a workspace, a tier, or the whole environment, behind
+two confirmations.
+
+**It closes no hole.** `rm -rf ~/sqsysroot` remains one tab-completion away,
+and that is how a previous project was lost. A safe command only helps if it
+is the one reached for, so the design goal is not "make deletion hard" — it is
+**make deletion worth doing here**.
+
+The inventory is therefore the point, not the ceremony. Before anything is
+removed it reports, for every repository in scope, whether it has uncommitted
+changes, unpushed commits, or no remote at all — and says plainly that this is
+the part `rm -rf` would not have told you. That is a reason to type the longer
+command.
+
+Two factors, neither producible by accident:
+
+- **A derived token.** The first invocation prints the inventory and a token
+  computed from it. The second must supply it. Derived rather than stored, so
+  there is no state to forge or go stale, and it stops matching when the
+  inventory changes — a command line copied from an earlier session will not
+  run against a tree that has moved on.
+- **A typed phrase on stdin.** No shell completion produces
+  `destroy the sandbox`.
+
+There is no `--yes`, no `--force`, no environment variable. A bypass would be
+used, and then this is `rm` with extra steps.
+
+Non-interactive use is allowed: a pipe may supply the phrase. The protection
+is not that a human is present but that neither factor arrives by accident.
+
+**Scope of the token, stated because the first draft overclaimed it.** The
+token certifies that *the inventory you were shown is still true*. It changes
+when a workspace appears or vanishes, a file count moves, or a repository
+becomes dirty or gains a remote. It does not change when a file's contents
+change without moving any of those — "65 files, uncommitted changes, no
+remote" is still true after another line is added to one of them. The
+user-facing text says exactly this, because the first version said "the moment
+any of it changes", which the implementation could not keep.
+
+Emptying a tier recreates it. An environment without its tiers is broken and
+the next `sqpg new` would fail on a missing directory. `--environment` does
+not recreate `.sqpg`: restoring it would mean copying back a binary the caller
+just asked to delete, and it is one `sqpg initialize` away.

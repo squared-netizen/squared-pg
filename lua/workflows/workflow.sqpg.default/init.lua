@@ -18,6 +18,7 @@ local report = require("squaredpg.report")
 local envmod = require("squaredpg.env")
 local drive = require("squaredpg.drive")
 local lifecycle = require("squaredpg.lifecycle")
+local destruct = require("squaredpg.destruct")
 
 local usage = [[
 sqpg -- offline-first project generator for the Squared framework
@@ -37,6 +38,8 @@ environment (~/sqsysroot, or $SQSYSROOT):
   sqpg promote <name>                         sandbox -> project
   sqpg demote <name>                          project -> sandbox
   sqpg quarantine <path> [--as NAME]          adopt a foreign tree into sandbox
+  sqpg selfdestruct <name>|--sandbox|--environment
+                                              delete, with two confirmations
 
 workflow, run inside a workspace:
   sqpg format | lint | check | test | docs | dist
@@ -443,6 +446,16 @@ function commands.demote()
   return lifecycle.demote(name, {
     root    = parsed.options.root,
     explain = parsed.options.explain ~= nil,
+  }, report)
+end
+
+function commands.selfdestruct()
+  return destruct.run({
+    root        = parsed.options.root,
+    name        = parsed.positional[1],
+    sandbox     = parsed.options.sandbox ~= nil,
+    environment = parsed.options.environment ~= nil,
+    confirm     = parsed.options.confirm,
   }, report)
 end
 
