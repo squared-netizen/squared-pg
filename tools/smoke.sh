@@ -55,7 +55,7 @@ step "generate with kit.terminal"
 
 for required in Makefile mk/squared_generated.mk mk/kit_terminal.mk \
                 sq_app/src/main.cpp sq_app/src/app.cpp sq_app/include/app.hpp \
-                sq_kit/include/squared/kit/terminal.hpp .squared/metadata.json; do
+                sq_kit/include/terminal/terminal.hpp .squared/metadata.json; do
     [ -f "hello/$required" ] || fail "missing $required"
 done
 
@@ -137,12 +137,12 @@ step "the workspace metadata reads back"
 step "kit.termux generates and its JSON parser is correct"
 "$sqpg" new phone --template template.terminal.cpp --kit kit.terminal --kit kit.termux \
     >/dev/null || fail "generate with kit.termux"
-[ -f phone/sq_kit/include/squared/kit/termux.hpp ] || fail "kit.termux header missing"
+[ -f phone/sq_kit/include/termux/termux.hpp ] || fail "kit.termux header missing"
 [ -f phone/mk/kit_termux.mk ] || fail "kit.termux fragment missing"
 
 rm -f phone/sq_app/src/app.cpp phone/sq_app/include/app.hpp
 cat > phone/sq_app/src/main.cpp <<'TERMUXTEST'
-#include <squared/kit/termux.hpp>
+#include <termux/termux.hpp>
 #include <cstdio>
 #include <string>
 
@@ -225,7 +225,7 @@ for required in Makefile mk/squared_generated.mk mk/squared_android_package.mk \
                 sq_android/res/drawable/ic_launcher_foreground.xml \
                 sq_android/res/mipmap-anydpi-v26/ic_launcher.xml \
                 sq_android/res/mipmap-hdpi/ic_launcher.png \
-                sq_kit/include/squared/kit/gl.hpp .squared/metadata.json; do
+                sq_kit/include/opengl/gl.hpp .squared/metadata.json; do
     [ -f "droid/$required" ] || fail "missing $required"
 done
 
@@ -265,7 +265,7 @@ step "android builds without a rendering kit"
     --param package_name=com.example.bare >/dev/null || fail "generate without a kit"
 [ ! -e bare/sq_kit ] || fail "sq_kit present without a rendering kit"
 [ ! -e bare/mk/kit_opengl.mk ] || fail "kit fragment present without the kit"
-grep -q "__has_include(<squared/kit/gl.hpp>)" bare/sq_android/entry.cpp \
+grep -q "__has_include(<opengl/gl.hpp>)" bare/sq_android/entry.cpp \
     || fail "the renderer include is not guarded"
 
 step "two renderers on a single-arity area are refused"

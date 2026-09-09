@@ -23,18 +23,24 @@
 
       "platforms": ["all"],
       "compatible_templates": [],
-      "integration_areas": ["build.make.fragments"],
+
+      "integration_areas": ["app.include", "build.make.fragments"],
+
       "conflicts_with": [],
       "provides": [],
 
       "requires": {
         "engine": ">=0.1.0 <0.2.0",
         "framework": ">=1.0.0 <2.0.0",
-        "packages": []
+        "packages": [],
+        "kits": []
       },
 
       "ownership": {
-        "generated": ["**"],
+        "generated": [
+          "sq_kit/**",
+          "mk/kit_{{project_name}}.mk"
+        ],
         "user": [],
         "shared": [],
         "default": "generated"

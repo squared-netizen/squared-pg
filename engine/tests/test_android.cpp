@@ -263,7 +263,7 @@ void platform_layer_is_seeded_not_generated() {
     CHECK(makefile != nullptr && makefile->string_or("ownership", "") == "seeded");
 
     // The kit's header is the kit's.
-    const Value* header = step_for(plan, "sq_kit/include/squared/kit/gl.hpp");
+    const Value* header = step_for(plan, "sq_kit/include/opengl/gl.hpp");
     CHECK(header != nullptr && header->string_or("origin", "") == "kit.opengl");
 
     (void)engine->shutdown();
@@ -286,7 +286,7 @@ void builds_without_a_rendering_kit() {
     // The guard, not a hard include: this is the line that lets a kit be added
     // later without editing code already written.
     const std::string entry = read(target / "sq_android" / "entry.cpp");
-    CHECK(entry.find("__has_include(<squared/kit/gl.hpp>)") != std::string::npos);
+    CHECK(entry.find("__has_include(<opengl/gl.hpp>)") != std::string::npos);
 
     (void)engine->shutdown();
 }

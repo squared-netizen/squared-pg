@@ -148,7 +148,7 @@ void planning() {
     }
 
     // Kit contributions are attributed to the kit, not to the template.
-    const Value* header = step_for(plan, "sq_kit/include/squared/kit/terminal.hpp");
+    const Value* header = step_for(plan, "sq_kit/include/terminal/terminal.hpp");
     CHECK(header != nullptr);
     CHECK_EQ(std::string{header->string_or("origin", "")}, "kit.terminal");
 
@@ -196,7 +196,7 @@ void generation() {
 
     CHECK(std::filesystem::exists(target / "Makefile"));
     CHECK(std::filesystem::exists(target / "sq_app" / "src" / "main.cpp"));
-    CHECK(std::filesystem::exists(target / "sq_kit" / "include" / "squared" / "kit" / "terminal.hpp"));
+    CHECK(std::filesystem::exists(target / "sq_kit" / "include" / "terminal" / "terminal.hpp"));
     CHECK(std::filesystem::exists(target / ".squared" / "metadata.json"));
 
     // kit.lua was not selected, so nothing it contributes may appear.
