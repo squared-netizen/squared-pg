@@ -50,10 +50,11 @@ error: template template.android.sfml requires kit kit.sfml, which the
 ## What the kit declares
 
 - `external`: `sfml` 3.1.0, `acquisition: vendored`
+- `binary.modules`: `system`, `window`, `main`, `graphics`, `audio`
 - `runtime.model: callback`
 - `compatible_templates: ["template.android.sfml"]`
 - `provides`: `platform.entrypoint`, `window.surface`, `gl.context`,
-  `input.touch`
+  `input.touch`, `render.2d`, `text.font`, `audio.playback`
 - `binary`: ABI, API level, linkage and the three archive paths (D-069). **Read
   by nothing today** — see Q-35.
 - Ownership: `sq_kit/**` plus the literal `mk/kit_sfml.mk`, per D-064
@@ -75,9 +76,21 @@ Through `mk/kit_sfml.mk`, accumulated into the template's variables:
 ```
 SQ_KIT_CPPFLAGS += -Isq_kit/include
 SQ_KIT_CPPFLAGS += -idirafter $(SQ_NDK_INC)
-SQ_KIT_LDLIBS   += <three archives> <three NDK stubs>
+SQ_KIT_LDLIBS   += <five SFML archives>
+                   -Wl,--start-group <dependency archives> -Wl,--end-group
+                   <five NDK libraries>
 SQ_KITS_PRESENT += kit.sfml
 ```
+
+The dependency archives — freetype, harfbuzz, ogg, vorbis, vorbisenc,
+vorbisfile, FLAC — are discovered by globbing `sq_kit/lib/` rather than listed,
+and wrapped in `--start-group` because FreeType and HarfBuzz are mutually
+dependent. Order inside a group does not matter, which is what makes the glob
+safe.
+
+The NDK libraries now include `libz.so` for Graphics and `libOpenSLES.so` for
+Audio, both by absolute path: `$PREFIX/lib/libz.so` is Termux's zlib, not
+Android's.
 
 `SQ_NDK_INC` and `SQ_NDK_LIB` are located by the **template**, not the kit —
 the NDK is what makes the output an Android project at all, and would be needed
@@ -92,9 +105,11 @@ generated project does not link.
 
 ## Limitations
 
-- **Window, GLES context and input only.** Graphics and Audio are not built;
-  the headers ship but the archives do not exist (Q-34).
-- **One ABI, one API level** per kit build (Q-35).
+- **One ABI, one API level** per kit build (Q-35). The manifest records which
+  in `binary.abi` and `binary.api_level`; nothing reads them yet.
+- **Network is not built.** `sf::Http`, `sf::Ftp` and the socket classes have
+  headers but no implementation. Enabling it means vendoring mbedTLS and
+  libssh2, both of which SFML patches.
 - The kit's payload is not in git. A fresh clone has the manifest and the make
   fragment; the archives arrive from a release cartridge or from
   `tools/build-sfml.sh --install`.

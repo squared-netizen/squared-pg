@@ -82,3 +82,91 @@ in the public Squared API.
 - [Lua license](../licenses/Lua-LICENSE.txt)
 - [yyjson license](../licenses/yyjson-LICENSE.txt)
 - [miniz license](../licenses/miniz-LICENSE.txt)
+
+## SFML 3.1.0
+
+- Upstream: <https://www.sfml-dev.org/>
+- Repository: <https://github.com/SFML/SFML>
+- Tag: `3.1.0`
+- License: zlib/png
+
+Vendored as extracted source in `third-party/SFML-3.1.0/`. Consumed by
+`kit.sfml`, which ships the built static archives; see
+[[developer/resources/sfml-android]] for how they are produced.
+
+**Trimmed.** `test/`, `examples/` and `doc/` are removed, along with
+`extlibs/headers/mingw/` and `extlibs/headers/wepoll/`, which are Windows-only.
+The remaining `extlibs/headers/` are all reachable: `cpp-unicodelib` and `glad`
+for Graphics, `miniaudio` and `dr_mp3` for Audio, `stb_image` and `qoi` for
+image loading, `vulkan` because `Vulkan.cpp` compiles unconditionally.
+
+**No SHA-256.** The tree was taken from a git checkout rather than a release
+archive, so there is no upstream digest to verify against. Re-fetching means
+cloning the tag again.
+
+## SFML's dependencies
+
+In `third-party/sfml-deps/`, needed by SFML's Graphics and Audio modules.
+
+**The versions are SFML's own, not chosen independently.** Each is the tag
+named in SFML's `FetchContent_Declare` blocks
+(`src/SFML/Graphics/CMakeLists.txt`, `src/SFML/Audio/CMakeLists.txt`), so the
+combination is one upstream tests. Changing SFML's version means re-reading
+those blocks, not bumping these by preference.
+
+| Library | Tag | Used by | License |
+|---|---|---|---|
+| FreeType | `VER-2-14-3` | Graphics — glyph rasterisation | FTL / GPLv2 |
+| HarfBuzz | `14.1.0` | Graphics — text shaping | MIT |
+| SheenBidi | `v3.0.0` | Graphics — bidirectional text | Apache-2.0 |
+| Ogg | `v1.3.6` | Audio — container | BSD-3-Clause |
+| Vorbis | `v1.3.7` | Audio — codec | BSD-3-Clause |
+| FLAC | `1.5.0` | Audio — codec | BSD-3-Clause / GPLv2 |
+
+Each was cloned at its tag with `.git` removed. **No SHA-256 for the same
+reason as SFML.**
+
+### These trees are patched
+
+SFML applies a `PATCH_COMMAND` to every one of these — edits to their
+`CMakeLists.txt` that are not cosmetic. FreeType's breaks a FreeType/HarfBuzz
+cycle; HarfBuzz's adds a missing `PUBLIC`; SheenBidi's makes it an OBJECT
+library; ogg, vorbis and flac get their `cmake_minimum_required` ceilings
+raised and install rules removed.
+
+Feeding the build from these vendored trees uses
+`FETCHCONTENT_SOURCE_DIR_<NAME>`, and **that override skips the update stage,
+which is where `PATCH_COMMAND` lives.** So the patches are applied by hand and
+the patched trees committed:
+
+```sh
+tools/build-sfml.sh --patch
+```
+
+Idempotent, and `build-sfml.sh` asserts each patch's post-condition before
+every build — these are version-pinned literal matches, and a patch that
+silently does nothing leaves a tree indistinguishable from an unpatched one.
+
+**Six files therefore differ from their upstream tag**: each dependency's
+`CMakeLists.txt`, plus `vorbis/lib/CMakeLists.txt`. That is deliberate, not
+corruption.
+
+### Trimmed
+
+`harfbuzz/test/` (87 MB of font fixtures), `harfbuzz/docs/`,
+`SheenBidi/Tools/Unicode/` (19 MB of Unicode Character Database),
+`freetype/docs/`, `freetype/tests/`, and the `doc/`, `examples/` and `test/`
+directories of ogg, vorbis and flac. 147 MB to 34 MB.
+
+SheenBidi's `Tools/Generator`, `Tools/Parser` and `Tests/` are kept: they are
+small, and they are what would regenerate the lookup tables if a future Unicode
+version mattered. Only `Tools/Unicode`, the input data, was removed — safe
+because everything referencing it sits behind `BUILD_GENERATOR` or
+`BUILD_TESTS`, neither of which SFML sets.
+
+### Not vendored
+
+mbedTLS and libssh2, which SFML's Network module needs. Network is off:
+`SFML_BUILD_NETWORK=OFF`. Both also carry patches, one of which fixes libssh2
+returning a pointer to stack memory, so enabling Network means vendoring and
+patching them too.

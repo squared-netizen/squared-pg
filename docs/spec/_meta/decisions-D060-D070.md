@@ -350,3 +350,132 @@ would still be incomplete.
 Reading `requires.kits` for ordering, `provides` for overlap, and
 `conflicts_with` for the data already waiting in it. Adding kits to an existing
 workspace after generation.
+
+---
+
+## D-071 — `sq_app` uses SFML under template.android.sfml
+**[[2.8 Templates]]** · supersedes the rule stated in D-067's rationale
+
+`sq_app/` may include `<SFML/Graphics.hpp>` and `<SFML/Audio.hpp>` freely.
+`App::render` takes an `sf::RenderTarget&`.
+
+The template originally forbade SFML in `sq_app/` so the same class would
+compile unchanged under `template.android.cpp`. **That bought portability to a
+template with neither Graphics nor Audio, at the cost of making `sf::Texture`,
+`sf::Font`, `sf::Text` and `sf::Sound` unreachable from the only place
+application code is supposed to live.**
+
+Found by building a real test project against the template: the first user hit
+the rule immediately and overrode it, which is the clearest signal a rule is
+wrong.
+
+`sf::RenderTarget&` rather than `sf::RenderWindow&` so the same drawing code
+works against an `sf::RenderTexture` — which is how a project screenshots, or
+renders at a resolution it does not present at. `app.hpp` forward-declares it
+rather than including `<SFML/Graphics.hpp>`, so files including `app.hpp` do
+not pay for that header.
+
+The platform layer opens an `sf::RenderWindow`; a plain `sf::Window` has no
+`draw()`.
+
+**What remains excluded is `<android/...>`.** SFML already abstracts the
+platform, so reaching past it gives up portability between devices rather than
+between templates. `<android/log.h>` is the exception, used by the demo.
+
+---
+
+## D-072 — Assets are packaged, and open by bare name
+**[[2.8 Templates]]**
+
+`mk/squared_android_package.mk` passes `-A $(SQ_ASSETS_DIR)` to `aapt2 link`,
+and the template ships `sq_android/assets/`.
+
+**Without it the directory existed, looked right, and reached nothing.** SFML
+reads every file it opens on Android through `AAssetManager`, which sees only
+what packaging placed under `assets/` in the APK — so every `sf::Font`,
+`sf::Texture` and `sf::Music` failed to open at runtime with no build-time
+complaint. Survivable under `template.android.cpp`, which draws through raw
+GLES; fatal under this one.
+
+`-A` is passed only when the directory holds something: aapt2 rejects an empty
+asset directory and a freshly generated project has one. The template therefore
+ships a README in `assets/`, which also means the packaging path is exercised
+on the first build rather than lying dormant.
+
+### The stamp
+
+A file list is an unreliable prerequisite. **Removing the last asset changes no
+prerequisite at all**, so make relinks nothing and the APK keeps shipping a
+file the tree no longer has. `$(SQ_ASSET_STAMP)` holds names and mtimes,
+sorted, and flips on add, rename, remove and touch alike.
+
+Taken from the workaround a user wrote in their own Makefile, which is where
+the defect was found.
+
+### The path
+
+Bare name relative to the assets root. `sq_android/assets/ui/panel.png` opens
+as `"ui/panel.png"`; subdirectories survive and no prefix is wanted. SFML's
+`FileInputStream` hands the path unchanged to `AAssetManager_open`
+(`src/SFML/System/Android/ResourceStream.cpp`).
+
+Assets are read from inside the APK; nothing is unpacked to storage.
+
+One trap: that Android branch is taken only when an activity exists. Without
+one, `FileInputStream` falls through to an ordinary `fopen` and silently reads
+the filesystem.
+
+---
+
+## D-073 — Vendored dependencies are staged into the build tree
+**[[1.6 Third-party dependencies]]**
+
+`tools/build-sfml.sh` copies each dependency to
+`build/sfml-build/_deps/<name>-src` and points
+`FETCHCONTENT_SOURCE_DIR_<NAME>` there, rather than at
+`third-party/sfml-deps/<name>` directly.
+
+**SFML names source files by absolute path in its unity-build exclusions.**
+`src/SFML/Graphics/CMakeLists.txt` excludes freetype's `pfr.c` and `smooth.c`
+as `${FETCHCONTENT_BASE_DIR}/freetype-src/src/pfr/pfr.c`, because `pfr.c` uses
+`local` as a variable while `src/gzip/zutil.h` does `#define local static` —
+combining them in one translation unit is a syntax error.
+
+Point the source directory anywhere else and that exclusion names a path that
+does not exist. **CMake matches source-file properties by path string, not by
+inode, so a symlink does not help.** `set_source_files_properties` silently
+does nothing, `pfr.c` joins the unity blob, and freetype fails with seven
+errors about `local` — none of which mentions unity builds, exclusions or the
+source directory.
+
+Staging by copy rather than hardlink: `cp -al` fails on Android's filesystems,
+and its partial failure leaves a destination directory that makes a subsequent
+`cp -a` nest the tree one level deeper. The script clears the destination
+before every attempt and verifies a `CMakeLists.txt` landed.
+
+---
+
+## D-074 — Patched dependency trees are committed
+**[[1.6 Third-party dependencies]]**
+
+The six dependency `CMakeLists.txt` files that SFML patches are patched once by
+`tools/build-sfml.sh --patch` and the results committed, rather than patched on
+every build or patched into a scratch copy.
+
+They are all `string(REPLACE)` or `string(REGEX REPLACE)` whose output no
+longer matches their own input, so re-running is safe. Committing keeps the
+build from mutating `third-party/`, so `git status` stays clean there and a
+real edit is visible.
+
+**The hazard is not a patch that fails; it is a patch that silently does
+nothing.** These are version-pinned literal matches. Bump freetype and
+`HARFBUZZ_FOUND` may not appear where expected — `string(REPLACE)` does
+nothing, the patch reports success, and the build fails later somewhere
+unrelated. A patched tree and an unpatched one look identical.
+
+So `build-sfml.sh` asserts each patch's post-condition before every build and
+refuses to configure otherwise. Recorded because the assertion looks like
+belt-and-braces and is not: it is the only thing distinguishing the two states.
+
+`third-party/README.md` records which six files differ from their upstream tag,
+so the divergence reads as deliberate rather than as corruption.

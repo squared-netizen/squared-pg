@@ -70,3 +70,23 @@ implementation and inherit that obligation.
   requesting target — a fact it does not currently carry, since ABI is a build
   setting rather than a generation parameter (see `mk/squared_generated.mk`'s
   note on SDK levels).
+
+- **Q-36** — CI fails at every job within seconds, before compilation. The
+  `hygiene` job is believed to be checking clang-format and lint
+  configurations that were never implemented; the remaining failures have not
+  been diagnosed. Two candidates worth ruling out first: `tools/bootstrap.sh`
+  still carries `set -euo pipefail`, and its NDK search globs paths that do not
+  exist on a GitHub runner — the same failure that stopped `build-sfml.sh`
+  twice and whose fix was never carried back. And the 34 MB of vendored
+  dependency source may trip a check over `resources/` or the repository root
+  that passed before.
+
+## Resolved
+
+**Q-34 closes.** SFML's Graphics and Audio are built and running on Android.
+The dependencies are vendored and patched, the FreeType/HarfBuzz cycle is
+broken by SFML's own `FT_DISABLE_HARFBUZZ` plus its patch, and a generated
+project renders text with a real font and plays audio on the device.
+
+Mark it resolved in place rather than deleting it; the entry records what was
+uncertain and why, which is worth keeping.

@@ -6,7 +6,7 @@ tags: [developer, resources, sfml, android]
 # SFML on Android — internals
 
 Counterpart: [[programmer/resources/sfml]] · [[usermanual/android-sfml]]
-Decisions: D-067, D-068, D-069 · Open: Q-34, Q-35
+Decisions: D-067, D-068, D-069, D-073, D-074 · Open: Q-35
 
 How `kit.sfml`'s archives are produced and why the build is shaped as it is.
 Everything here was established empirically against SFML 3.1.0, Termux clang
@@ -90,6 +90,34 @@ an earlier archive must be defined by a later one.
 `mk/kit_sfml.mk` for application code, which draws through GLES 3.0 and would
 otherwise have no implementation to bind against.
 
+### 6. The dependency patches, and where dependencies must live
+
+Graphics and Audio need six third-party libraries. SFML acquires them with
+FetchContent and patches each one's CMakeLists.txt; the override that feeds the
+build from vendored trees skips the stage where those patches run. See D-074
+and `third-party/README.md`.
+
+**Dependencies are staged into `build/sfml-build/_deps/<name>-src`, not
+referenced in place.** SFML excludes freetype's `pfr.c` from its unity build by
+naming `${FETCHCONTENT_BASE_DIR}/freetype-src/src/pfr/pfr.c`, and CMake matches
+source-file properties by path string rather than by inode — so pointing the
+source directory elsewhere makes the exclusion silently miss and freetype fails
+to compile. Symlinks do not help. See D-073.
+
+Staging is a plain copy: `cp -al` fails on Android's filesystems, and its
+partial failure leaves a destination that makes a subsequent `cp -a` nest the
+tree one level too deep.
+
+### 7. Dependency archives land in `lib/`
+
+Not under `_deps/`. Each dependency inherits `CMAKE_ARCHIVE_OUTPUT_DIRECTORY`
+from the top-level project, so `libfreetype.a` and the rest sit beside
+`libsfml-*.a`. The build script finds them by globbing `lib/` and excluding
+`libsfml-*`.
+
+SheenBidi produces no archive: SFML patches it to an OBJECT library, so it
+folds into `libsfml-graphics-s.a`.
+
 ## The entry point
 
 `libsfml-main.a` defines `ANativeActivity_onCreate`, which Android resolves **by
@@ -128,10 +156,6 @@ linked into one `.so` make that problem disappear.
 
 ## Not established
 
-- **Graphics and Audio have not been built** (Q-34). The dependencies are
-  vendored but none has been cross-compiled, and SFML's CMake patches
-  FreeType's config to break a FreeType/HarfBuzz cycle — whether that survives
-  outside FetchContent is unknown.
 - **The release-time build has not been exercised.** During alpha the archives
   are produced on-device by `tools/build-sfml.sh`; CI running the same script
   is the intended shape but has not run.
