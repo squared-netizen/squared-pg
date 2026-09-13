@@ -17,7 +17,7 @@
 # The test: if your fragment only works when it comes first, it is
 # reorganising the toolchain rather than adding to it.
 #
-# ## The include root (D-057)
+# ## The include root (D-061)
 #
 # Headers go under sq_kit/include/{{project_name}}/ and the flag names the
 # include ROOT, not the kit's directory inside it:
@@ -36,9 +36,36 @@
 # than once on the command line. Harmless, and it is the workspace's job to
 # deduplicate, not this fragment's.
 
-CXXFLAGS += -Isq_kit/include
-
-# Uncomment and edit for an external dependency:
+# Kits contribute through accumulators, never by touching the workspace's own
+# variables. The template reads these after every mk/kit_*.mk has been
+# included, so appending here is all a kit has to do:
 #
-# CXXFLAGS += -idirafter /usr/include/{{project_name}}
-# LDLIBS   += /usr/lib/lib{{project_name}}.a
+#   SQ_KIT_CPPFLAGS   compile flags and include paths
+#   SQ_KIT_LDFLAGS    link flags
+#   SQ_KIT_LDLIBS     libraries, named by path
+#   SQ_KIT_SRC        sources for the workspace to compile
+#   SQ_KITS_PRESENT   this kit's identity, for diagnostics
+#
+# Appending to CXXFLAGS or LDLIBS directly would work by accident and break the
+# moment the template reorders anything.
+
+SQ_KIT_CPPFLAGS += -Isq_kit/include
+SQ_KITS_PRESENT += kit.{{project_name}}
+
+# --- an external dependency, if this kit wraps one -------------------------
+#
+# -idirafter, never -I: -I prepends, and an additional sysroot placed ahead of
+# libc++ makes <cctype> find the wrong ctype.h, with the error appearing far
+# from its cause.
+#
+# SQ_KIT_CPPFLAGS += -idirafter /usr/include/{{project_name}}
+# SQ_KIT_LDLIBS   += /usr/lib/lib{{project_name}}.a
+
+# --- sources this kit contributes, if any ----------------------------------
+#
+# A kit may ship .cpp files for the workspace to compile, rather than headers
+# alone or a prebuilt archive. They are compiled with the workspace's own
+# flags, including its warning set, so a library that does not build cleanly
+# under -Wall -Wextra -Wpedantic will need attention here.
+#
+# SQ_KIT_SRC += sq_kit/include/{{project_name}}/{{project_name}}.cpp
