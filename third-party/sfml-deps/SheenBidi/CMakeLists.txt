@@ -126,7 +126,7 @@ if(BUILDING_DLL)
   set(SHEENBIDI_PKGCONFIG_CFLAGS "${SHEENBIDI_PKGCONFIG_CFLAGS} -DSB_CONFIG_DLL_IMPORT")
 endif()
 
-add_library(SheenBidi
+add_library(SheenBidi OBJECT
   ${SHEENBIDI_HEADERS}
   ${INTERNAL_HEADERS}
   ${SHEENBIDI_SOURCES}
@@ -354,50 +354,3 @@ endif()
 # Install Configuration
 # ------------------------------------------------------------------------------
 
-include(GNUInstallDirs)
-
-install(
-  TARGETS SheenBidi
-  EXPORT SheenBidiTargets
-  PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/SheenBidi"
-)
-
-set(ConfigPackageLocation "${CMAKE_INSTALL_LIBDIR}/cmake/SheenBidi")
-
-include(CMakePackageConfigHelpers)
-
-write_basic_package_version_file(
-  "${CMAKE_CURRENT_BINARY_DIR}/SheenBidi/SheenBidiConfigVersion.cmake"
-  VERSION ${PROJECT_VERSION}
-  COMPATIBILITY SameMajorVersion
-)
-
-configure_package_config_file(SheenBidi.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/SheenBidi/SheenBidiConfig.cmake"
-  INSTALL_DESTINATION ${ConfigPackageLocation}
-)
-
-export(EXPORT SheenBidiTargets
-  FILE "${CMAKE_CURRENT_BINARY_DIR}/SheenBidi/SheenBidiTargets.cmake"
-  NAMESPACE SheenBidi::
-)
-
-install(EXPORT SheenBidiTargets
-  FILE SheenBidiTargets.cmake
-  NAMESPACE SheenBidi::
-  DESTINATION ${ConfigPackageLocation}
-)
-
-install(
-  FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/SheenBidi/SheenBidiConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/SheenBidi/SheenBidiConfigVersion.cmake"
-  DESTINATION
-    ${ConfigPackageLocation}
-)
-
-configure_file(sheenbidi.pc.in ${CMAKE_CURRENT_BINARY_DIR}/sheenbidi.pc @ONLY)
-install(
-  FILES ${CMAKE_CURRENT_BINARY_DIR}/sheenbidi.pc
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-)

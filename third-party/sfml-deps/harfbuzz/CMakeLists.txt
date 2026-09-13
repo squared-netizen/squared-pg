@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(harfbuzz)
 
-message(WARNING "The main build system for HarfBuzz is Meson. CMake build support is community-maintained and is not actively supported by HarfBuzz developers.")
+
 
 if(POLICY CMP0063)
   cmake_policy(SET CMP0063 NEW)
@@ -593,7 +593,7 @@ endif ()
 
 ## Define harfbuzz library
 add_library(harfbuzz ${project_sources} ${project_extra_sources} ${project_headers})
-target_link_libraries(harfbuzz ${THIRD_PARTY_LIBS})
+target_link_libraries(harfbuzz PUBLIC ${THIRD_PARTY_LIBS})
 if (MINGW)
     target_compile_options(harfbuzz PRIVATE "-Wa,-mbig-obj")
 endif()
@@ -602,7 +602,7 @@ target_include_directories(harfbuzz PUBLIC
                            "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/harfbuzz>")
 set_target_properties(harfbuzz PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)
 if (HB_HAVE_FREETYPE AND TARGET freetype)
-  target_link_libraries(harfbuzz freetype)
+  target_link_libraries(harfbuzz PUBLIC freetype)
 endif ()
 
 
@@ -855,7 +855,7 @@ endif ()
 # On Windows, g-ir-scanner requires a DLL build in order for it to work
 if (WIN32)
   if (NOT BUILD_SHARED_LIBS)
-    message("Building introspection files on Windows requires BUILD_SHARED_LIBS to be enabled.")
+    
     set (HB_HAVE_INTROSPECTION OFF)
   endif ()
 endif ()

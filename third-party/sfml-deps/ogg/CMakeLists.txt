@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.6...3.10)
 
 # Extract project version from configure.ac
 file(READ configure.ac CONFIGURE_AC_CONTENTS)
@@ -85,7 +85,7 @@ endif()
 if(BUILD_FRAMEWORK)
     set(BUILD_SHARED_LIBS TRUE)
 endif()
-
+set(CMAKE_DEBUG_POSTFIX d)
 add_library(ogg ${OGG_HEADERS} ${OGG_SOURCES})
 add_library(Ogg::ogg ALIAS ogg)
 target_include_directories(ogg PUBLIC
@@ -98,7 +98,7 @@ set_target_properties(
     ogg PROPERTIES
     SOVERSION ${LIB_SOVERSION}
     VERSION ${LIB_VERSION}
-    PUBLIC_HEADER "${OGG_HEADERS}"
+    
 )
 
 if(BUILD_FRAMEWORK)

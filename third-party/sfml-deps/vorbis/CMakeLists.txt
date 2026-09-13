@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 2.8.12...3.10)
 project(vorbis)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -62,19 +62,12 @@ message(STATUS "Configuring ${PROJECT_NAME} ${PROJECT_VERSION}")
 check_library_exists(m floor "" HAVE_LIBM)
 
 # Find ogg dependency
-find_package(Ogg REQUIRED)
-
+set(OGG_LIBRARIES Ogg::ogg)
+set(CMAKE_DEBUG_POSTFIX d)
 add_subdirectory(lib)
 
 configure_pkg_config_file(vorbis.pc.in)
 configure_pkg_config_file(vorbisenc.pc.in)
 configure_pkg_config_file(vorbisfile.pc.in)
 
-install(
-    FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/vorbis.pc
-    ${CMAKE_CURRENT_BINARY_DIR}/vorbisenc.pc
-    ${CMAKE_CURRENT_BINARY_DIR}/vorbisfile.pc
-    DESTINATION
-    ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-)
+

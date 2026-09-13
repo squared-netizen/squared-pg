@@ -379,7 +379,7 @@ if (PNG_FOUND)
     "/\\* +(#define +FT_CONFIG_OPTION_USE_PNG) +\\*/" "\\1"
     FTOPTION_H "${FTOPTION_H}")
 endif ()
-if (HARFBUZZ_FOUND OR FT_DYNAMIC_HARFBUZZ_ENABLED)
+if (TRUE OR FT_DYNAMIC_HARFBUZZ_ENABLED)
   string(REGEX REPLACE
     "/\\* +(#define +FT_CONFIG_OPTION_USE_HARFBUZZ) +\\*/" "\\1"
     FTOPTION_H "${FTOPTION_H}")
@@ -658,10 +658,7 @@ if (NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
     file(WRITE "${FREETYPE2_PC_IN_NAME}" ${FREETYPE2_PC_IN})
   endif ()
 
-  install(
-    FILES ${PROJECT_BINARY_DIR}/freetype2.pc
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-    COMPONENT pkgconfig)
+
 
   include(CMakePackageConfigHelpers)
   write_basic_package_version_file(
