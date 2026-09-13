@@ -105,7 +105,7 @@
 # generate/build/package chain touches the network (Repository invariant
 # 1.13).
 
-set -euo pipefail
+set -eu
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$here"

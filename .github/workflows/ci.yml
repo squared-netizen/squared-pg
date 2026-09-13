@@ -5,8 +5,10 @@
 # only way to know they have is to run both — a bug that appeared under CMake
 # and not under make is exactly how the installation-root defect was found.
 #
-# No network is used by the build itself. Everything squared-pg compiles is
-# vendored, so a runner with a compiler and CMake is the whole requirement.
+# No network is used by the build itself: everything squared-pg compiles is
+# vendored. The jobs do reach the network once, before building, to assemble
+# the tree -- squared-pg is three repositories and a bare checkout is not a
+# buildable tree. See tools/bootstrap.sh.
 
 name: ci
 
@@ -55,6 +57,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # squared-pg is three repositories. A bare checkout has neither sqcart/
+      # nor resources/.squared, and the Makefile's own guard says so before
+      # anything compiles. This is also the only thing that exercises
+      # bootstrap.sh, which nothing else tests.
+      - name: assemble
+        run: ./tools/bootstrap.sh
+
       - name: configure
         env:
           CC: ${{ matrix.cc }}
@@ -91,6 +100,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # squared-pg is three repositories. A bare checkout has neither sqcart/
+      # nor resources/.squared, and the Makefile's own guard says so before
+      # anything compiles. This is also the only thing that exercises
+      # bootstrap.sh, which nothing else tests.
+      - name: assemble
+        run: ./tools/bootstrap.sh
+
       - name: build
         run: make -j
 
@@ -122,6 +138,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # sqcart is a separate repository; bootstrap clones it into sqcart/.
+      - name: assemble
+        run: ./tools/bootstrap.sh
+
       # The nested project must build standalone. squared-pg links it from
       # vendored in-tree source, so a change here that only works inside the
       # parent build would break its isolation gate.
@@ -189,8 +210,12 @@ jobs:
         run: |
           # A stray `sqpg new` in the repository root is easy to do and would
           # ship someone's scratch project in the release tarball.
-          if find . -name '.squared' -not -path './.git/*' | grep -q .; then
+          # Match the metadata file, not the directory name. bootstrap.sh
+          # clones the squared repository to resources/.squared, which shares
+          # its name with a workspace's metadata directory and would otherwise
+          # be reported here. Only a real workspace has the record inside it.
+          if find . -path '*/.squared/metadata.json' -not -path './.git/*' | grep -q .; then
             echo "a generated workspace is committed:" >&2
-            find . -name '.squared' -not -path './.git/*' >&2
+            find . -path '*/.squared/metadata.json' -not -path './.git/*' >&2
             exit 1
           fi
