@@ -51,9 +51,17 @@ Value MetadataService::build_record(const GenerationPlan& plan, const Version& e
     }
     resources.set("kits", kits);
 
-    std::vector<std::string> packages;
-    for (const ResourceRef& ref : plan.packages) packages.push_back(ref.to_string());
-    resources.set("packages", Value::strings(packages));
+    // Packages are recorded exactly like kits — an identity with a version —
+    // so a later update can attribute a path to its package and tell which
+    // version it came from (D-079).
+    Value packages = Value::array();
+    for (std::size_t i = 0; i < plan.packages.size(); ++i) {
+        Value entry = Value::object();
+        entry.set("id", plan.packages[i].id.str());
+        entry.set("version", i < plan.package_versions.size() ? plan.package_versions[i] : std::string{});
+        packages.push(std::move(entry));
+    }
+    resources.set("packages", packages);
 
     std::vector<std::string> assets;
     for (const ResourceRef& ref : plan.assets) assets.push_back(ref.to_string());

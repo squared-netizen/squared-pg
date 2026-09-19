@@ -103,8 +103,12 @@ Paths are substituted too, so `tree/{{project_name}}.desktop` works.
 |---|---|
 | `generated` | may be overwritten |
 | `user` → `seeded` | written once, never overwritten |
-| `shared` → `seeded` | reserved; treated conservatively |
+| `shared` | written to be edited; absorb/merge reserved (D-077) |
 | unmatched | `seeded` |
+
+`shared` is reserved in §2.7.10 as `merged` and is *exercised* conservatively:
+the payload lands `shared` on disk so the author owns it, and the absorb/merge
+heavy half waits for the journal (D-077, D-080).
 
 Most specific pattern wins. Two equally specific patterns that disagree is a
 manifest defect — the safer class is kept and a warning is emitted.

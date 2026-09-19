@@ -32,11 +32,19 @@
 
 namespace squared::pg {
 
-/// §2.7.10. `merged` is reserved and unimplemented in v1 (D-020); the name is
-/// held so adding it later is not a breaking change.
+/// §2.7.10. `shared` implements the class the specification reserves under the
+/// name `merged`; the manifest vocabulary spells it `shared`, and the engine
+/// uses that spelling because it is the one authors write (D-075).
+///
+/// `shared` means "both": the generator wrote it and the project may edit it.
+/// It behaves exactly like `seeded` when the file is untouched, and like
+/// neither `seeded` nor `generated` when it is not — a later pass may absorb
+/// the upstream change only if the file still matches the hash recorded at
+/// generation, and writes alongside rather than clobbering if it does not.
 enum class OwnershipClass : std::uint8_t {
     generated,  ///< generator-managed; may be overwritten
     seeded,     ///< created once, user-owned thereafter; never overwritten
+    shared,     ///< written once; overwritten on a later pass only while unchanged
     user,       ///< created by the user; never touched
     metadata,   ///< generator record; may be rewritten
 };
@@ -98,6 +106,7 @@ struct GenerationPlan {
     std::vector<ResourceRef> kits;
     std::vector<std::string> kit_versions;
     std::vector<ResourceRef> packages;
+    std::vector<std::string> package_versions;
     std::vector<ResourceRef> assets;
     std::vector<std::string> platforms;
     std::string              framework_version;

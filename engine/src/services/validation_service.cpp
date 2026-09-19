@@ -302,7 +302,11 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
     // --- required packages -------------------------------------------------
     //
     // §2.7.6: a package required by a resolved kit is surfaced to Lua, never
-    // injected silently. Reporting it as a diagnostic is exactly that.
+    // injected silently. Reporting it as a diagnostic is exactly that. D-080
+    // extends the same advisory reading to a template's `requires.packages`:
+    // the template may be built around a package, but selection is the
+    // workflow's, and a workflow that leaves it out is told rather than
+    // second-guessed. The no-package generation is therefore still valid.
     std::set<std::string> resolved_packages;
     for (const ResolvedResource& package : set.packages) resolved_packages.insert(package.id().str());
     for (const ResolvedResource& kit : set.kits) {
@@ -315,6 +319,21 @@ Result<void> ValidationService::cross_validate(const ResolvedSet& set, const Val
                                "kit " + kit.id().str() + " declares a requirement on " + required +
                                    ", which the workflow did not request",
                                kit.id().str(), {}});
+            }
+        }
+    }
+    {
+        const std::vector<std::string> template_required_packages = string_list(
+            detail::manifest_extension(set.project_template.cartridge->manifest(),
+                                       "requires.packages"));
+        for (const std::string& required : template_required_packages) {
+            if (resolved_packages.count(required) == 0) {
+                diagnostics.push_back(
+                    Diagnostic{Severity::warning,
+                               "template " + set.project_template.id().str() +
+                                   " is written against package " + required +
+                                   ", which the workflow did not request",
+                               set.project_template.id().str(), {}});
             }
         }
     }

@@ -525,12 +525,35 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
         }
     }
 
-    diagnostics.push_back(Diagnostic{Severity::info,
-                                     "package " + ref.id.str() + " resolved; payload materialization is "
-                                     "not implemented in this engine build",
-                                     ref.id.str(), {}});
-
+    // D-076: packages follow D-031 through the same shared payload-root
+    // detection every other kind uses. The manifest's `tree` is required by
+    // cartridge format 2, so there is nothing to guess here.
     resolved->tree_prefix = payload_prefix(resolved->cartridge->manifest());
+    // Ownership globs come from the same manifest member every kind reads;
+    // package.squared-core is `default: "shared"` (D-077), which is exactly
+    // the case the class exists for.
+    resolved->ownership = detail::ownership_rules(manifest);
+
+    // A package that resolves with an empty payload is an authoring bug now
+    // that materialization exists (D-079): it will be recorded as selected
+    // and contribute nothing. Reported rather than passed over.
+    {
+        const std::string& prefix = resolved->tree_prefix;
+        const auto& entries = resolved->cartridge->entries();
+        const bool populated = std::any_of(
+            entries.begin(), entries.end(), [&](const sqcart::EntryInfo& entry) {
+                return entry.path.starts_with(prefix)
+                       && !entry.path.starts_with(sqcart::kMetaDir);
+            });
+        if (!populated) {
+            diagnostics.push_back(Diagnostic{Severity::warning,
+                                             "package " + ref.id.str() +
+                                                 " carries no payload; it will contribute nothing to the "
+                                                 "workspace",
+                                             ref.id.str(), {}});
+        }
+    }
+
     return resolved;
 }
 

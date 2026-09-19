@@ -283,10 +283,13 @@ void builds_without_a_rendering_kit() {
     CHECK(!std::filesystem::exists(target / "sq_kit"));
     CHECK(!std::filesystem::exists(target / "mk" / "kit_opengl.mk"));
 
-    // The guard, not a hard include: this is the line that lets a kit be added
+    // No renderer probe: the framework's graphics Context always exists, and a
+    // project without a GLES kit gets the null backend, which draws nothing
+    // rather than failing to link. That is what lets a rendering kit be added
     // later without editing code already written.
     const std::string entry = read(target / "sq_android" / "entry.cpp");
-    CHECK(entry.find("__has_include(<opengl/gl.hpp>)") != std::string::npos);
+    CHECK(entry.find("<squared/graphics/context.hpp>") != std::string::npos);
+    CHECK(entry.find("__has_include(<opengl/gl.hpp>)") == std::string::npos);
 
     (void)engine->shutdown();
 }

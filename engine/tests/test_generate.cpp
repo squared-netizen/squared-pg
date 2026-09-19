@@ -9,7 +9,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
+#include <vector>
 
 using namespace squared::pg;
 
@@ -76,6 +78,26 @@ Value request(const std::string& name, const std::string& output, bool with_lua)
     return config;
 }
 
+/// A request against the Android template with a rendering kit and an
+/// optional package list — the set package.squared-core was written for.
+Value request_android(const std::string& name, const std::string& output,
+                      const std::vector<std::string>& packages) {
+    Value config = Value::object();
+    config.set("name", name);
+    config.set("output", output);
+    config.set("template", "template.android.cpp");
+    Array kits;
+    kits.emplace_back("kit.opengl");
+    config.set("kits", Value{std::move(kits)});
+    if (!packages.empty()) config.set("packages", Value::strings(packages));
+    config.set("framework", "1.0.0");
+
+    Value parameters = Value::object();
+    parameters.set("package_name", "com.example." + name);
+    config.set("parameters", parameters);
+    return config;
+}
+
 std::string read(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     return std::string{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
@@ -86,6 +108,14 @@ const Value* step_for(const Value& plan, const std::string& path) {
         if (step.string_or("path", {}) == path) return &step;
     }
     return nullptr;
+}
+
+std::vector<Value> steps_named(const Value& plan, const std::string& path) {
+    std::vector<Value> matches;
+    for (const Value& step : *plan.find("steps")->as_array()) {
+        if (step.string_or("path", {}) == path) matches.push_back(step);
+    }
+    return matches;
 }
 
 void resolution() {
@@ -404,6 +434,245 @@ void configuration_is_validated() {
     (void)engine->shutdown();
 }
 
+// ---------------------------------------------------------------------------
+// Package materialization (D-076 .. D-080)
+// ---------------------------------------------------------------------------
+
+/// An engine whose index also scans a scratch packages root, so the tests can
+/// exercise synthetic packages a shipped manifest cannot describe.
+std::unique_ptr<Engine> engine_with_packages_root(const std::filesystem::path& packages_root) {
+    EngineConfig cfg;
+    for (const char* kind : {"templates", "kits", "packages", "assets"}) {
+        cfg.resource_roots.emplace_back(kSource + "/resources/" + kind);
+        cfg.resource_roots.emplace_back(kSource + "/resources/generator/" + kind);
+    }
+    cfg.resource_roots.emplace_back(packages_root);
+    auto engine = Engine::create(std::move(cfg));
+    (void)engine->initialize();
+    return engine;
+}
+
+void write_synthetic_package(const std::filesystem::path& packages_root, const std::string& id,
+                             const std::vector<std::string>& overrides,
+                             const std::map<std::string, std::string>& payload) {
+    const std::filesystem::path location = packages_root / id;
+    std::filesystem::create_directories(location / "SQ-INF");
+    for (const auto& [path, content] : payload) {
+        const std::filesystem::path full = location / path;
+        std::filesystem::create_directories(full.parent_path());
+        std::ofstream(full) << content;
+    }
+
+    std::string override_json;
+    for (const std::string& override_path : overrides) {
+        if (!override_json.empty()) override_json += ", ";
+        override_json += "\"" + override_path + "\"";
+    }
+    const std::string manifest =
+        "{\n"
+        "  \"format\": \"squared-cartridge\",\n"
+        "  \"format_version\": 2,\n"
+        "  \"kind\": \"package\",\n"
+        "  \"id\": \"" + id + "\",\n"
+        "  \"version\": \"1.0.0\",\n"
+        "  \"tree\": \"tree/\",\n"
+        "  \"consumers\": {\n"
+        "    \"squared_pg\": {\n"
+        "      \"requires\": { \"framework\": \">=1.0.0 <2.0.0\" },\n"
+        "      \"ownership\": { \"default\": \"shared\" },\n"
+        "      \"overrides\": [ " + override_json + " ]\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    std::ofstream(location / "SQ-INF" / "manifest.json") << manifest;
+}
+
+void package_materializes() {
+    Scratch scratch("package");
+    auto    engine = ready_engine();
+    const auto target = scratch.child("demo");
+
+    const Value config = request_android("demo", target.string(), {"package.squared-core"});
+    const OperationResult planned = engine->execute("project.plan", config);
+    CHECK(planned.succeeded());
+
+    // D-079: the plan names packages exactly like kits -- the same shape,
+    // with no package-shaped variant.
+    const Value& plan = planned.data();
+    const Array* pkgs = plan.find("packages")->as_array();
+    CHECK(pkgs != nullptr && pkgs->size() == 1);
+    if (pkgs != nullptr && pkgs->size() == 1) {
+        CHECK_EQ(std::string{(*pkgs)[0].string_or("id", "")}, "package.squared-core");
+        CHECK_EQ(std::string{(*pkgs)[0].string_or("version", "")}, "1.0.0");
+    }
+
+    // The payload is listed before anything is written (§6).
+    const Value* header = step_for(plan, "squared/gui/include/squared/gui/button.hpp");
+    CHECK(header != nullptr);
+    CHECK_EQ(std::string{header->string_or("phase", "")}, "package.materialize");
+    CHECK_EQ(std::string{header->string_or("origin", "")}, "package.squared-core");
+    // D-077: framework source is `shared` -- written for the user to edit, and
+    // absorptive on a later pass only while unchanged.
+    CHECK_EQ(std::string{header->string_or("ownership", "")}, "shared");
+
+    // The build fragment is the generator's, exactly like a kit's.
+    const Value* fragment = step_for(plan, "mk/pkg_squared_core.mk");
+    CHECK(fragment != nullptr);
+    CHECK_EQ(std::string{fragment->string_or("ownership", "")}, "generated");
+
+    // §2.7.3: nothing generator-owned lands inside the working directory,
+    // package contributions included.
+    for (const Value& step : *plan.find("steps")->as_array()) {
+        const std::string path{step.string_or("path", "")};
+        if (path.rfind("sq_app", 0) == 0) {
+            CHECK(step.string_or("ownership", "") != "generated");
+        }
+    }
+
+    const OperationResult generated = engine->execute("project.generate", config);
+    CHECK(generated.succeeded());
+    CHECK(std::filesystem::exists(target / "squared" / "gui" / "include" / "squared" / "gui" / "button.hpp"));
+    CHECK(std::filesystem::exists(target / "mk" / "pkg_squared_core.mk"));
+
+    // D-079: packages are recorded with id and version, like kits.
+    Value inspect = Value::object();
+    inspect.set("workspace", target.string());
+    const OperationResult read_back = engine->execute("workspace.inspect", inspect);
+    CHECK(read_back.succeeded());
+    const Array* package_rows = read_back.data().find("resources")->find("packages")->as_array();
+    CHECK(package_rows != nullptr && package_rows->size() == 1);
+    if (package_rows != nullptr && package_rows->size() == 1) {
+        CHECK_EQ(std::string{(*package_rows)[0].string_or("id", "")}, "package.squared-core");
+        CHECK_EQ(std::string{(*package_rows)[0].string_or("version", "")}, "1.0.0");
+    }
+
+    // §2.7.10: provenance rows carry the hash for every package path, in the
+    // `shared` class.
+    {
+        const Array* provenance = read_back.data().find("provenance")->as_array();
+        std::size_t package_rows = 0;
+        for (const Value& entry : *provenance) {
+            if (entry.string_or("origin", "") != "package.squared-core") continue;
+            ++package_rows;
+            CHECK(entry.string_or("sha256", "").size() == 64U);
+            CHECK(support::to_hex(support::sha256(
+                      read(target / std::string{entry.string_or("path", "")}))) ==
+                  entry.string_or("sha256", ""));
+        }
+        CHECK(package_rows == 329);
+
+        Value verify = Value::object();
+        verify.set("workspace", target.string());
+        const OperationResult clean = engine->execute("workspace.verify", verify);
+        CHECK(clean.succeeded());
+        CHECK(clean.data().int_or("modified", -1) == 0);
+        CHECK(clean.data().int_or("conflicts", -1) == 0);
+    }
+
+    (void)engine->shutdown();
+}
+
+/// D-078: a package claiming a path the template already wrote is refused at
+/// plan time — the package must name the path in an explicit `overrides` list.
+void package_collision_requires_override() {
+    Scratch scratch("pkg-collision");
+    const auto packages_root = scratch.child("packages");
+    std::filesystem::create_directories(packages_root);
+
+    const auto make_config = [&](const std::string& name, const std::filesystem::path& out) {
+        Value config = request(name, out.string(), false);
+        config.set("packages", Value::strings({"package.synthetic"}));
+        return config;
+    };
+
+    // template.terminal.cpp writes a seeded Makefile; the package claims it too.
+    write_synthetic_package(packages_root, "package.synthetic", {},
+                            {{"tree/Makefile", "package copy\n"}, {"tree/app.mk", "x\n"}});
+    {
+        auto engine = engine_with_packages_root(packages_root);
+        const OperationResult planned =
+            engine->execute("project.plan", make_config("hello", scratch.child("out1")));
+        CHECK(!planned.succeeded());
+        CHECK_EQ(planned.errors().front().code, "kit.integration_point.conflict");
+        (void)engine->shutdown();
+    }
+
+    // Same package, now declaring the override. The plan succeeds and the
+    // package's copy owns the path.
+    write_synthetic_package(packages_root, "package.synthetic", {"Makefile"},
+                            {{"tree/Makefile", "package copy\n"}, {"tree/app.mk", "x\n"}});
+    {
+        auto engine = engine_with_packages_root(packages_root);
+        const auto out = scratch.child("out2");
+        const OperationResult planned =
+            engine->execute("project.plan", make_config("hello", out));
+        CHECK(planned.succeeded());
+        // Both contributions stay in the plan; the later phase wins on disk
+        // (§2.7.9 contributions are applied in order), and the overriding
+        // package owns the path.
+        const std::vector<Value> makefile_steps = steps_named(planned.data(), "Makefile");
+        CHECK(makefile_steps.size() == 2);
+        CHECK(std::any_of(makefile_steps.begin(), makefile_steps.end(), [](const Value& step) {
+            return step.string_or("origin", "") == "package.synthetic";
+        }));
+
+        const OperationResult generated = engine->execute("project.generate", make_config("hello", out));
+        CHECK(generated.succeeded());
+        CHECK_EQ(read(out / "Makefile"), "package copy\n");
+        (void)engine->shutdown();
+    }
+}
+
+/// D-079: a package that resolves with no payload is an authoring bug and is
+/// reported, not passed over.
+void empty_payload_package_warns() {
+    Scratch scratch("pkg-empty");
+    const auto packages_root = scratch.child("packages");
+    std::filesystem::create_directories(packages_root);
+    write_synthetic_package(packages_root, "package.empty", {}, {});
+
+    auto engine = engine_with_packages_root(packages_root);
+    Value config = request("hello", scratch.child("out").string(), false);
+    config.set("packages", Value::strings({"package.empty"}));
+
+    const OperationResult planned = engine->execute("project.plan", config);
+    CHECK(planned.succeeded());
+    bool warned = false;
+    for (const Diagnostic& warning : planned.warnings()) {
+        if (warning.message.find("package.empty") != std::string::npos) warned = true;
+    }
+    CHECK(warned);
+
+    (void)engine->shutdown();
+}
+
+/// D-080: a template's `requires.packages` is advisory -- leaving the package
+/// out warns and still works, selecting it silences the warning.
+void template_requires_packages_is_advisory() {
+    Scratch scratch("pkg-requires");
+    auto    engine = ready_engine();
+
+    const Value without =
+        request_android("hello", scratch.child("without").string(), {});
+    const OperationResult planned = engine->execute("project.plan", without);
+    CHECK(planned.succeeded());
+    bool warned = false;
+    for (const Diagnostic& warning : planned.warnings()) {
+        if (warning.message.find("package.squared-core") != std::string::npos) warned = true;
+    }
+    CHECK(warned);
+
+    const Value with =
+        request_android("hello", scratch.child("with").string(), {"package.squared-core"});
+    const OperationResult selected = engine->execute("project.plan", with);
+    CHECK(selected.succeeded());
+    for (const Diagnostic& warning : selected.warnings()) {
+        CHECK(warning.message.find("package.squared-core") == std::string::npos);
+    }
+
+    (void)engine->shutdown();
+}
+
 }  // namespace
 
 int main() {
@@ -417,5 +686,9 @@ int main() {
     determinism();
     required_kit_is_enforced();
     configuration_is_validated();
+    package_materializes();
+    package_collision_requires_override();
+    empty_payload_package_warns();
+    template_requires_packages_is_advisory();
     return squared::pg::test::report("test_generate");
 }

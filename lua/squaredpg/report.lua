@@ -164,6 +164,11 @@ function report.plan(plan)
       report.out(("  kit               %s@%s"):format(kit.id, kit.version))
     end
   end
+  if #plan.packages > 0 then
+    for _, package in ipairs(plan.packages) do
+      report.out(("  package           %s@%s"):format(package.id, package.version))
+    end
+  end
   report.out(("  working directory %s"):format(plan.working_directory))
   report.out(("  workspace         %s"):format(plan.workspace))
   report.out("")

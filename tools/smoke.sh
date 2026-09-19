@@ -265,8 +265,10 @@ step "android builds without a rendering kit"
     --param package_name=com.example.bare >/dev/null || fail "generate without a kit"
 [ ! -e bare/sq_kit ] || fail "sq_kit present without a rendering kit"
 [ ! -e bare/mk/kit_opengl.mk ] || fail "kit fragment present without the kit"
+grep -q "#include <squared/graphics/context.hpp>" bare/sq_android/entry.cpp \
+    || fail "the platform layer does not use the renderer-agnostic context"
 grep -q "__has_include(<opengl/gl.hpp>)" bare/sq_android/entry.cpp \
-    || fail "the renderer include is not guarded"
+    && fail "the stale __has_include renderer guard is back"
 
 step "two renderers on a single-arity area are refused"
 if "$sqpg" plan clash --template template.android.cpp --kit kit.opengl --kit kit.opengl \

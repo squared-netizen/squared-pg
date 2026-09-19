@@ -160,6 +160,7 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
     }
     for (const ResolvedResource& package : set.packages) {
         plan.packages.push_back(ResourceRef{package.id(), {}});
+        plan.package_versions.push_back(package.version());
     }
     for (const ResolvedResource& asset : set.assets) {
         plan.assets.push_back(ResourceRef{asset.id(), {}});
@@ -171,11 +172,17 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
                                                           plan.working_directory, engine_version, kit_ids);
 
     // Contributions in §2.7.9 phase order: template first, then kits in
-    // resolution order.
+    // resolution order, then packages (D-078). Kits and packages are the same
+    // mechanism with different data — payload root, default ownership and
+    // collision policy come from each resource's manifest, so there is no
+    // kit-shaped materializer to special-case.
     std::vector<Contribution> contributions;
     contributions.push_back(Contribution{&set.project_template, GenerationPhase::template_instantiate});
     for (const ResolvedResource& kit : set.kits) {
         contributions.push_back(Contribution{&kit, GenerationPhase::kit_apply});
+    }
+    for (const ResolvedResource& package : set.packages) {
+        contributions.push_back(Contribution{&package, GenerationPhase::package_materialize});
     }
 
     std::vector<PlanStep>              steps;
@@ -200,6 +207,12 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
 
         const std::vector<std::string> executable_globs =
             string_list(detail::manifest_extension(resource.cartridge->manifest(), "executable"));
+        // §2.7.10 / D-078: a resource may claim a path already claimed by an
+        // earlier contribution only by naming that exact workspace path here.
+        // Intent as data — without it, a collision is an authoring defect
+        // reported at plan time, never a last-writer-wins race.
+        const std::vector<std::string> overrides =
+            string_list(detail::manifest_extension(resource.cartridge->manifest(), "overrides"));
         const Value processor_value =
             detail::manifest_extension(resource.cartridge->manifest(), "processor");
         const std::string processor{processor_value.as_string().value_or("substitute")};
@@ -243,17 +256,25 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
             // conflict detected before any mutation, not a last-writer-wins
             // race decided by iteration order.
             if (auto existing = claimed.find(workspace_path); existing != claimed.end()) {
-                EngineError error =
-                    make_error(ErrorCategory::compatibility, "kit.integration_point.conflict",
-                               "two resources contribute the same path: " + workspace_path);
-                error.path        = workspace_path;
-                error.resource    = resource.id().str();
-                error.recoverable = true;
-                Value detail      = Value::object();
-                detail.set("first", existing->second);
-                detail.set("second", resource.id().str());
-                error.diagnostics = std::move(detail);
-                return Unexpected{std::move(error)};
+                const bool explicitly_overridden =
+                    std::find(overrides.begin(), overrides.end(), workspace_path) != overrides.end();
+                if (!explicitly_overridden) {
+                    EngineError error =
+                        make_error(ErrorCategory::compatibility, "kit.integration_point.conflict",
+                                   "two resources contribute the same path: " + workspace_path);
+                    error.path        = workspace_path;
+                    error.resource    = resource.id().str();
+                    error.recoverable = true;
+                    Value detail      = Value::object();
+                    detail.set("first", existing->second);
+                    detail.set("second", resource.id().str());
+                    error.diagnostics = std::move(detail);
+                    return Unexpected{std::move(error)};
+                }
+                // The resource wants this exact path on purpose (D-078), so it
+                // owns the result; the later phase's write is the one that
+                // lands on disk.
+                existing->second = resource.id().str();
             }
 
             auto bytes = resource.cartridge->read(entry.path);

@@ -58,6 +58,14 @@ into its manifest. The manifest is owned by the cartridge, so keeping the
 pointer without keeping the cartridge would dangle — and the type system would
 not catch it.
 
+**Packages contribute through the same plan the template and kits do**, pushed
+in after kits (§2.7.6 materialisation phase, D-078). A package path that
+collides with an earlier contribution is refused at plan time unless the
+package names the exact path in its manifest `overrides` list — then the later
+phase's write owns it (D-078). Ownership for a package payload defaults to the
+`shared` class (D-077), and empty payloads warn (D-079) instead of silently
+claiming nothing.
+
 ## Payload root (D-031)
 
 Templates declare `template.tree`. The cartridge format gives kits, packages and

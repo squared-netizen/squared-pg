@@ -479,3 +479,110 @@ belt-and-braces and is not: it is the only thing distinguishing the two states.
 
 `third-party/README.md` records which six files differ from their upstream tag,
 so the divergence reads as deliberate rather than as corruption.
+
+---
+
+## D-075 — `shared` in a manifest is spec-reserved `merged`
+**[[3.5 Packages]]**
+
+`shared` in a package's ownership class was cited in `details/plan.hpp` and never
+recorded, leaving the vocabulary half-authored. It is the implementation spelling
+of the spec-reserved `merged` class, which v1 does not implement (§D-020): a
+file that ships in a package's payload tree and is handed to the user to own
+once generated.
+
+The leading comment in `details/plan.hpp` now says `shared`, matching the release
+sequence, and the ownership tables (§2.7.4) read `shared` the same way they read
+its companions.
+
+Rejected: inventing a new reserved word distinct from `merged` — two names for an
+un-implemented class, in a vocabulary that is already three words long.
+
+---
+
+## D-076 — Packages follow D-031's payload root, through a shared helper
+**[[3.1 Packages]]** · [[2.7 Project generation model]] · [[2.2 Identity]]
+
+A package cartridge names one payload root; that root is the package's
+`tree_prefix`, exactly as D-031 chose for templates and kits. Rather than a new
+resolution rule per resource kind, `detail::payload_prefix()` serves the package
+resolver too — the same function that already owns the D-031 tree detection.
+
+**[[limitations]]** Nothing a package materializes may live outside that root.
+
+Rejected: inventing a package-shaped payload convention — packages are not a
+special case, and a second convention would have to be documented, enforced, and
+explained, none of which earns its keep.
+
+---
+
+## D-077 — `shared` is a real ownership class; provenance hashes are unconditional
+**[[3.2 Packages]]** · [[2.7.4 Ownership]] · [[2.14 Workspace verification]]
+
+The engine materializes package payload with the `shared` ownership class, with
+`generated` for the build fragments a package contributes to `mk/`. Package
+materialization runs `project.plan`, `project.generate`, writes to the journal,
+and records provenance **including the sha256** of every payload file — the
+hash is written regardless of ownership class, so a workspace verify that reads
+carryover files has something to check. The earlier "materialization not
+implemented" diagnostic on empty payload is replaced by a warning (D-079).
+
+Deferred to the update path, following **[[ROADMAP]]** item 3 and
+**[[limitations]]**: the `regenerate`/`.new`-writeback half of v1
+ownership semantics. Generate currently records the same content to the same
+path, so the conflict question does not arise until journals can advance
+existing workspaces wells and write back. Until then a re-generated workspace
+is refused up front.
+
+Rejected: requiring every materialized file carry `generated` ownership as
+packages took from kits — the generator cannot edit user code it never wrote
+without asking first; keeping the diagnostic and silently dropping the package
+was the v0 behaviour that misled users into shipping shells.
+
+---
+
+## D-078 — A package claims a taken path only via an explicit override
+**[[3.3 Packages]]** · [[2.7.10 Generation plan]]
+
+Allowable contribution order is template → kits → packages because reciprocal
+ordering is the two orderings we must not ship (a field claiming its sequence
+declaration would claim those two too). A package path that collides with a
+path already claimed by the template or a kit is an integration-point conflict
+(`kit.integration_point.conflict` — the same code kits use for the same situation), failed at plan time.
+
+A package may reclaim a path another contribution already claimed only when its
+cartridge manifest names that exact path in an `overrides` list; anything short
+of an exact name is *not* an override, and a last-writer-wins race is not.
+
+Rejected: last-writer-wins on collisions (silent, order-dependent, and exactly
+what §2.7.10's conflict rule is for); glob overrides (a glob that matches two
+paths authorises both, widening the map for what an exact path would not buy);
+any override defaulting on (an author must declare intent).
+
+---
+
+## D-079 — Packages surface like kits in reporting and metadata
+**[[3.4 Packages]]** · [[2.7 Project generation model]] · [[2.6 Storage]]
+
+`plan`/`new`/`--json` report packages in the same shape as kits — there is no
+package-shaped reporting variant. `metadata.json` records packages under
+`resources.packages` as `{id, version}` objects, mirroring kits; provenance rows
+list every package path with its sha256.
+
+Rejected: a distinct package shape in reports (three kinds, three shapes, no
+information gained); npm-style `package-lock` json (one more file to keep in
+sync with the metadata that is already the journal).
+
+---
+
+## D-080 — Template `requires.packages` is advisory, never auto-injected
+**[[3.5 Packages]]** · [[2.7.9 Conformance]]
+
+A template's `requires.packages` is a warning source, not an injection rule.
+Generating a template with a package requirement the workflow did not request
+warns and continues; it never silently adds the package)Skip. The android
+template declares `package.squared-core` in `requires.packages`.
+
+Rejected: auto-injecting the package (a parameter the user did not ask for
+turns up in their project unannounced); refusing to generate (turns a
+rendering-less android build from a wanted state into an error).

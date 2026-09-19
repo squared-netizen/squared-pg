@@ -200,9 +200,14 @@ namespace detail {
 [[nodiscard]] OwnershipClass ownership_class_from_manifest(std::string_view declared) {
     if (declared == "generated") return OwnershipClass::generated;
     if (declared == "user") return OwnershipClass::seeded;
-    // `shared` is 2.7.10's reserved `merged`, unimplemented (D-020). Seeded is
-    // the conservative reading of it.
-    if (declared == "shared") return OwnershipClass::seeded;
+    // `shared` is 2.7.10's reserved `merged`, spelled `shared` in manifest
+    // vocabulary (D-075). It is implemented (D-077): the generator wrote the
+    // file and the project may edit it, so a later pass absorbs the upstream
+    // change only while the file still matches the recorded hash.
+    if (declared == "shared") return OwnershipClass::shared;
+    // The map is deliberately not identity: a manifest's `user` (theirs) is an
+    // engine `seeded` (written once, never again), because a path the
+    // generator is materialising can never be `user` (see the function doc).
     return OwnershipClass::seeded;
 }
 
@@ -270,9 +275,10 @@ OwnershipClass classify_path(const OwnershipRules& rules, std::string_view path,
 
     consider(rules.generated, ownership_class_from_manifest("generated"));
     consider(rules.user, ownership_class_from_manifest("user"));
-    // `shared` is what 2.7.10 reserves as `merged` and does not implement
-    // (D-020). Seeded is the conservative reading: written once, never
-    // rewritten.
+    // `shared` (D-077): written once like `seeded`, but absorptive while it
+    // still matches the recorded hash. Listed last so a pattern collision
+    // prefers it over `generated` — a file the manifest both marks as the
+    // generator's and as shared-with-the-project reads as shared.
     consider(rules.shared, ownership_class_from_manifest("shared"));
 
     return found ? chosen : rules.default_class;

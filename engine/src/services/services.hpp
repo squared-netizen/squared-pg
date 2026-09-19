@@ -283,9 +283,9 @@ private:
     const std::vector<Capability>& capabilities_;
 };
 
-/// §2.7.6. Packages resolve and are recorded; materialization of package
-/// payloads is not implemented in this pass and is refused explicitly rather
-/// than silently skipped — see docs/developer/engine/limitations.md.
+/// §2.7.6. Packages resolve and, since D-076/D-078, materialize through the
+/// same contribution path as kits; a package whose payload is empty is a
+/// warning at resolution (D-079). See docs/developer/engine/resources.md.
 class PackageService final : public Service {
 public:
     static constexpr std::string_view kServiceName = "package";

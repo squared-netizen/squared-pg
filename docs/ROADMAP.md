@@ -115,8 +115,14 @@ the path. One is now on the horizon.
 2. **Q-23 proper**, against a working backend: how a project acquires the
    framework offline, what `sq_framework/` looks like in a workspace, and
    whether the build emission model (Q-22) needs to change to link it.
-3. **Package materialisation** (§2.7.6), which is currently unimplemented and
-   has had nothing to materialise. The framework is its first real consumer.
+3. **Package materialisation (§2.7.6). Now implemented, and its first real
+   consumer picked it up as a first real test.** `package.squared-core` lands
+   through the shared payload helper (D-076), contributes `mk/pkg_squared_core.mk`
+   as `generated`, uses the `shared` ownership class (D-077), and its payload
+   is recorded in metadata packages + provenance (D-079) after passing the
+   override/collision rules (D-078). The asset half of §2.7.6/§2.7.7 remains
+   unimplemented — there are no asset bundles yet, and the framework only
+   exercises the package half.
 
 ## 4. Regeneration — the biggest missing engine capability
 

@@ -539,6 +539,9 @@ void Engine::Impl::register_operations() {
             std::vector<std::string> kit_ids;
             for (const ResourceRef& ref : plan->kits) kit_ids.push_back(ref.id.str());
             data.set("kits", Value::strings(kit_ids));
+            std::vector<std::string> package_ids;
+            for (const ResourceRef& ref : plan->packages) package_ids.push_back(ref.id.str());
+            data.set("packages", Value::strings(package_ids));
             data.set("metadata_file", std::string{MetadataService::kMetadataFile});
             data.set("durability", std::string{self.config.fast_durability ? "fast" : "durable"});
 

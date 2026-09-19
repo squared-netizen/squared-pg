@@ -406,6 +406,9 @@ function commands.new()
   if #result.data.kits > 0 then
     report.out(("  kits              %s"):format(table.concat(result.data.kits, ", ")))
   end
+  if #result.data.packages > 0 then
+    report.out(("  packages          %s"):format(table.concat(result.data.packages, ", ")))
+  end
   report.out(("  working directory %s/"):format(result.data.working_directory))
   report.out(("  files             %d in %d directories")
     :format(result.data.files_written, result.data.directories_created))

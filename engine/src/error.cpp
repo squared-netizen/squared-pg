@@ -182,6 +182,7 @@ std::string_view to_string(OwnershipClass cls) noexcept {
     switch (cls) {
         case OwnershipClass::generated: return "generated";
         case OwnershipClass::seeded: return "seeded";
+        case OwnershipClass::shared: return "shared";
         case OwnershipClass::user: return "user";
         case OwnershipClass::metadata: return "metadata";
     }
@@ -190,11 +191,14 @@ std::string_view to_string(OwnershipClass cls) noexcept {
 
 OwnershipClass ownership_class_from_string(std::string_view text) noexcept {
     if (text == "generated") return OwnershipClass::generated;
+    // "merged" is the name §2.7.10 reserves for this class; a record written
+    // by a future pass that used the specification's spelling must still read
+    // back as the same thing.
+    if (text == "shared" || text == "merged") return OwnershipClass::shared;
     if (text == "user") return OwnershipClass::user;
     if (text == "metadata") return OwnershipClass::metadata;
-    // Anything unrecognised — including the reserved "merged" and the
-    // cartridge format's "shared" — lands on seeded. §2.7.10 makes the safe
-    // default explicit: never overwrite.
+    // Anything unrecognised lands on seeded. §2.7.10 makes the safe default
+    // explicit: never overwrite.
     return OwnershipClass::seeded;
 }
 
@@ -256,9 +260,14 @@ Value GenerationPlan::to_value() const {
     out.set("kits", kit_list);
 
     std::vector<std::string> package_ids;
-    package_ids.reserve(packages.size());
-    for (const ResourceRef& ref : packages) package_ids.push_back(ref.to_string());
-    out.set("packages", Value::strings(package_ids));
+    Value package_list = Value::array();
+    for (std::size_t i = 0; i < packages.size(); ++i) {
+        Value entry = Value::object();
+        entry.set("id", packages[i].id.str());
+        entry.set("version", i < package_versions.size() ? package_versions[i] : std::string{});
+        package_list.push(std::move(entry));
+    }
+    out.set("packages", package_list);
 
     std::vector<std::string> asset_ids;
     asset_ids.reserve(assets.size());
