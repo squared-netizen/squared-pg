@@ -10,12 +10,12 @@ assemble, build, install the tool, generate an Android workspace, build it,
 and get the demo app's own code. Run each command in bash; nothing here needs
 a computer, adb or Wi-Fi.
 
-Two parts of the process use the network: cloning, in steps 2 and 7, and
-`tools/bootstrap.sh` in step 3. Nothing after that does.
+The network is needed for installing packages (step 1), cloning (steps 2 and
+7) and `tools/bootstrap.sh` (step 3). Nothing after that uses it.
 
 | Step | What you end up with |
 |---|---|
-| 1. Termux packages | a compiler, `make`, git, and the Android packaging tools |
+| 1. Termux packages | a compiler, `make`, git, the Android SDK and NDK, and the packaging tools |
 | 2. Clone | `~/projects/squared-pg` |
 | 3. Bootstrap | the framework (`squared`) and `sqcart` cloned inside it |
 | 4. Build | `build/sqpg`, tested |
@@ -25,29 +25,45 @@ Two parts of the process use the network: cloning, in steps 2 and 7, and
 
 ## 1. Termux packages
 
+Termux's own repository has most of the Android tooling. The SDK, with the
+NDK and the platform `android.jar`, comes from the
+[Termux Void](https://termuxvoid.github.io) repository, which is added once:
+
 ```bash
-pkg install git clang make
-pkg install aapt2 apksigner openjdk-17 netcat-openbsd
+curl -sL https://github.com/termuxvoid/repo/raw/main/install.sh | bash
 ```
 
-The first line builds squared-pg. The second packages and signs an APK, and
-`nc` (from `netcat-openbsd`) reads a development build's log.
+That pipes a script from the network into bash. Download it and read it first
+if you prefer: `curl -sLO https://github.com/termuxvoid/repo/raw/main/install.sh`.
 
-The Android build also needs an NDK and an `android.jar`. A workspace looks for
-them here, and the first match wins:
+Then:
+
+```bash
+pkg install git clang make
+pkg install android-sdk ndk-sysroot aapt2 apksigner openjdk-17 netcat-openbsd
+```
+
+| Package | From | For |
+|---|---|---|
+| `git`, `clang`, `make` | Termux | building squared-pg and every workspace |
+| `android-sdk` | Termux Void | the NDK and the platforms, under `$PREFIX/opt/android-sdk/` |
+| `ndk-sysroot` | Termux | NDK headers and libraries for Termux's own clang |
+| `aapt2`, `apksigner` | Termux | packaging and signing the APK |
+| `openjdk-17` | Termux | `keytool`, which creates the debug signing key |
+| `netcat-openbsd` | Termux | `nc`, to read a development build's log |
+
+A workspace looks for the NDK and `android.jar` here, and the first match
+wins:
 
 | What | Where it looks |
 |---|---|
 | NDK | `$ANDROID_NDK_HOME`, then `$PREFIX/opt/android-sdk/ndk/<newest version>`, then `$ANDROID_HOME/ndk/*`, `$ANDROID_SDK_ROOT/ndk/*` |
 | `android.jar` | `$PREFIX/opt/android-sdk/platforms/android-*/`, then the same under `$ANDROID_HOME` and `$ANDROID_SDK_ROOT` |
 
-> [!todo] Record how this phone's SDK got there
-> This phone has NDK `29.0.14206865` and the platforms under
-> `$PREFIX/opt/android-sdk/`. Write down the package or download that put them
-> there, so a new phone can be set up from this page alone.
-
-Step 6 runs `make android-status`, which reports what the build found and what
-it is missing. That is the check for this step.
+With `android-sdk` installed, the second NDK location is the one found
+(`ndk/29.0.14206865` on the phone this page was written on). Step 6 runs
+`make android-status`, which reports what the build found and what it is
+missing. That is the check for this step.
 
 ## 2. Clone squared-pg
 
