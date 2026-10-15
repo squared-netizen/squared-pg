@@ -16,6 +16,8 @@ something, it is in the wrong tree — that belongs in
 ## Pages
 
 - [[usermanual/getting-started]] — generate a workspace and run it
+- [[usermanual/demo-from-scratch]] — from an empty Termux to the demo app on
+  the phone: clone, bootstrap, build, initialize, generate, build the demo
 - [[usermanual/workspace]] — what the directories are, which files are yours
 - [[usermanual/android-sfml]] — Android apps with SFML
 - [[usermanual/cartridges]] — `sqcart`, for opening and building `.sq` files
