@@ -27,6 +27,13 @@ counterpart there.
 - [Authoring a kit](resources/kits.md)
 - [Manifest reference](resources/manifests.md)
 
+### Teaching workspace
+- [template.term.edu.cpp](templates/template.term.edu.cpp.md) — the simplest template: one program and a self-explaining Makefile
+- [kit.edu_cpp](kits/kit.edu_cpp.md) — optional C++ lessons for that template
+
+### Kits
+- [kit.terminal](kits/kit.terminal.md) — simple terminal utilities: console I/O, regex helpers, FileHandle
+
 ## Two-minute version
 
 ```cpp
