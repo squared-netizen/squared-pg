@@ -21,6 +21,7 @@ and each page links to its counterpart.
 
 ### Lua
 - [Binding layer](lua/binding.md) — conversion, registry generation, ownership
+- [Doctor in an installed environment](lua/doctor-install-report.md) — why `sqpg doctor` called a working installation broken, and what fixed it
 
 ### Resources
 - [Manifest handling](resources/manifests.md) — schema divergence and how extension fields are read

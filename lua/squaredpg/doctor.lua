@@ -91,6 +91,23 @@ local function pinned_ref(root, file)
   return nil
 end
 
+--- Whether `root` is a source checkout rather than an installed tool.
+--
+-- The markers are the files only a checkout carries: the bootstrap script,
+-- the pin files, the repository, and the trees bootstrap clones. An installed
+-- `.sqpg` has none of them -- `initialize` copies `lua/`, the resource
+-- namespaces and the binaries, and nothing else -- so this is the test that
+-- decides which half of the report applies.
+local function is_checkout(root)
+  if env.exists(root .. "/tools/bootstrap.sh") then return true end
+  if env.exists(root .. "/SQCART_VERSION") then return true end
+  if env.exists(root .. "/SQUARED_VERSION") then return true end
+  if env.is_dir(root .. "/.git") then return true end
+  if env.is_dir(root .. "/sqcart") then return true end
+  if env.is_dir(root .. "/resources/.squared") then return true end
+  return false
+end
+
 --- A component's state, entirely from what git already knows locally.
 local function component_state(dir)
   if not env.is_dir(dir) then return { present = false } end
@@ -122,7 +139,32 @@ end
 local function check_components(root, rep)
   rep:heading("components")
 
-  local any = false
+  if not is_checkout(root) then
+    rep:line(1, "components", "installed tool; pins and checkouts live in the source tree")
+
+    for _, tool in ipairs({ "sqpg", "sqcart" }) do
+      local installed = root .. "/bin/" .. tool
+      if env.exists(installed) then
+        rep:line(0, tool, "installed in .sqpg/bin")
+      else
+        local fix = tool == "sqcart"
+          and "make -C sqcart && sqpg initialize"
+          or "sqpg initialize"
+        rep:line(2, tool, "not installed in .sqpg/bin", fix)
+      end
+    end
+
+    for _, tool in ipairs({ "git", "make" }) do
+      local which = trim(capture("command -v " .. tool))
+      if which == "" then
+        rep:line(2, tool, "not found on PATH", "install " .. tool)
+      else
+        rep:line(0, tool, which)
+      end
+    end
+    return
+  end
+
   for _, spec in ipairs({ { "sqcart", "sqcart", "SQCART_VERSION" },
                           { "squared", "resources/.squared", "SQUARED_VERSION" } }) do
     local name, rel, pin_file = spec[1], spec[2], spec[3]
@@ -132,12 +174,9 @@ local function check_components(root, rep)
 
     if not state.present then
       rep:line(3, name, "absent", "./tools/bootstrap.sh")
-      any = true
     elseif not state.repo then
       rep:line(2, name, rel .. " exists but is not a git checkout")
-      any = true
     else
-      any = true
       local where = state.detached and ("detached at " .. state.short)
                                     or (state.branch .. " " .. state.short)
       -- A pin that does not match HEAD means bootstrap has not been run since
@@ -161,10 +200,6 @@ local function check_components(root, rep)
       end
     end
   end
-
-  if not any then
-    rep:line(1, "components", "none; this looks like an installed tool, not a checkout")
-  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -186,7 +221,7 @@ local function check_resources(root, rep, sqpg_table)
     if env.is_dir(pair[1]) then
       present = present + 1
       local count = tonumber(trim(capture(
-        "find " .. env.quote(pair[1]) .. " -mindepth 1 -maxdepth 1 -type d | wc -l"))) or 0
+        "find -H " .. env.quote(pair[1]) .. " -mindepth 1 -maxdepth 1 -type d | wc -l"))) or 0
       local link = ""
       if env.run("test -L " .. env.quote(pair[1])) then
         link = " -> " .. trim(capture("readlink " .. env.quote(pair[1])))

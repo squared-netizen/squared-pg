@@ -528,6 +528,24 @@ void doctor_reports_without_repairing() {
     CHECK(warm.contains("no duplicates"));
     CHECK(warm.contains(sysroot.path().string()));
 
+    // From the installed environment (sqsysroot/.sqpg), doctor should not claim
+    // checkout components are absent; it should report installed and exit cleanly
+    // if tools are present.
+    {
+        const std::string inst = sysroot.path().string() + "/.sqpg/bin/sqpg";
+        const std::string cmd = "SQSYSROOT='" + sysroot.path().string() + "' '" + inst + "' doctor 2>&1";
+        FILE* p = popen(cmd.c_str(), "r");
+        std::string out;
+        std::array<char, 4096> buf{};
+        while (std::fgets(buf.data(), static_cast<int>(buf.size()), p) != nullptr) {
+            out += buf.data();
+        }
+        const int st = pclose(p);
+        CHECK(st == 0);
+        CHECK(out.find("absent") == std::string::npos);
+        CHECK(out.find("sqcart") != std::string::npos);
+    }
+
     // It runs from inside a workspace too. A diagnostic that only worked
     // from one directory would be missing when it was wanted.
     const fs::path made = seed_workspace(sysroot, "d");
