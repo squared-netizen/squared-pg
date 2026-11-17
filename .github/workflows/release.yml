@@ -40,7 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: version
         name: resolve and check the version
@@ -74,7 +74,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: archive
         env:
@@ -102,7 +102,7 @@ jobs:
           make -j
           make check
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: source
           path: dist/*
@@ -133,7 +133,7 @@ jobs:
             runner: macos-13
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: build
         run: |
@@ -168,7 +168,7 @@ jobs:
           rm -rf "dist/$name"
           ls -lh dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: bundle-${{ matrix.platform }}
           path: dist/*.tar.gz
@@ -179,9 +179,9 @@ jobs:
     needs: [verify, source, bundle]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: staged
 
@@ -228,7 +228,7 @@ jobs:
           \`\`\`
           EOF
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.tar.gz
