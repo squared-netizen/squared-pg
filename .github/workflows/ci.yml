@@ -55,7 +55,7 @@ jobs:
             cxx: clang++
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # squared-pg is three repositories. A bare checkout has neither sqcart/
       # nor resources/.squared, and the Makefile's own guard says so before
@@ -98,7 +98,7 @@ jobs:
         runner: [ubuntu-latest, macos-14]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # squared-pg is three repositories. A bare checkout has neither sqcart/
       # nor resources/.squared, and the Makefile's own guard says so before
@@ -137,7 +137,7 @@ jobs:
     name: sqcart
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # sqcart is a separate repository; bootstrap clones it into sqcart/.
       - name: assemble
@@ -155,7 +155,7 @@ jobs:
     name: hygiene
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: version is single-sourced
         run: sh tools/version-check.sh

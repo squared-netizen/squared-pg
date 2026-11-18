@@ -16,6 +16,20 @@ matters. Nothing is listed done on the strength of having been written.
       executable-path branch is written and unexecuted. Runner labels
       (`ubuntu-24.04-arm`, `macos-13`) may also need adjusting.
 
+## Stale test: package payload path
+
+- [ ] **`package_materializes` in `engine/tests/test_generate.cpp`** has three
+      checks disabled (2026-11-18). Two expected
+      `squared/gui/include/squared/gui/button.hpp` in a generated Android
+      project; squared moved to C++ modules and has no such header, so the
+      plan has no such step and the test crashed on a null pointer. The
+      third expected exactly 329 squared-core files, a count that changed
+      with the same move; each file's hash is still checked. CI had
+      been red on every runner since 2026-10-15 because of it. The rest of
+      the test still runs. Restore the checks against a small fixture
+      cartridge with known files, so squared's layout cannot break them:
+      phase 1 of the sqpg redesign.
+
 ## Spec debt — `spec-audit-02.md`
 
 Sixteen decisions (D-029…D-044) name a section to amend; none is applied.
