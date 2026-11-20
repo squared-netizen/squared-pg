@@ -31,8 +31,6 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
-    env:
-      TMPDIR: ${{ runner.temp }}
 
     steps:
       - uses: actions/checkout@v6
@@ -52,9 +50,13 @@ jobs:
 
       - name: engine tests
         run: make check
+        env:
+          TMPDIR: ${{ runner.temp }}
 
       - name: end-to-end smoke
         run: make smoke
+        env:
+          TMPDIR: ${{ runner.temp }}
 
       - name: sqpg finds its installation
         run: |
