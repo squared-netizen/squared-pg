@@ -148,7 +148,7 @@ local function check_components(root, rep)
         rep:line(0, tool, "installed in .sqpg/bin")
       else
         local fix = tool == "sqcart"
-          and "make -C sqcart && sqpg initialize"
+          and "make sqcart && sqpg initialize"
           or "sqpg initialize"
         rep:line(2, tool, "not installed in .sqpg/bin", fix)
       end
@@ -287,7 +287,7 @@ local function check_environment(rep, source)
     local installed = root .. "/.sqpg/bin/" .. tool
     if not env.exists(installed) then
       local fix = tool == "sqcart"
-        and "make -C sqcart && sqpg initialize"
+        and "make sqcart && sqpg initialize"
         or "sqpg initialize"
       rep:line(2, tool, "not installed in the environment", fix)
     else
@@ -295,7 +295,7 @@ local function check_environment(rep, source)
       -- snapshot; a rebuild in the checkout does not reach it, and nothing
       -- else says so.
       local built = source .. "/build/" .. tool
-      if tool == "sqcart" then built = source .. "/sqcart/build/sqcart" end
+      if tool == "sqcart" then built = source .. "/sqcart/v3/build/sqcart3" end
       if env.exists(built) and not env.run("cmp -s " .. env.quote(built) .. " "
                                            .. env.quote(installed)) then
         rep:line(2, tool, "installed copy differs from the built one",

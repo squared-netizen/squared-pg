@@ -284,7 +284,7 @@ OwnershipClass classify_path(const OwnershipRules& rules, std::string_view path,
     return found ? chosen : rules.default_class;
 }
 
-OwnershipRules ownership_rules(const sqcart::Manifest& manifest) {
+OwnershipRules ownership_rules(const cart::Manifest& manifest) {
     OwnershipRules out;
     const Value declared = manifest_extension(manifest, "ownership");
     const auto fill = [&](const char* key, std::vector<std::string>& into) {
@@ -312,7 +312,7 @@ OwnershipRules ownership_rules(const sqcart::Manifest& manifest) {
     return out;
 }
 
-Value manifest_extension(const sqcart::Manifest& manifest, std::string_view member) {
+Value manifest_extension(const cart::Manifest& manifest, std::string_view member) {
     // Cartridge format 2 carries this engine's manifest data under
     // `consumers.squared_pg` and never opens it (format spec 5.6). sqcart
     // hands it back as JSON text, which is the whole of the contract: the

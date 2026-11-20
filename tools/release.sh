@@ -16,7 +16,6 @@
 # Options:
 #   --version=X.Y.Z   override the version
 #   --out=DIR         artifact directory (default: dist/)
-#   --skip-cmake      skip the CMake build in `check`
 #   --skip-make       skip the Makefile build in `check`
 #
 # Runs from anywhere: the repository is found from this script's own location,
@@ -43,13 +42,11 @@ root=$(cd "$script_dir/.." && pwd)
 command_name=""
 pkg_version=""
 out_dir="$root/dist"
-skip_cmake=0
 skip_make=0
 tarball=""
 
 for argument in "$@"; do
     case "$argument" in
-        --skip-cmake) skip_cmake=1 ;;
         --skip-make)  skip_make=1 ;;
         --version=*)  pkg_version="${argument#--version=}" ;;
         --out=*)      out_dir="${argument#--out=}" ;;
@@ -116,8 +113,8 @@ host_platform() {
 }
 
 project_version() {
-    # The version lives in one file. CMakeLists.txt and the Makefile both read
-    # it and compile it in. Scraping it back out of the build files stopped
+    # The version lives in one file. The Makefile reads
+    # it and compiles it in. Scraping it back out of the build files stopped
     # working the moment they started reading it instead of declaring it.
     tr -d ' \t\n\r' < "$root/VERSION"
 }
@@ -147,10 +144,9 @@ do_check() {
 
     step "vendored dependencies are present"
     for required in third-party/lua-5.4.8/src/lua.h \
-                    third-party/miniz-3.1.2/miniz.c \
-                    third-party/yyjson-0.12.0/src/yyjson.c \
+                    third-party/yyjson-0.12.0/src/yyjson.h \
                     third-party/crypto-algorithms/sha256.c \
-                    sqcart/include/sqcart/sqcart.hpp \
+                    sqcart/v3/src/sq.cart.cppm \
                     LICENSE VERSION; do
         [ -f "$root/$required" ] || die "missing: $required"
     done
@@ -165,28 +161,15 @@ do_check() {
     fi
 
     if [ "$skip_make" -eq 0 ]; then
-        step "Makefile build (the Termux path)"
+        step "Makefile build"
         run_or_die make -C "$root" -j "$(jobs_count)"
         run_or_die make -C "$root" check
         run_or_die make -C "$root" smoke
         ok "Makefile path clean"
     fi
 
-    if [ "$skip_cmake" -eq 0 ]; then
-        step "CMake build (the supported path)"
-        if ! command -v cmake >/dev/null 2>&1; then
-            warn "cmake not installed; skipping. CI covers this path."
-        else
-            run_or_die cmake -S "$root" -B "$root/build-cmake" -DCMAKE_BUILD_TYPE=RelWithDebInfo
-            run_or_die cmake --build "$root/build-cmake" -j "$(jobs_count)"
-            run_or_die ctest --test-dir "$root/build-cmake" --output-on-failure
-            ok "CMake path clean"
-        fi
-    fi
-
     step "sqcart, independently"
-    run_or_die make -C "$root/sqcart" -j "$(jobs_count)"
-    run_or_die make -C "$root/sqcart" check
+    run_or_die make -C "$root/sqcart/v3" -j "$(jobs_count)" CXX="${CXX:-clang++}" test
     ok "sqcart clean"
 }
 
@@ -204,8 +187,7 @@ do_stage() {
     local name="squared-pg-$version-$platform"
     local stage="$target/$name"
 
-    local binary="$root/build-cmake/sqpg"
-    [ -x "$binary" ] || binary="$root/build/sqpg"
+    local binary="$root/build/sqpg"
     [ -x "$binary" ] || die "no sqpg binary; run './release.sh check' first"
 
     rm -rf "$stage"
@@ -500,8 +482,8 @@ case "$command_name" in
         do_status "$pkg_version" "$platform" ;;
 
     clean)
-        rm -rf "$out_dir" "$root/build-cmake"
-        ok "removed $out_dir and build-cmake" ;;
+        rm -rf "$out_dir"
+        ok "removed $out_dir" ;;
 
     ""|help)
         sed -n '3,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;

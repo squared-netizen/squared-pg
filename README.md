@@ -1,7 +1,7 @@
 # squared-pg
 
 An offline-first project generator for applications built on the Squared
-framework. A native C++20 engine provides generation capability; a Lua 5.4
+framework. A native C++23 engine provides generation capability; a Lua 5.4
 control layer sequences it into workflows. The output is a self-contained
 developer workspace you own outright.
 
@@ -88,7 +88,7 @@ make smoke    # generate a project, build it, run it
 ```
 
 No network, at any point. A clean checkout plus `third-party/` is the whole
-dependency list. A C++20 compiler and `make` are the only requirements; see
+dependency list. clang and libc++ (19 or later) and `make` are the only requirements; see
 [BUILDING.md](BUILDING.md) for per-platform notes and troubleshooting.
 
 ## Use
@@ -138,7 +138,7 @@ User / tool input  →  Lua workflow  →  engine control surface  →  workspac
 ## Layout
 
 ```text
-engine/        the C++20 engine — include/ is public, src/ is not
+engine/        the C++23 engine — include/ is public, src/ is not
 engine/lua/    the Lua binding layer
 lua/           workflows and shared Lua modules
 app/           sqpg, the reference CLI host

@@ -116,7 +116,7 @@ local function install_into(root, options, report)
   -- squared-pg built without it is still a working generator; only cartridge
   -- authoring needs it.
   local sqcart_src = nil
-  for _, candidate in ipairs({ source .. "/sqcart/build/sqcart",
+  for _, candidate in ipairs({ source .. "/sqcart/v3/build/sqcart3",
                                source .. "/bin/sqcart" }) do
     if env.exists(candidate) then
       sqcart_src = candidate

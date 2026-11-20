@@ -74,7 +74,7 @@ namespace {
 /// `capability.template.substitute@^1.0` names something real, and whether this
 /// build satisfies the range, is the consumer's question -- which is to say,
 /// this function's.
-[[nodiscard]] Result<void> check_capabilities(const sqcart::Manifest& manifest,
+[[nodiscard]] Result<void> check_capabilities(const cart::Manifest& manifest,
                                               std::span<const Capability> provided,
                                               const ResourceId& id, ErrorCategory category) {
     std::vector<std::string> unmet;
@@ -209,7 +209,7 @@ namespace {
 /// trailing-slash path otherwise, so the only work left here is turning "."
 /// into the empty prefix this engine uses for "no prefix". SQ-INF/ is not
 /// payload either way; that is the format's rule, not this function's.
-[[nodiscard]] std::string payload_prefix(const sqcart::Manifest& manifest) {
+[[nodiscard]] std::string payload_prefix(const cart::Manifest& manifest) {
     const std::string& declared = manifest.tree();
     if (declared == ".") return {};
     return declared;
@@ -240,7 +240,7 @@ Result<ResolvedResource> TemplateService::resolve(const ResourceRef& ref, const 
                                     ErrorCategory::template_, "template", capabilities_);
     if (!resolved) return resolved;
 
-    const sqcart::Manifest& manifest = resolved->cartridge->manifest();
+    const cart::Manifest& manifest = resolved->cartridge->manifest();
 
     // Cartridge format 2 has no kind bodies. A template that says nothing to
     // this engine is no longer a malformed manifest -- it is a cartridge
@@ -299,9 +299,9 @@ Result<ResolvedResource> TemplateService::resolve(const ResourceRef& ref, const 
         const std::string& prefix = resolved->tree_prefix;
         const auto& entries = resolved->cartridge->entries();
         const bool populated = std::any_of(
-            entries.begin(), entries.end(), [&](const sqcart::EntryInfo& entry) {
+            entries.begin(), entries.end(), [&](const cart::EntryInfo& entry) {
                 return entry.path.starts_with(prefix)
-                       && !entry.path.starts_with(sqcart::kMetaDir);
+                       && !entry.path.starts_with(cart::kMetaDir);
             });
         if (!populated) {
             diagnostics.push_back(Diagnostic{Severity::warning,
@@ -378,7 +378,7 @@ Result<ResolvedResource> KitService::resolve(const ResourceRef& ref, const Resol
                                     capabilities_);
     if (!resolved) return resolved;
 
-    const sqcart::Manifest& manifest = resolved->cartridge->manifest();
+    const cart::Manifest& manifest = resolved->cartridge->manifest();
     if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::kit, "kit.manifest.invalid",
                                        "kit " + ref.id.str() +
@@ -486,7 +486,7 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
                         "package", capabilities_);
     if (!resolved) return resolved;
 
-    const sqcart::Manifest& manifest = resolved->cartridge->manifest();
+    const cart::Manifest& manifest = resolved->cartridge->manifest();
     if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::package, "package.manifest.invalid",
                                        "package " + ref.id.str() +
@@ -541,9 +541,9 @@ Result<ResolvedResource> PackageService::resolve(const ResourceRef& ref, const R
         const std::string& prefix = resolved->tree_prefix;
         const auto& entries = resolved->cartridge->entries();
         const bool populated = std::any_of(
-            entries.begin(), entries.end(), [&](const sqcart::EntryInfo& entry) {
+            entries.begin(), entries.end(), [&](const cart::EntryInfo& entry) {
                 return entry.path.starts_with(prefix)
-                       && !entry.path.starts_with(sqcart::kMetaDir);
+                       && !entry.path.starts_with(cart::kMetaDir);
             });
         if (!populated) {
             diagnostics.push_back(Diagnostic{Severity::warning,
@@ -567,7 +567,7 @@ Result<ResolvedResource> AssetService::resolve(const ResourceRef& ref, const Res
                                     capabilities_);
     if (!resolved) return resolved;
 
-    const sqcart::Manifest& manifest = resolved->cartridge->manifest();
+    const cart::Manifest& manifest = resolved->cartridge->manifest();
     if (!manifest.consumer(detail::kConsumerId)) {
         EngineError error = make_error(ErrorCategory::asset, "asset.manifest.invalid",
                                        "asset bundle " + ref.id.str() +

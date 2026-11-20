@@ -219,7 +219,7 @@ step "generate an android workspace"
     --platform android --param package_name=com.example.droid || fail "generate droid"
 
 for required in Makefile mk/squared_generated.mk mk/squared_android_package.mk \
-                mk/kit_opengl.mk sq_app/src/app.cpp sq_app/include/app.hpp \
+                mk/kit_opengl.mk sq_app/src/main.cpp \
                 sq_android/entry.cpp sq_android/AndroidManifest.xml \
                 sq_android/res/values/strings.xml \
                 sq_android/res/drawable/ic_launcher_foreground.xml \
@@ -265,7 +265,7 @@ step "android builds without a rendering kit"
     --param package_name=com.example.bare >/dev/null || fail "generate without a kit"
 [ ! -e bare/sq_kit ] || fail "sq_kit present without a rendering kit"
 [ ! -e bare/mk/kit_opengl.mk ] || fail "kit fragment present without the kit"
-grep -q "#include <squared/graphics/context.hpp>" bare/sq_android/entry.cpp \
+grep -q "^import sq.graphics;" bare/sq_android/entry.cpp \
     || fail "the platform layer does not use the renderer-agnostic context"
 grep -q "__has_include(<opengl/gl.hpp>)" bare/sq_android/entry.cpp \
     && fail "the stale __has_include renderer guard is back"

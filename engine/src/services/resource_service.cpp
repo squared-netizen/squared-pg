@@ -8,24 +8,11 @@
 namespace squared::pg {
 namespace {
 
-/// Manifests are read through sqcart rather than by a second parser here.
-/// sqcart already enforces the container profile, the path rules, the
-/// resource limits and the envelope, and it is linked from vendored in-tree
-/// source regardless. A second manifest reader would be a second chance to
-/// disagree about what a manifest means.
-[[nodiscard]] sqcart::OpenOptions index_open_options() {
-    sqcart::OpenOptions options;
-    // Envelope validation only at index time (D-012); the typed services
-    // check the body when they resolve. Integrity verification costs a full
-    // read of every entry, so it stays off until a resource is actually used.
-    options.conformance      = sqcart::Conformance::strict;
-    options.verify_integrity = false;
-    // Kits and packages legitimately ship compiled artefacts; containment is
-    // an archive property and loading is a runtime decision.
-    options.reject_native_code = false;
-    return options;
-}
-
+/// Manifests are read through sq.cart (services/cartridge.hpp) rather than
+/// by a second parser here: sq.cart enforces the container, the path rules,
+/// the limits and the envelope. A second manifest reader would be a second
+/// chance to disagree about what a manifest means. A packed cartridge's
+/// entries are checked against their digests as they are read (§9.1).
 [[nodiscard]] bool is_resource_directory(const std::filesystem::path& path) {
     std::error_code ec;
     if (!std::filesystem::is_directory(path, ec)) return false;
@@ -94,7 +81,7 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
     }
 
     for (const std::filesystem::path& location : candidates) {
-        auto opened = sqcart::Cartridge::open(location, index_open_options());
+        auto opened = cart::Cartridge::open(location);
         if (!opened) {
             // A malformed resource is reported and skipped. Failing the whole
             // engine because one third-party kit is broken would make the
@@ -112,7 +99,7 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
             continue;
         }
 
-        const sqcart::Manifest& manifest = opened->manifest();
+        const cart::Manifest& manifest = opened->manifest();
 
         // `kind` is an opaque token as of cartridge format 2, so mapping it
         // onto a ResourceKind is this engine's job and an unrecognised token
@@ -216,17 +203,11 @@ Result<void> ResourceService::build_index(const std::vector<std::filesystem::pat
     return {};
 }
 
-Result<std::shared_ptr<sqcart::Cartridge>> ResourceService::open(const ResourceRecord& record) {
+Result<std::shared_ptr<cart::Cartridge>> ResourceService::open(const ResourceRecord& record) {
     const std::string key = record.id.str() + '@' + record.version.to_string();
     if (auto found = cache_.find(key); found != cache_.end()) return found->second;
 
-    sqcart::OpenOptions options = index_open_options();
-    // Payloads are about to be read into a workspace, so integrity is checked
-    // now rather than at index time (§2.10.7): the cost is paid once, for the
-    // resources actually used.
-    options.verify_integrity = true;
-
-    auto opened = sqcart::Cartridge::open(record.location, options);
+    auto opened = cart::Cartridge::open(record.location);
     if (!opened) {
         EngineError error = make_error(ErrorCategory::resource, "resource.payload.unreadable",
                                        "could not open resource payload: " + opened.error().message);
@@ -235,7 +216,7 @@ Result<std::shared_ptr<sqcart::Cartridge>> ResourceService::open(const ResourceR
         return Unexpected{std::move(error)};
     }
 
-    auto shared = std::make_shared<sqcart::Cartridge>(std::move(*opened));
+    auto shared = std::make_shared<cart::Cartridge>(std::move(*opened));
     cache_.emplace(key, shared);
     return shared;
 }

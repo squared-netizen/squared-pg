@@ -226,9 +226,9 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
             return Unexpected{std::move(error)};
         }
 
-        for (const sqcart::EntryInfo& entry : resource.cartridge->entries()) {
+        for (const cart::EntryInfo& entry : resource.cartridge->entries()) {
             // SQ-INF/ is container metadata, never payload.
-            if (entry.path.starts_with(sqcart::kMetaDir)) continue;
+            if (entry.path.starts_with(cart::kMetaDir)) continue;
             if (!resource.tree_prefix.empty() && !entry.path.starts_with(resource.tree_prefix)) continue;
 
             std::string relative = entry.path.substr(resource.tree_prefix.size());

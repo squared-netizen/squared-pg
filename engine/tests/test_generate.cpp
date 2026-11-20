@@ -472,7 +472,7 @@ void write_synthetic_package(const std::filesystem::path& packages_root, const s
     const std::string manifest =
         "{\n"
         "  \"format\": \"squared-cartridge\",\n"
-        "  \"format_version\": 2,\n"
+        "  \"format_version\": 3,\n"
         "  \"kind\": \"package\",\n"
         "  \"id\": \"" + id + "\",\n"
         "  \"version\": \"1.0.0\",\n"

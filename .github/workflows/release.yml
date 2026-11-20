@@ -57,11 +57,18 @@ jobs:
 
       - run: sh tools/version-check.sh
 
+      - name: assemble
+        run: ./tools/bootstrap.sh
+
+      - name: clang and libc++
+        run: |
+          ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
+          echo "$RUNNER_TEMP/llvm" >> "$GITHUB_PATH"
+
       - name: build and test
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build -j
-          ctest --test-dir build --output-on-failure
+          make -j4 CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" OPT=-O2
+          make check CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" OPT=-O2
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -89,9 +96,14 @@ jobs:
             | gzip -9 > "dist/$name-src.tar.gz"
           ls -lh dist/
 
+      - name: clang and libc++
+        run: ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
+
       - name: the tarball builds offline
         env:
           VERSION: ${{ needs.verify.outputs.version }}
+          CXX: ${{ runner.temp }}/llvm/clang++
+          CC: ${{ runner.temp }}/llvm/clang
         run: |
           # Unpacking somewhere unrelated and building proves the tarball is
           # self-contained -- that nothing was left behind in .gitignore and
@@ -129,21 +141,25 @@ jobs:
             runner: ubuntu-24.04-arm
           - platform: macos-arm64
             runner: macos-14
-          - platform: macos-x86_64
-            runner: macos-13
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: build
+      - name: assemble the tree
+        run: ./tools/bootstrap.sh
+
+      - name: clang and libc++
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_INSTALL_PREFIX="$PWD/stage/usr"
-          cmake --build build -j
-          cmake --install build
+          ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
+          echo "$RUNNER_TEMP/llvm" >> "$GITHUB_PATH"
+          echo "CXX=$RUNNER_TEMP/llvm/clang++" >> "$GITHUB_ENV"
+          echo "CC=$RUNNER_TEMP/llvm/clang" >> "$GITHUB_ENV"
+
+      - name: build
+        run: make -j4 OPT=-O2
 
       - name: test
-        run: ctest --test-dir build --output-on-failure
+        run: make check OPT=-O2
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -156,7 +172,8 @@ jobs:
           mkdir -p "dist/$name"
           # The layout sqpg looks for: the binary beside its resources, so the
           # upward walk finds them wherever the bundle is unpacked.
-          cp stage/usr/bin/sqpg "dist/$name/"
+          cp build/sqpg "dist/$name/"
+          cp sqcart/v3/build/sqcart3 "dist/$name/sqcart"
           cp -r resources lua "dist/$name/"
           cp LICENSE README.md BUILDING.md "dist/$name/"
           printf '%s\n' "$VERSION" > "dist/$name/VERSION"
@@ -198,7 +215,7 @@ jobs:
           cat > NOTES.md <<EOF
           ## squared-pg $VERSION
 
-          An offline-first project generator for the Squared framework. A C++20
+          An offline-first project generator for the Squared framework. A C++23
           engine provides generation capability; a Lua 5.4 control layer
           sequences it into workflows.
 
