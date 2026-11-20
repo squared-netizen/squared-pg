@@ -586,3 +586,29 @@ template declares `package.squared-core` in `requires.packages`.
 Rejected: auto-injecting the package (a parameter the user did not ask for
 turns up in their project unannounced); refusing to generate (turns a
 rendering-less android build from a wanted state into an error).
+
+---
+
+## D-081 — Cartridges are read through sq.cart (format 3.0); one build, clang and libc++
+**[[2.6 Storage]]** · [[1.3 Engine]]
+
+The engine reads every template, kit and package through sq.cart, sqcart's
+3.0 reader, behind `engine/src/services/cartridge.hpp`: a `.sq` file through
+`sq::cart::Archive`, a folder through `sq::cart::Folder`. A 2.0 cartridge is
+refused (sqcart's spec §13: no 2.0 reading); the shipped resources moved to
+3.0 once, by squared's `tools/cartridges_to_3.lua`. The cartridge format
+records no provenance and knows no kinds: `template`, `kit` and `package`
+are this engine's, in `kind` and in `consumers.squared_pg`, as before.
+
+sq.cart is C++23 modules with `import std;`, so the engine is built with
+clang 19 or later and libc++, C++23, by the Makefile alone (decided
+2026-11-20). `cartridge.cpp` is the one source that imports a module. The
+CMake build, the GCC jobs and the Apple-clang jobs are gone; CI runs Linux
+x86_64 and arm64 and macOS (Homebrew's LLVM) through `tools/ci-toolchain.sh`.
+sqcart's CLI shipped beside sqpg is sqcart/v3's `sqcart3`, installed as
+`sqcart`.
+
+Rejected: keeping CMake beside the Makefile (CMake's `import std` support is
+experimental, and two builds to keep equal was already the source of a bug);
+a second reader of exploded cartridges in the engine (two readers can
+disagree about what a cartridge is).

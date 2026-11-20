@@ -1,33 +1,48 @@
-# Hand-written build, for hosts without CMake — Termux, chiefly — and for quick
-# iteration. CMakeLists.txt is the supported build; this must stay
-# behaviourally identical to it.
+# The build, for every host: Termux, Linux, macOS (with Homebrew's LLVM).
 #
 #   make            build the engine, the CLI and the tests
 #   make check      build and run the tests
 #   make smoke      generate a project and build it, end to end
 #   make clean
 #
+# clang and libc++ new enough for `import std;` (19 or later; 23 is what
+# sqterm and CI use), C++23: the engine reads cartridges through sq.cart
+# (sqcart 3.0), whose C++23 modules sqcart/v3's own Makefile builds, with
+# libc++'s std module. Only engine/src/services/cartridge.cpp imports them.
+#
+#   make CXX=/path/to/clang++
+#
 # Offline throughout (§1.13): everything it compiles is already in the tree.
 
-CXX      ?= g++
-CC       ?= gcc
-CXXSTD   ?= c++20
+ifeq ($(origin CXX),default)
+CXX      := clang++
+endif
+ifeq ($(origin CC),default)
+CC       := $(patsubst %clang++,%clang,$(CXX))
+endif
+CXXSTD   ?= c++23
+STDLIB   := -stdlib=libc++
 OPT      ?= -O1 -g
 WARN     := -Wall -Wextra -Wpedantic
 
 BUILD    := build
-THIRD    := third-party
 
-MINIZ    := $(THIRD)/miniz-3.1.2
+THIRD    := third-party
 YYJSON   := $(THIRD)/yyjson-0.12.0/src
 SHA256   := $(THIRD)/crypto-algorithms
 LUA      := $(THIRD)/lua-5.4.8/src
 
+# sq.cart: sqcart/v3, built in its own build folder by its own Makefile.
+SQCART   := sqcart/v3
+SQB      := $(SQCART)/build
+SQCART_LIBS := $(SQB)/libsqcart.a $(SQB)/libsqcart-unzstd.a
+SQCART_MODS := -fprebuilt-module-path=$(SQB)/pcm -fmodule-file=std=$(SQB)/pcm/std.pcm
+
 SQ_VERSION := $(shell cat VERSION 2>/dev/null || echo 0.0.0)
 
-DEFS     := -DSQCART_ENABLE_WRITER=1 -DSQUARED_PG_VERSION=\"$(SQ_VERSION)\"
-INC      := -Iengine/include -Iengine/src -Iengine/lua/include -Isqcart/include -Isqcart/src \
-            -isystem $(MINIZ) -isystem $(YYJSON) -isystem $(SHA256) -isystem $(LUA)
+DEFS     := -DSQUARED_PG_VERSION=\"$(SQ_VERSION)\"
+INC      := -Iengine/include -Iengine/src -Iengine/lua/include \
+            -isystem $(YYJSON) -isystem $(SHA256) -isystem $(LUA)
 
 # -MMD -MP: header dependency tracking. Without it, editing a header does not
 # rebuild the objects that include it, and you debug a stale binary while
@@ -35,8 +50,9 @@ INC      := -Iengine/include -Iengine/src -Iengine/lua/include -Isqcart/include 
 # the start; this one did not, and it cost an afternoon.
 DEPFLAGS := -MMD -MP
 
-CXXFLAGS := -std=$(CXXSTD) $(OPT) $(WARN) $(DEFS) $(INC) $(DEPFLAGS)
+CXXFLAGS := -std=$(CXXSTD) $(STDLIB) $(OPT) $(WARN) $(DEFS) $(INC) $(DEPFLAGS)
 CFLAGS   := $(OPT) -w $(INC) $(DEPFLAGS)
+LDFLAGS  := $(STDLIB) -lpthread
 
 # --- sources ---------------------------------------------------------------
 
@@ -47,26 +63,19 @@ ENGINE_SRC := engine/src/value.cpp engine/src/version.cpp engine/src/identity.cp
               engine/src/services/resolve_services.cpp \
               engine/src/services/validation_service.cpp \
               engine/src/services/project_service.cpp \
-              engine/src/services/transaction_service.cpp
+              engine/src/services/transaction_service.cpp \
+              engine/src/services/cartridge.cpp
 
 BINDING_SRC := engine/lua/src/bindings.cpp
 
-SQCART_SRC := sqcart/src/errors.cpp sqcart/src/path.cpp \
-              sqcart/src/manifest.cpp sqcart/src/symlink.cpp sqcart/src/reader.cpp \
-              sqcart/src/digest.cpp sqcart/src/validate.cpp sqcart/src/extract.cpp \
-              sqcart/src/sha256.cpp sqcart/src/writer.cpp
-
-# One copy of miniz and yyjson for the whole build, shared with sqcart, exactly
-# as the CMake build arranges through SQCART_USE_EXTERNAL_* (§1.6).
-C_SRC    := $(MINIZ)/miniz.c $(MINIZ)/miniz_tdef.c $(MINIZ)/miniz_tinfl.c $(MINIZ)/miniz_zip.c \
-            $(YYJSON)/yyjson.c $(SHA256)/sha256.c
+# yyjson's code is in libsqcart.a (sq.data's, the same 0.12.0): one copy.
+C_SRC    := $(SHA256)/sha256.c
 
 # Everything except the standalone interpreter and compiler drivers.
 LUA_SRC  := $(filter-out $(LUA)/lua.c $(LUA)/luac.c,$(wildcard $(LUA)/*.c))
 
 ENGINE_OBJ  := $(patsubst %,$(BUILD)/%.o,$(ENGINE_SRC))
 BINDING_OBJ := $(patsubst %,$(BUILD)/%.o,$(BINDING_SRC))
-SQCART_OBJ  := $(patsubst %,$(BUILD)/%.o,$(SQCART_SRC))
 C_OBJ       := $(patsubst %,$(BUILD)/%.o,$(C_SRC))
 LUA_OBJ     := $(patsubst %,$(BUILD)/%.o,$(LUA_SRC))
 
@@ -77,9 +86,9 @@ TEST_BIN := $(patsubst %,$(BUILD)/%,$(TESTS))
 # Components assembled by tools/bootstrap.sh.
 #
 # Checked before anything is compiled. Without this the first symptom of an
-# un-assembled tree is a compiler error about a missing sqcart header, which
+# un-assembled tree is a compiler error about a missing sq.cart module, which
 # names the wrong problem and sends the reader into the include paths.
-ifeq ($(wildcard sqcart/include/sqcart/sqcart.hpp),)
+ifeq ($(wildcard $(SQCART)/src/sq.cart.cppm),)
 $(error sqcart/ is not present. Run ./tools/bootstrap.sh to assemble this tree)
 endif
 
@@ -90,21 +99,20 @@ all: $(BUILD)/sqpg $(TEST_BIN) sqcart
 components:
 	@./tools/bootstrap.sh --check
 
-# sqcart's CLI, built by its own makefile.
-#
-# The top-level build compiles sqcart's *sources* into libsquaredpg.a but
-# never linked its command-line tool, so a fresh clone produced a generator
-# that could not author a cartridge -- and nothing said so. `sqpg initialize`
-# then had nothing to install, which is why every authoring workspace needed
-# $SQCART set by hand (D-055).
-#
-# A sub-make rather than duplicated link rules: sqcart is a self-contained
-# project with its own build, and vendoring its link line here would mean two
-# places to change when it gains a source file.
+# sqcart's CLI travels with sqpg (D-055: a fresh clone must be able to
+# author a cartridge without $SQCART set by hand). sqcart/v3 is a project
+# with its own build; a sub-make keeps its link lines in one place.
+# sq.cart's libraries, its modules and sqcart3, by sqcart/v3's own Makefile.
+# Always asked (it knows what is up to date); the engine waits for it.
 sqcart:
-	@$(MAKE) --no-print-directory -C sqcart $(SQCART_BUILD)/sqcart
+	@$(MAKE) --no-print-directory -C $(SQCART) CXX='$(CXX)' $(patsubst $(SQCART)/%,%,$(SQCART_LIBS)) build/sqcart3
 
-SQCART_BUILD ?= build
+$(SQCART_LIBS): sqcart
+
+# The one source that imports sq.cart.
+$(BUILD)/engine/src/services/cartridge.cpp.o: engine/src/services/cartridge.cpp $(SQCART_LIBS)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(SQCART_MODS) -c $< -o $@
 
 $(BUILD)/%.cpp.o: %.cpp
 	@mkdir -p $(dir $@)
@@ -117,7 +125,7 @@ $(BUILD)/%.c.o: %.c
 $(BUILD)/liblua.a: $(LUA_OBJ)
 	ar rcs $@ $^
 
-$(BUILD)/libsquaredpg.a: $(ENGINE_OBJ) $(SQCART_OBJ) $(C_OBJ)
+$(BUILD)/libsquaredpg.a: $(ENGINE_OBJ) $(C_OBJ)
 	ar rcs $@ $^
 
 # Inputs are named explicitly rather than with $^.
@@ -131,7 +139,7 @@ $(BUILD)/libsquaredpg.a: $(ENGINE_OBJ) $(SQCART_OBJ) $(C_OBJ)
 $(BUILD)/sqpg: app/src/main.cpp $(BINDING_OBJ) $(BUILD)/libsquaredpg.a $(BUILD)/liblua.a
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) app/src/main.cpp $(BINDING_OBJ) \
-	    $(BUILD)/libsquaredpg.a $(BUILD)/liblua.a -o $@
+	    $(BUILD)/libsquaredpg.a $(BUILD)/liblua.a $(SQCART_LIBS) $(LDFLAGS) -o $@
 
 # Tests reach the real resources/ tree rather than a fixture copy: the point of
 # these tests is that the shipped template and kits generate correctly.
@@ -140,7 +148,7 @@ $(BUILD)/test_cli: $(BUILD)/sqpg
 $(BUILD)/test_%: engine/tests/test_%.cpp $(BUILD)/libsquaredpg.a
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -DSQUARED_PG_TEST_SOURCE_DIR=\"$(CURDIR)\" -Iengine/tests \
-	    $< $(BUILD)/libsquaredpg.a -o $@
+	    $< $(BUILD)/libsquaredpg.a $(SQCART_LIBS) $(LDFLAGS) -o $@
 
 check: all
 	@fail=0; for t in $(TEST_BIN); do \
@@ -154,6 +162,7 @@ smoke: all
 
 clean:
 	rm -rf $(BUILD)
+	@$(MAKE) --no-print-directory -C $(SQCART) clean
 
 DEPS := $(shell find $(BUILD) -name '*.d' 2>/dev/null)
 -include $(DEPS)

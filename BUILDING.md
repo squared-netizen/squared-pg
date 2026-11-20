@@ -7,71 +7,63 @@ initialise, and no package to install before configuring.
 ## Quick version
 
 ```sh
-cmake -S . -B build && cmake --build build -j4 && ctest --test-dir build
-```
-
-Or, on a host without CMake:
-
-```sh
+./tools/bootstrap.sh            # once: sqcart/ and resources/.squared at their pins
 make -j4 && make check && make smoke
 ```
 
-Both produce `build/sqpg`. The CMake build is the supported one; the
-hand-written `Makefile` is a behavioural equivalent for Termux and for quick
-iteration.
+This produces `build/sqpg`, and sqcart's CLI as `sqcart/v3/build/sqcart3`
+(installed beside sqpg as `sqcart`). The `Makefile` is the only build.
 
 ## What you need
 
 | | Required | Notes |
 |---|---|---|
-| C++20 compiler | yes | clang 15+ or GCC 12+. `std::expected` is not required — there is a tested fallback. |
-| C compiler | yes | for the vendored C dependencies |
+| clang and libc++ 19+ | yes | C++23 with `import std;`: the engine reads cartridges through sq.cart (sqcart 3.0), whose modules sqcart/v3's Makefile builds from libc++'s own module sources. 23 is what sqterm and CI use. GCC and Apple's clang cannot build it. |
 | `make` | yes | GNU make |
-| CMake 3.21+ | no | for the CMake build path |
 | `sh` | yes | for `tools/smoke.sh` |
 
-Nothing else. Lua, miniz, yyjson, SHA-256 and sqcart are all vendored and built
-from source in the same pass.
+Nothing else. Lua, yyjson, SHA-256 and sq.cart (with zstd's decoder) are all
+vendored and built from source in the same pass. Pass the compiler as
+`make CXX=/path/to/clang++` when `clang++` on PATH is not the one.
 
 ## Per platform
 
 ### Termux (Android)
 
 ```sh
-pkg install clang make cmake
+pkg install clang make
 ```
 
-This is the primary target and everything is tested here first.
+This is the primary target and everything is tested here first. Termux's
+clang uses libc++ already.
 
 ### Debian, Ubuntu
 
-```sh
-sudo apt install build-essential cmake
-```
-
-### Fedora, Arch
+clang and libc++ from apt.llvm.org (Ubuntu 24.04's own clang is 18):
 
 ```sh
-sudo dnf install gcc-c++ cmake make      # Fedora
-sudo pacman -S base-devel cmake          # Arch
+sudo apt install clang-23 lld-23 libc++-23-dev libc++abi-23-dev make
+make CXX=/usr/lib/llvm-23/bin/clang++
 ```
+
+`tools/ci-toolchain.sh` is what CI runs; it also writes `clang++` and `clang`
+wrappers that link libc++, so the projects `make smoke` generates use it too.
 
 ### macOS
 
+Homebrew's LLVM (Apple's clang has no std module):
+
 ```sh
-xcode-select --install
-brew install cmake
+./tools/ci-toolchain.sh ~/.local/llvm      # brew install llvm, and wrappers that link its libc++
+make CXX=~/.local/llvm/clang++
 ```
 
-Untested. The engine has no macOS-specific code and the executable-path
-lookup handles Darwin, but nobody has run it. If it does not work, that is a
-bug and worth reporting rather than working around.
+CI builds and tests here.
 
 ### Windows
 
 Not supported. `tools/smoke.sh` needs a POSIX shell, the durability path uses
-`fsync`, and the Android template shells out to `readelf`. The engine itself is
-portable C++20 and would probably compile; nothing else would. WSL works.
+`fsync`, and the Android template shells out to `readelf`. WSL works.
 
 ## After building
 
@@ -87,7 +79,7 @@ the current working directory to decide what to generate.
 
 ## Generated projects need less than this
 
-A project produced by `template.terminal.cpp` needs a C++20 compiler and
+A project produced by `template.terminal.cpp` needs a C++ compiler and
 `make`. It does not depend on squared-pg, does not reference the generator
 tree, and does not need it installed to build, run or ship.
 

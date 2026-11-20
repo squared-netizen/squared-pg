@@ -43,7 +43,7 @@ std::string_view to_string(LifecycleState state) noexcept {
 }
 
 // Supplied by the build from the VERSION file, which is the single source:
-// CMakeLists.txt reads it, the Makefile reads it, and this is where it lands.
+// the Makefile reads it, and this is where it lands.
 //
 // The fallback exists so the engine still compiles when built by hand without
 // the define. tools/release.fish refuses to package when the fallback and the

@@ -33,14 +33,11 @@ set --global command ""
 # declares it as a parameter.
 set --global pkg_version ""
 set --global out_dir "$root/dist"
-set --global skip_cmake 0
 set --global skip_make 0
 set --global tarball ""
 
 for argument in $argv
     switch $argument
-        case --skip-cmake
-            set skip_cmake 1
         case --skip-make
             set skip_make 1
         case '--version=*'
@@ -51,7 +48,6 @@ for argument in $argv
             echo "usage: ./release.fish {check|stage|package|source|verify|tag|publish|all|clean} [options]"
             echo "  --version=X.Y.Z[-tag]   override the version"
             echo "  --out=DIR               artifact directory (default: dist/)"
-            echo "  --skip-cmake            skip the CMake build in 'check'"
             echo "  --skip-make             skip the Makefile build in 'check'"
             exit 0
         case '-*'
@@ -147,8 +143,8 @@ end
 # kind of thing nobody notices until a bug report is impossible to place.
 # ---------------------------------------------------------------------------
 
-# The version lives in one file. CMakeLists.txt and the Makefile both read it
-# and compile it in; engine.cpp keeps a fallback for hand builds. Scraping it
+# The version lives in one file. The Makefile reads it
+# and compiles it in; engine.cpp keeps a fallback for hand builds. Scraping it
 # back out of the build files -- which an earlier version of this script did --
 # stopped working the moment they started reading it instead of declaring it.
 function project_version
@@ -166,7 +162,7 @@ end
 # check — everything CI runs
 # ---------------------------------------------------------------------------
 
-function do_check --argument-names root skip_cmake skip_make
+function do_check --argument-names root skip_make
     step "version"
     check_version_agreement
 
@@ -177,10 +173,9 @@ function do_check --argument-names root skip_cmake skip_make
 
     step "vendored dependencies are present"
     for required in third-party/lua-5.4.8/src/lua.h \
-                    third-party/miniz-3.1.2/miniz.c \
-                    third-party/yyjson-0.12.0/src/yyjson.c \
+                    third-party/yyjson-0.12.0/src/yyjson.h \
                     third-party/crypto-algorithms/sha256.c \
-                    sqcart/include/sqcart/sqcart.hpp
+                    sqcart/v3/src/sq.cart.cppm
         test -f "$root/$required"; or die "missing: $required"
     end
     ok "offline build inputs complete"
@@ -193,28 +188,17 @@ function do_check --argument-names root skip_cmake skip_make
     end
 
     if test $skip_make -eq 0
-        step "Makefile build (the Termux path)"
+        step "Makefile build"
         run_or_die make -C "$root" -j (nproc 2>/dev/null; or echo 2)
         run_or_die make -C "$root" check
         run_or_die make -C "$root" smoke
         ok "Makefile path clean"
     end
 
-    if test $skip_cmake -eq 0
-        step "CMake build (the supported path)"
-        if not command -v cmake >/dev/null
-            warn "cmake not installed; skipping. CI covers this path."
-        else
-            run_or_die cmake -S "$root" -B "$root/build-cmake" -DCMAKE_BUILD_TYPE=RelWithDebInfo
-            run_or_die cmake --build "$root/build-cmake" -j (nproc 2>/dev/null; or echo 2)
-            run_or_die ctest --test-dir "$root/build-cmake" --output-on-failure
-            ok "CMake path clean"
-        end
-    end
-
     step "sqcart, independently"
-    run_or_die make -C "$root/sqcart" -j (nproc 2>/dev/null; or echo 2)
-    run_or_die make -C "$root/sqcart" check
+    set --local cxx clang++
+    set -q CXX; and set cxx $CXX
+    run_or_die make -C "$root/sqcart/v3" -j (nproc 2>/dev/null; or echo 2) CXX=$cxx test
     ok "sqcart clean"
 end
 
@@ -233,8 +217,7 @@ function do_stage --argument-names root pkg_version platform out_dir
     set --local name "squared-pg-$pkg_version-$platform"
     set --local stage "$out_dir/$name"
 
-    set --local binary "$root/build-cmake/sqpg"
-    test -x "$binary"; or set binary "$root/build/sqpg"
+    set --local binary "$root/build/sqpg"
     test -x "$binary"; or die "no sqpg binary; run './release.fish check' first"
 
     rm -rf "$stage"
@@ -472,14 +455,14 @@ echo
 
 switch $command
     case check
-        do_check "$root" $skip_cmake $skip_make
+        do_check "$root" $skip_make
 
     case stage
         set --local stage (do_stage "$root" "$pkg_version" "$platform" "$out_dir")
         ok "staged at $stage"
 
     case package
-        do_check "$root" $skip_cmake $skip_make
+        do_check "$root" $skip_make
         step "packaging"
         set --local archive (do_package "$root" "$pkg_version" "$platform" "$out_dir")
         ok "$archive"
@@ -498,7 +481,7 @@ switch $command
         do_publish "$root" "$pkg_version"
 
     case all
-        do_check "$root" $skip_cmake $skip_make
+        do_check "$root" $skip_make
         step "source tarball"
         do_source "$root" "$pkg_version" "$out_dir"
         step "packaging"
@@ -514,8 +497,8 @@ switch $command
         echo "    ./release.fish publish     # pushes; CI drafts the release"
 
     case clean
-        rm -rf "$out_dir" "$root/build-cmake"
-        ok "removed $out_dir and build-cmake"
+        rm -rf "$out_dir"
+        ok "removed $out_dir"
 
     case '*'
         die "unknown command '$command' — try ./release.fish --help"

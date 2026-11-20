@@ -1,14 +1,12 @@
 # squared-pg — continuous integration.
 #
-# Two build systems, deliberately. CMake is the supported path; the hand-written
-# Makefile is what Termux uses. They must stay behaviourally identical, and the
-# only way to know they have is to run both — a bug that appeared under CMake
-# and not under make is exactly how the installation-root defect was found.
+# One build: the Makefile, with clang and libc++ (C++23; sq.cart's modules
+# and `import std;`), as on Termux. tools/ci-toolchain.sh installs them.
 #
 # No network is used by the build itself: everything squared-pg compiles is
 # vendored. The jobs do reach the network once, before building, to assemble
 # the tree -- squared-pg is three repositories and a bare checkout is not a
-# buildable tree. See tools/bootstrap.sh.
+# buildable tree (tools/bootstrap.sh) -- and to install the toolchain.
 
 name: ci
 
@@ -26,89 +24,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cmake:
-    name: cmake / ${{ matrix.name }}
+  build:
+    name: build / ${{ matrix.runner }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: linux-x86_64-gcc
-            runner: ubuntu-latest
-            cc: gcc
-            cxx: g++
-          - name: linux-x86_64-clang
-            runner: ubuntu-latest
-            cc: clang
-            cxx: clang++
-          - name: linux-aarch64-gcc
-            runner: ubuntu-24.04-arm
-            cc: gcc
-            cxx: g++
-          - name: macos-arm64
-            runner: macos-14
-            cc: clang
-            cxx: clang++
-          - name: macos-x86_64
-            runner: macos-13
-            cc: clang
-            cxx: clang++
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
 
     steps:
       - uses: actions/checkout@v6
 
-      # squared-pg is three repositories. A bare checkout has neither sqcart/
-      # nor resources/.squared, and the Makefile's own guard says so before
-      # anything compiles. This is also the only thing that exercises
-      # bootstrap.sh, which nothing else tests.
       - name: assemble
         run: ./tools/bootstrap.sh
 
-      - name: configure
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-
-      - name: build
-        run: cmake --build build -j
-
-      # The smoke test generates projects, builds them and runs them, so it
-      # needs somewhere writable. macOS runners set TMPDIR; Linux ones do not
-      # always, and the tests fall back to "." which is not always what we want.
-      - name: test
-        run: ctest --test-dir build --output-on-failure
-        env:
-          TMPDIR: ${{ runner.temp }}
-
-      # macOS is the platform with no on-device testing behind it. Proving the
-      # binary can find its own resources there is the check that matters,
-      # because the executable-path lookup is platform-specific code.
-      - name: sqpg finds its installation
+      - name: clang and libc++
         run: |
-          ./build/sqpg list
-          ./build/sqpg describe
-
-  makefile:
-    name: makefile / ${{ matrix.runner }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-latest, macos-14]
-
-    steps:
-      - uses: actions/checkout@v6
-
-      # squared-pg is three repositories. A bare checkout has neither sqcart/
-      # nor resources/.squared, and the Makefile's own guard says so before
-      # anything compiles. This is also the only thing that exercises
-      # bootstrap.sh, which nothing else tests.
-      - name: assemble
-        run: ./tools/bootstrap.sh
+          ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
+          echo "$RUNNER_TEMP/llvm" >> "$GITHUB_PATH"
+          echo "CXX=$RUNNER_TEMP/llvm/clang++" >> "$GITHUB_ENV"
+          echo "CC=$RUNNER_TEMP/llvm/clang" >> "$GITHUB_ENV"
 
       - name: build
-        run: make -j
+        run: make -j4
 
       - name: engine tests
         run: make check
@@ -120,34 +58,34 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
 
-      # The bug class that cost an afternoon: header dependency tracking makes
-      # a link target depend on its headers, and a rule using $^ then tries to
-      # compile them. It only appears on an incremental rebuild, so a clean
-      # build alone would not have caught it.
+      - name: sqpg finds its installation
+        run: |
+          ./build/sqpg list
+          ./build/sqpg describe
+
       - name: incremental rebuild after touching a source
         run: |
           touch engine/src/services/project_service.cpp
-          make -j
+          make -j4
       - name: incremental rebuild after touching a header
         run: |
           touch engine/src/services/services.hpp
-          make -j
+          make -j4
 
   sqcart:
     name: sqcart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
-      # sqcart is a separate repository; bootstrap clones it into sqcart/.
       - name: assemble
         run: ./tools/bootstrap.sh
 
-      # The nested project must build standalone. squared-pg links it from
-      # vendored in-tree source, so a change here that only works inside the
-      # parent build would break its isolation gate.
+      - name: clang and libc++
+        run: ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
+
       - name: build and test
-        run: cd sqcart && make -j && make check
+        run: make -C sqcart/v3 -j4 CXX="$RUNNER_TEMP/llvm/clang++" test
         env:
           TMPDIR: ${{ runner.temp }}
 

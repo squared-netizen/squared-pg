@@ -27,17 +27,7 @@
 #  endif
 #endif
 
-#if defined(__cpp_lib_expected) && __cpp_lib_expected >= 202202L
-#  define SQUARED_PG_HAVE_STD_EXPECTED 1
-#else
-#  define SQUARED_PG_HAVE_STD_EXPECTED 0
-#endif
-
-#if SQUARED_PG_HAVE_STD_EXPECTED
-#  include <expected>
-#else
-#  include "sqcart/expected.hpp"
-#endif
+#include <expected>
 
 namespace squared::pg {
 
@@ -95,19 +85,9 @@ struct Diagnostic {
     [[nodiscard]] Value to_value() const;
 };
 
-#if SQUARED_PG_HAVE_STD_EXPECTED
 template <class T>
 using Result = std::expected<T, EngineError>;
 using Unexpected = std::unexpected<EngineError>;
-#else
-/// The toolchain lacks <expected>. Rather than vendor a second substitute,
-/// reuse the one sqcart already ships and tests (sqcart/expected.hpp);
-/// sqcart is linked from vendored in-tree source regardless, so this costs
-/// nothing and keeps one substitute under test instead of two.
-template <class T>
-using Result = sqcart::expected<T, EngineError>;
-using Unexpected = sqcart::unexpected<EngineError>;
-#endif
 
 /// Shorthand for the overwhelmingly common failure return.
 [[nodiscard]] Unexpected fail(ErrorCategory category, std::string code, std::string message);

@@ -288,7 +288,7 @@ void builds_without_a_rendering_kit() {
     // rather than failing to link. That is what lets a rendering kit be added
     // later without editing code already written.
     const std::string entry = read(target / "sq_android" / "entry.cpp");
-    CHECK(entry.find("<squared/graphics/context.hpp>") != std::string::npos);
+    CHECK(entry.find("import sq.graphics;") != std::string::npos);
     CHECK(entry.find("__has_include(<opengl/gl.hpp>)") == std::string::npos);
 
     (void)engine->shutdown();

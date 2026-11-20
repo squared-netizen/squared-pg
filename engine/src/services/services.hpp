@@ -29,7 +29,7 @@
 #include "squared/pg/value.hpp"
 #include "squared/pg/version.hpp"
 
-#include "sqcart/sqcart.hpp"
+#include "services/cartridge.hpp"
 #include "support/support.hpp"
 
 #include <filesystem>
@@ -128,11 +128,11 @@ public:
     /// Open a resource payload. Lazy: called only when a resolved resource is
     /// about to be read (§2.4.4). Cached, because a kit resolved and then
     /// applied would otherwise be opened twice.
-    [[nodiscard]] Result<std::shared_ptr<sqcart::Cartridge>> open(const ResourceRecord& record);
+    [[nodiscard]] Result<std::shared_ptr<cart::Cartridge>> open(const ResourceRecord& record);
 
 private:
     ResourceIndex index_;
-    std::map<std::string, std::shared_ptr<sqcart::Cartridge>> cache_;
+    std::map<std::string, std::shared_ptr<cart::Cartridge>> cache_;
 };
 
 // ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ struct TemplateParameter {
 
 struct ResolvedResource {
     const ResourceRecord*              record{nullptr};
-    std::shared_ptr<sqcart::Cartridge> cartridge;
+    std::shared_ptr<cart::Cartridge> cartridge;
 
     /// Payload root inside the cartridge, from the manifest envelope's
     /// `tree` (D-031). Empty means the cartridge root, which the manifest
@@ -480,7 +480,7 @@ namespace detail {
 ///
 /// The `body_key` parameter is gone. It named the kind body -- "template",
 /// "kit" -- and there are no kind bodies to name.
-[[nodiscard]] Value manifest_extension(const sqcart::Manifest& manifest, std::string_view member);
+[[nodiscard]] Value manifest_extension(const cart::Manifest& manifest, std::string_view member);
 
 /// Ownership globs out of this engine's manifest section (§2.7.10).
 ///
@@ -489,7 +489,7 @@ namespace detail {
 /// a shape. An absent or malformed `ownership` yields three empty lists,
 /// which classify_path treats as "everything is seeded" -- the conservative
 /// reading, and the one that cannot destroy user work.
-[[nodiscard]] OwnershipRules ownership_rules(const sqcart::Manifest& manifest);
+[[nodiscard]] OwnershipRules ownership_rules(const cart::Manifest& manifest);
 
 /// This engine's consumer identity in a cartridge manifest (format spec 5.6).
 inline constexpr std::string_view kConsumerId = "squared_pg";
