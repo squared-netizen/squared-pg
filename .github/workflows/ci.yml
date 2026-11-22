@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]  # Linux only for now: no macOS or iOS target yet
 
     steps:
       - uses: actions/checkout@v6

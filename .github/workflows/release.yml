@@ -139,8 +139,6 @@ jobs:
             runner: ubuntu-latest
           - platform: linux-aarch64
             runner: ubuntu-24.04-arm
-          - platform: macos-arm64
-            runner: macos-14
 
     steps:
       - uses: actions/checkout@v6
