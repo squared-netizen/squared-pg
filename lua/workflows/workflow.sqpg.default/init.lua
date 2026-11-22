@@ -413,8 +413,16 @@ function commands.new()
   report.out(("  files             %d in %d directories")
     :format(result.data.files_written, result.data.directories_created))
   report.out("")
-  report.out(("write your code in %s/%s/ and run `make` in %s")
-    :format(result.data.workspace, result.data.working_directory, result.data.workspace))
+  -- A workspace with a build.lua builds with sqmake (against the installed
+  -- squared unless one was vendored); the others with make.
+  local builder = "make"
+  local lua_build = io.open(result.data.workspace .. "/build.lua", "r")
+  if lua_build ~= nil then
+    lua_build:close()
+    builder = "sqmake"
+  end
+  report.out(("write your code in %s/%s/ and run `%s` in %s")
+    :format(result.data.workspace, result.data.working_directory, builder, result.data.workspace))
   return 0
 end
 

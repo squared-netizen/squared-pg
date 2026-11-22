@@ -657,8 +657,11 @@ void empty_payload_package_warns() {
     (void)engine->shutdown();
 }
 
-/// D-080: a template's `requires.packages` is advisory -- leaving the package
-/// out warns and still works, selecting it silences the warning.
+/// D-080: a template's `requires.packages` is advisory. template.android.cpp
+/// no longer declares package.squared-core (sqmake builds it against the
+/// installed squared), so leaving the package out plans with no warning, and
+/// selecting it -- the vendored copy, for make or for changing squared --
+/// still plans.
 void template_requires_packages_is_advisory() {
     Scratch scratch("pkg-requires");
     auto    engine = ready_engine();
@@ -667,11 +670,9 @@ void template_requires_packages_is_advisory() {
         request_android("hello", scratch.child("without").string(), {});
     const OperationResult planned = engine->execute("project.plan", without);
     CHECK(planned.succeeded());
-    bool warned = false;
     for (const Diagnostic& warning : planned.warnings()) {
-        if (warning.message.find("package.squared-core") != std::string::npos) warned = true;
+        CHECK(warning.message.find("package.squared-core") == std::string::npos);
     }
-    CHECK(warned);
 
     const Value with =
         request_android("hello", scratch.child("with").string(), {"package.squared-core"});
