@@ -165,14 +165,13 @@ the checkout. Step 8 covers keeping that copy current.
 
 ## 6. Generate the workspace the demo was made from
 
-The demo was generated with this command. The workspace's own record,
-`.squared/metadata.json`, lists the template, the package and the
-parameters:
+The workspace's own record, `.squared/metadata.json`, lists the template,
+any packages and the parameters:
 
 ```bash
 cd ~/sqsysroot/sandbox
-sqpg plan demo -t template.android.cpp --package package.squared-core -p package_name=com.example.demo
-sqpg new  demo -t template.android.cpp --package package.squared-core -p package_name=com.example.demo
+sqpg plan demo -t template.android.cpp -p package_name=com.example.demo
+sqpg new  demo -t template.android.cpp -p package_name=com.example.demo
 ```
 
 `plan` prints every file that would be written and who owns it, and changes
@@ -182,7 +181,7 @@ nothing. `new` writes the workspace to `./demo`.
 |---|---|
 | `demo` | the project name: library name (`libdemo.so`), C++ namespace and log tag; a C identifier |
 | `-t template.android.cpp` | the shape: NativeActivity, C++20, no Java, no Gradle |
-| `--package package.squared-core` | vendors the framework into `demo/squared/`. **Not optional in practice**: without it you get a warning that the template is written against squared-core, and a workspace with no framework |
+| `--package package.squared-core` | optional: vendors the framework into `demo/squared/`, for a workspace that changes squared itself, or that builds with make. Without it, sqmake builds against the installed squared (`$PREFIX/share/squared/<version>`; in sqterm, `pkg install squared`), and its compiles are shared with every other workspace through sqmake's cache |
 | `-p package_name=com.example.demo` | the Android application id; must be unique on the device |
 
 Optional: `-p app_label="Squared Demo"` sets the launcher label, which
@@ -193,13 +192,17 @@ Build and install:
 
 ```bash
 cd demo
-make android-status     # every tool and path the build found
-make apk                # build/libdemo.so, packaged and signed into build/demo.apk
-make install            # hand the APK to the package installer
+sqmake                  # build/libdemo.so, packaged and signed into build/demo.apk
+sqmake install          # hand the APK to Android's installer
+sqmake run              # install, then start it
+sqmake --debug run      # the build you debug with, in build/debug/
 ```
 
-The first `make apk` creates a debug keystore in `~/.android/` if there is
-none. `make install` opens Android's installer; confirm there.
+`app.squared` in `build.lua` picks the squared it builds against: a version
+(`"1.0.0"`) for that installed copy, or a folder for a vendored one; unset,
+`./squared` when there is one, else the newest installed. With
+`--package package.squared-core` the workspace also builds with make
+(`make apk`, `make install`); without it, make says to use sqmake.
 
 What runs is the template's starter app. The screen is dark green if the
 bundled skin was found and dark red if not, and the colour changes when you
@@ -211,7 +214,7 @@ assets. The demo's screens are not in the template. They live in the
 To generate again, remove the old one or pick a new name:
 
 ```bash
-cd ~/sqsysroot/sandbox && sqpg new test1 -t template.android.cpp --package package.squared-core -p package_name=com.example.test1
+cd ~/sqsysroot/sandbox && sqpg new test1 -t template.android.cpp -p package_name=com.example.test1
 ```
 
 ## 7. The demo app itself

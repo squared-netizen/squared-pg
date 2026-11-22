@@ -110,8 +110,12 @@ Or build an Android app, on the phone, with no Gradle anywhere:
 ```sh
 ./build/sqpg new myapp --template template.android.cpp --kit kit.opengl \
     --platform android --param package_name=com.example.myapp
-cd myapp && make apk && make install
+cd myapp && sqmake run
 ```
+
+It builds with sqmake against the installed squared (in sqterm, `pkg install
+sqmake squared`). To carry a copy of squared in the workspace instead, to
+change it or to build with make, add `--package package.squared-core`.
 
 See what would happen without doing it:
 
