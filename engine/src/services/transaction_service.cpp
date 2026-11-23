@@ -75,7 +75,87 @@ Value MetadataService::build_record(const GenerationPlan& plan, const Version& e
     // Provenance is filled in by the transaction, which is the only component
     // that knows what was actually written and what its bytes hashed to.
     record.set("provenance", Value::array());
+    record.set("parameters", plan.parameters.is_object() ? plan.parameters : Value::object());
+    record.set("roles", plan.roles.is_object() ? plan.roles : Value::object());
     return record;
+}
+
+namespace {
+
+/// A workspace's identity (sqcart 2.0 5.2: reverse-DNS): the template's
+/// package_name when it gives one, else local.<project name>.
+std::string workspace_id(const GenerationPlan& plan) {
+    if (const Value* given = plan.parameters.find("package_name")) {
+        if (auto text = given->as_string(); text && text->find('.') != std::string_view::npos) {
+            return std::string{*text};
+        }
+    }
+    std::string id = "local.";
+    for (const char c : plan.project_name) {
+        const bool keep = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+        id += keep ? c : (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : '_';
+    }
+    return id;
+}
+
+Value versioned(const std::string& id, const std::string& version) {
+    return Value{id + "@" + version};
+}
+
+}  // namespace
+
+Value MetadataService::workspace_manifest(const GenerationPlan& plan, const Value& record) {
+    Value made_from = Value::object();
+    made_from.set("generator", "squared-pg@" + std::string{record.string_or("generator_version", {})});
+    made_from.set("template", versioned(plan.template_ref.id.str(), plan.template_version));
+    Value kits = Value::array();
+    for (std::size_t i = 0; i < plan.kits.size(); ++i) {
+        kits.push(versioned(plan.kits[i].id.str(), i < plan.kit_versions.size() ? plan.kit_versions[i] : std::string{}));
+    }
+    made_from.set("kits", kits);
+    Value packages = Value::array();
+    for (std::size_t i = 0; i < plan.packages.size(); ++i) {
+        packages.push(versioned(plan.packages[i].id.str(),
+                                i < plan.package_versions.size() ? plan.package_versions[i] : std::string{}));
+    }
+    made_from.set("packages", packages);
+    made_from.set("framework", plan.framework_version);
+
+    Value square = Value::object();
+    square.set("made_from", made_from);
+    square.set("roles", plan.roles.is_object() ? plan.roles : Value::object());
+    Value generator = Value::object();
+    generator.set("parameters", plan.parameters.is_object() ? plan.parameters : Value::object());
+    generator.set("working_directory", plan.working_directory);
+    Value consumers = Value::object();
+    consumers.set("square", square);
+    consumers.set(std::string{detail::kConsumerId}, generator);
+
+    Value manifest = Value::object();
+    manifest.set("format", "squared-cartridge");
+    manifest.set("format_version", static_cast<std::int64_t>(3));
+    manifest.set("kind", "workspace");
+    manifest.set("id", workspace_id(plan));
+    manifest.set("version", "0.1.0");
+    manifest.set("title", plan.project_name);
+    manifest.set("consumers", consumers);
+    return manifest;
+}
+
+Value MetadataService::workspace_files(const Value& record) {
+    Value files = Value::object();
+    if (const Value* provenance = record.find("provenance")) {
+        if (const Array* entries = provenance->as_array()) {
+            for (const Value& entry : *entries) {
+                Value file = Value::object();
+                file.set("class", std::string{entry.string_or("ownership", {})});
+                file.set("origin", std::string{entry.string_or("origin", {})});
+                file.set("sha256", std::string{entry.string_or("sha256", {})});
+                files.set(std::string{entry.string_or("path", {})}, file);
+            }
+        }
+    }
+    return files;
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +308,24 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
     }
     ++outcome.files_written;
     if (!fast_durability) filesystem_.sync_path(metadata_file);
+
+    // The workspace as a cartridge, for square: its manifest and the
+    // provenance table by path (square's spec §2.1-2.2).
+    const std::pair<std::string_view, Value> workspace_files[] = {
+        {MetadataService::kWorkspaceManifest, MetadataService::workspace_manifest(plan, record)},
+        {MetadataService::kWorkspaceFiles, MetadataService::workspace_files(record)},
+    };
+    for (const auto& [path, value] : workspace_files) {
+        const std::filesystem::path file = staging / std::filesystem::path{std::string{path}};
+        if (auto created = filesystem_.create_directories(file.parent_path()); !created) {
+            return abort_with(created.error());
+        }
+        if (auto written = filesystem_.write_file(file, support::json_write(value, true), false); !written) {
+            return abort_with(written.error());
+        }
+        ++outcome.files_written;
+        if (!fast_durability) filesystem_.sync_path(file);
+    }
 
     // Land it. One rename, same filesystem, atomic with respect to any
     // observer: either the workspace exists complete and user-owned, or it

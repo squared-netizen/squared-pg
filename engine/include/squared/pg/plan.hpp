@@ -111,6 +111,14 @@ struct GenerationPlan {
     std::vector<std::string> platforms;
     std::string              framework_version;
 
+    /// The template's parameters as generation used them (supplied, then
+    /// derived, then declared defaults), and where the workspace keeps each
+    /// of its parts (the template's `consumers.square.roles`, or the working
+    /// directory as `app`): what the workspace's own manifest records for
+    /// square (square's spec §2.2).
+    Value parameters;
+    Value roles;
+
     std::vector<PlanStep>  steps;
     std::vector<Diagnostic> diagnostics;
 

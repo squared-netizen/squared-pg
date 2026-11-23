@@ -170,6 +170,18 @@ Result<GenerationPlan> ProjectService::build_plan(const ResolvedSet& set, const 
     for (const ResolvedResource& kit : set.kits) kit_ids.push_back(kit.id().str());
     const Value parameters = detail::effective_parameters(set.project_template, config,
                                                           plan.working_directory, engine_version, kit_ids);
+    plan.parameters = parameters;
+    // Roles: square's section of the template's manifest names them; with
+    // none, the working directory is the app.
+    plan.roles = Value::object();
+    if (const auto section = set.project_template.cartridge->manifest().consumer("square")) {
+        if (auto parsed = support::json_parse(*section)) {
+            if (const Value* roles = parsed->find("roles"); roles != nullptr && roles->is_object()) {
+                plan.roles = *roles;
+            }
+        }
+    }
+    if (plan.roles.find("app") == nullptr) plan.roles.set("app", plan.working_directory);
 
     // Contributions in §2.7.9 phase order: template first, then kits in
     // resolution order, then packages (D-078). Kits and packages are the same

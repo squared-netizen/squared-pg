@@ -385,6 +385,15 @@ public:
     /// carries no timestamp so that two identical generations produce
     /// byte-identical metadata (§2.7.13).
     [[nodiscard]] Value build_record(const GenerationPlan& plan, const Version& engine_version) const;
+
+    /// The workspace as a cartridge (square's spec §2): `SQ-INF/manifest.json`,
+    /// kind `workspace`, sqcart 3.0's envelope with square's and this
+    /// generator's sections; and `SQ-INF/files.json`, the provenance table
+    /// keyed by path. Built from the finished record (its provenance filled).
+    static constexpr std::string_view kWorkspaceManifest = "SQ-INF/manifest.json";
+    static constexpr std::string_view kWorkspaceFiles = "SQ-INF/files.json";
+    [[nodiscard]] static Value workspace_manifest(const GenerationPlan& plan, const Value& record);
+    [[nodiscard]] static Value workspace_files(const Value& record);
 };
 
 // ---------------------------------------------------------------------------
