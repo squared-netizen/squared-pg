@@ -16,17 +16,13 @@ local args = {}
 -- else takes the last value, because "the last one wins" is what every shell
 -- user already expects from a repeated flag.
 -- Options that take no value. A switch not listed here swallows the next
--- argument, which for `sqpg promote --explain name` would silently consume
--- the workspace name and then complain that promote needs one.
+-- argument, which for `sqpg verify --json name` would silently consume the
+-- workspace name.
 local switches = {
   help = true,
   json = true,
   quiet = true,
   verbose = true,
-  explain = true,
-  sandbox = true,
-  environment = true,
-  ["no-git"] = true,
   -- `version` is also a value-taking option for `new`. As a bare switch it
   -- reports the engine's version, which is what `sqpg --version` means
   -- everywhere else; the value form still works because a switch only
@@ -49,7 +45,6 @@ local aliases = {
   o = "out",
   p = "param",
   h = "help",
-  j = "jobs",
 }
 
 --- Split `key=value` into two parts. Returns nil when there is no `=`.

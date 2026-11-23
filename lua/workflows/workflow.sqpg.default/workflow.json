@@ -3,7 +3,7 @@
   "id": "workflow.sqpg.default",
   "version": "0.1.0",
   "entry": "init.lua",
-  "description": "Reference workflow: generation, environment lifecycle, and the workflow verbs.",
+  "description": "Reference workflow: generation, and reading a workspace back.",
 
   "requires_engine": "^0.1",
   "requires_capabilities": [

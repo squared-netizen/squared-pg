@@ -5,6 +5,9 @@ tags: [report, lua, doctor, install]
 
 # `sqpg doctor` reports an installed tool as a broken checkout
 
+> **Superseded 2026-11-23.** sqpg no longer keeps an environment: sqterm's `pkg` installs it, a workspace lives wherever it is made, and `initialize`, `promote`, `demote`, `quarantine`, `selfdestruct`, `doctor` and the make-driving workflow verbs were removed. Kept as the record of what was built and why.
+
+
 ```
 Report run:  2026-10-18
 Scope:       lua/squaredpg/doctor.lua, lua/squaredpg/lifecycle.lua,

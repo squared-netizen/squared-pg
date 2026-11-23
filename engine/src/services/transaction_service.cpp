@@ -203,11 +203,9 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
 
     // A target inside an existing workspace is refused too.
     //
-    // Nothing prevented it before, and the result is a workspace the tier
-    // commands cannot reach: `promote` takes a name in sandbox/, not a path,
-    // so `sandbox/format/w` is invisible to it. The nested tree also sits
-    // inside the outer workspace's provenance scope, where `workspace.verify`
-    // will eventually report every file of it as untracked.
+    // The nested tree would sit inside the outer workspace's provenance
+    // scope (and its cartridge: packing the outer one would take it along),
+    // where `workspace.verify` reports every file of it as untracked.
     //
     // The usual way in is a `sqpg new x` run from inside a workspace, where
     // `-o` defaults to `./x` and nothing looks up. That is an easy mistake and
@@ -231,7 +229,7 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
         Value detail      = Value::object();
         detail.set("workspace", ancestor.string());
         detail.set("hint",
-                   "a workspace inside a workspace cannot be promoted or verified on its own; "
+                   "a workspace inside a workspace cannot be verified or packed on its own; "
                    "generate outside it, or pass -o with a path that is not nested");
         error.diagnostics = std::move(detail);
         return Unexpected{std::move(error)};

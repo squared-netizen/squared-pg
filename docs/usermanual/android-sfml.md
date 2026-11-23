@@ -12,7 +12,7 @@ clang, aapt2 and apksigner.
 ## Generate
 
 ```sh
-cd ~/sqsysroot/sandbox
+mkdir -p ~/projects && cd ~/projects
 sqpg new droid -t template.android.sfml -k kit.sfml \
   -p project_name=droid -p package_name=com.example.droid
 cd droid
