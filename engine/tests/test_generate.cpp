@@ -542,6 +542,28 @@ void package_materializes() {
     // CHECK(std::filesystem::exists(target / "squared" / "gui" / "include" / "squared" / "gui" / "button.hpp"));
     CHECK(std::filesystem::exists(target / "mk" / "pkg_squared_core.mk"));
 
+    // The workspace is a cartridge, for square: its manifest (kind
+    // workspace, what it was made from, its roles and parameters) and the
+    // provenance table by path.
+    {
+        std::ifstream in(target / "SQ-INF" / "manifest.json");
+        const std::string text((std::istreambuf_iterator<char>(in)), {});
+        auto manifest = support::json_parse(text);
+        CHECK(manifest.has_value());
+        CHECK_EQ(std::string{manifest->string_or("kind", "")}, "workspace");
+        CHECK_EQ(std::string{manifest->string_or("format", "")}, "squared-cartridge");
+        const Value* square = manifest->find("consumers") ? manifest->find("consumers")->find("square") : nullptr;
+        CHECK(square != nullptr);
+        CHECK(square != nullptr && square->find("made_from") != nullptr);
+        CHECK(square != nullptr && square->find("roles") != nullptr && square->find("roles")->find("app") != nullptr);
+        std::ifstream files_in(target / "SQ-INF" / "files.json");
+        const std::string files_text((std::istreambuf_iterator<char>(files_in)), {});
+        auto files = support::json_parse(files_text);
+        CHECK(files.has_value() && files->find("mk/pkg_squared_core.mk") != nullptr);
+        CHECK(files.has_value() && files->find("mk/pkg_squared_core.mk")->string_or("origin", "") ==
+                                       std::string_view{"package.squared-core"});
+    }
+
     // D-079: packages are recorded with id and version, like kits.
     Value inspect = Value::object();
     inspect.set("workspace", target.string());

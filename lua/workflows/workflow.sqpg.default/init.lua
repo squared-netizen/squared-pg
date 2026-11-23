@@ -16,10 +16,6 @@
 local args = require("squaredpg.args")
 local report = require("squaredpg.report")
 local envmod = require("squaredpg.env")
-local drive = require("squaredpg.drive")
-local lifecycle = require("squaredpg.lifecycle")
-local destruct = require("squaredpg.destruct")
-local doctor = require("squaredpg.doctor")
 
 local usage = [[
 sqpg -- offline-first project generator for the Squared framework
@@ -31,24 +27,12 @@ usage:
   sqpg show <id>                              resolve one resource and describe it
   sqpg inspect <workspace>                    read a workspace metadata record
   sqpg verify [workspace]                     check a workspace against its record
-  sqpg doctor                                 report what is assembled, installed and stale
   sqpg describe                               engine version, services, capabilities
   sqpg operations                             enumerate the control surface
 
-environment (~/sqsysroot, or $SQSYSROOT):
-  sqpg initialize                             create the environment
-  sqpg promote <name>                         sandbox -> project
-  sqpg demote <name>                          project -> sandbox
-  sqpg quarantine <path> [--as NAME]          adopt a foreign tree into sandbox
-  sqpg selfdestruct <name>|--sandbox|--environment
-                                              delete, with two confirmations
-
-workflow, run inside a workspace:
-  sqpg format | lint | check | test | docs | dist
-                                              run the matching make target
-      --workspace PATH    act on this workspace instead of searching upward
-      --explain           print the command that would run, and stop
-  -j, --jobs N            parallelism, passed to make
+sqpg creates a workspace; square answers questions about it and changes it;
+sqmake builds it (`sqmake`, `sqmake run`). sqpg itself comes from pkg
+(`pkg install squared-pg`) and keeps no environment of its own.
 
 options for new and plan:
   -t, --template ID       template identity, optionally id@version-range
@@ -424,80 +408,6 @@ function commands.new()
   report.out(("write your code in %s/%s/ and run `%s` in %s")
     :format(result.data.workspace, result.data.working_directory, builder, result.data.workspace))
   return 0
-end
-
--- Workflow verbs. Registered from one table rather than written out six
--- times, because the point of the vocabulary is that the six are identical
--- except for their name -- and six near-copies would drift.
-for _, verb in ipairs(drive.verbs) do
-  commands[verb.name] = function()
-    return drive.run(verb.name, {
-      workspace = parsed.options.workspace,
-      explain   = parsed.options.explain ~= nil,
-      jobs      = parsed.options.jobs,
-    }, report)
-  end
-end
-
-function commands.initialize()
-  return lifecycle.initialize({
-    root    = parsed.options.root,
-    explain = parsed.options.explain ~= nil,
-  }, report)
-end
-
-function commands.promote()
-  local name = parsed.positional[1]
-  if name == nil then
-    report.err("sqpg: promote needs a workspace name")
-    report.err("      it names a directory in ~/sqsysroot/sandbox, not a path")
-    return 2
-  end
-  return lifecycle.promote(name, {
-    root    = parsed.options.root,
-    explain = parsed.options.explain ~= nil,
-    no_git  = parsed.options["no-git"] ~= nil,
-  }, report)
-end
-
-function commands.demote()
-  local name = parsed.positional[1]
-  if name == nil then
-    report.err("sqpg: demote needs a workspace name")
-    report.err("      it names a directory in ~/sqsysroot/project, not a path")
-    return 2
-  end
-  return lifecycle.demote(name, {
-    root    = parsed.options.root,
-    explain = parsed.options.explain ~= nil,
-  }, report)
-end
-
-function commands.doctor()
-  return doctor.run({}, report)
-end
-
-function commands.selfdestruct()
-  return destruct.run({
-    root        = parsed.options.root,
-    name        = parsed.positional[1],
-    sandbox     = parsed.options.sandbox ~= nil,
-    environment = parsed.options.environment ~= nil,
-    confirm     = parsed.options.confirm,
-  }, report)
-end
-
-function commands.quarantine()
-  local path = parsed.positional[1]
-  if path == nil then
-    report.err("sqpg: quarantine needs a path to a directory outside the environment")
-    return 2
-  end
-  return lifecycle.quarantine(path, {
-    root    = parsed.options.root,
-    explain = parsed.options.explain ~= nil,
-    name    = parsed.options.as,
-  }, report)
 end
 
 local handler = commands[parsed.command]

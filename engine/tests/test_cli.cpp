@@ -2,22 +2,14 @@
 //
 // The command surface: `app/`, `lua/` and the `engine/lua/` bindings.
 //
-// These three had no tests at all. That was tolerable while the CLI only
-// generated workspaces -- a mistake showed up as a workspace that did not
-// build. It stopped being tolerable when `lifecycle.lua` gained three commands
-// that rename trees, copy trees and write files into them. `demote` moves a
-// directory the author cares about; `quarantine` runs `cp -a`. A defect in
-// either costs real work, and nothing was watching.
-//
 // Driven as a subprocess rather than in-process. `main.cpp` owns the Lua state
 // and the argument split, so linking it into a test would mean refactoring the
 // host to be testable -- and the thing worth testing is precisely what a user
 // gets when they type the command, including the parts of the host that only
 // run under a real argv.
 //
-// SQSYSROOT is set on every invocation without exception. A test that fell
-// back to $HOME would operate on the author's own environment, and `demote`
-// would move their work.
+// sqpg keeps no environment of its own since 2026-11-23 (no ~/sqsysroot, no
+// tiers): every workspace here is generated into a scratch folder by path.
 
 #include <array>
 #include <cstdio>
@@ -47,23 +39,24 @@ struct Run {
     }
 };
 
-/// A scratch environment root, removed on destruction.
+/// A scratch folder, removed on destruction.
 ///
 /// Under $TMPDIR, never /tmp: Termux has no /tmp, and this suite runs there.
-class Sysroot {
+class Scratch {
 public:
-    explicit Sysroot(const char* name) {
+    explicit Scratch(const char* name) {
         const char* base = std::getenv("TMPDIR");
         root_ = fs::path{base != nullptr ? base : "."} / (std::string{"sqpg-cli-"} + name);
         std::error_code ec;
         fs::remove_all(root_, ec);
+        fs::create_directories(root_);
     }
-    ~Sysroot() {
+    ~Scratch() {
         std::error_code ec;
         fs::remove_all(root_, ec);
     }
-    Sysroot(const Sysroot&) = delete;
-    Sysroot& operator=(const Sysroot&) = delete;
+    Scratch(const Scratch&) = delete;
+    Scratch& operator=(const Scratch&) = delete;
 
     [[nodiscard]] const fs::path& path() const { return root_; }
     [[nodiscard]] fs::path child(const char* rel) const { return root_ / rel; }
@@ -72,17 +65,12 @@ private:
     fs::path root_;
 };
 
-/// Run sqpg with SQSYSROOT pointed at `sysroot`, capturing merged output.
-Run sqpg(const Sysroot& sysroot, const std::string& args, const std::string& input = {}) {
+/// Run sqpg from `where` (the scratch folder by default), capturing merged output.
+Run sqpg(const Scratch& scratch, const std::string& args, const fs::path& where = {}) {
     const std::string binary = std::string{SQUARED_PG_TEST_SOURCE_DIR} + "/build/sqpg";
-    // `printf | cmd` rather than a here-string: popen runs /bin/sh, which has
-    // no <<<. Piping is also the form the command documents, so the tests
-    // exercise the published invocation.
-    const std::string prefix =
-        input.empty() ? std::string{"</dev/null "}
-                      : "printf '%s\\n' '" + input + "' | ";
-    const std::string command = prefix + "SQSYSROOT='" + sysroot.path().string() + "' '" + binary
-                              + "' " + args + " 2>&1";
+    const fs::path dir = where.empty() ? scratch.path() : where;
+    const std::string command =
+        "cd '" + dir.string() + "' && '" + binary + "' " + args + " </dev/null 2>&1";
 
     Run run;
     FILE* pipe = popen(command.c_str(), "r");
@@ -99,209 +87,38 @@ Run sqpg(const Sysroot& sysroot, const std::string& args, const std::string& inp
     return run;
 }
 
-// ---------------------------------------------------------------------------
-
-void initialize_creates_and_installs() {
-    Sysroot sysroot("init");
-
-    const Run first = sqpg(sysroot, "initialize");
-    CHECK(first.code == 0);
-
-    // The four directories, and .squared last -- it is the marker an
-    // initialised environment is recognised by, so a failure part-way through
-    // must not leave something that looks complete.
-    CHECK(fs::is_directory(sysroot.child("project")));
-    CHECK(fs::is_directory(sysroot.child("sandbox")));
-    CHECK(fs::is_directory(sysroot.child(".sqpg")));
-
-    // It installs. A `.squared` with nothing in it was the whole defect the
-    // install change existed to fix.
-    CHECK(fs::is_regular_file(sysroot.child(".sqpg/bin/sqpg")));
-    CHECK(fs::is_directory(sysroot.child(".sqpg/lua/workflows")));
-    CHECK(fs::is_directory(sysroot.child(".sqpg/resources")));
-
-    // The layout is the mechanism: a binary at .sqpg/bin/sqpg walks up one
-    // level and finds both markers. If this pair ever stops holding, the
-    // installed copy silently falls back to some other root.
-    CHECK(fs::is_directory(sysroot.child(".sqpg/resources/templates")));
-    CHECK(fs::is_directory(sysroot.child(".sqpg/lua/squaredpg")));
-
-    // It tells you how to reach the tool, without asserting which of the two
-    // ways it chose -- a symlink where a PATH directory exists, an export
-    // otherwise. Pinning the wording here would make the test fail on a
-    // machine with ~/.local/bin, which is most of them.
-    CHECK(first.contains("put the tool on your PATH"));
-    CHECK(first.contains("ln -sf") || first.contains("export PATH="));
-
-    // Idempotent. The natural response to "did that work?" is to run it again.
-    const Run second = sqpg(sysroot, "initialize");
-    CHECK(second.code == 0);
-    CHECK(second.contains("already present"));
-    CHECK(fs::is_regular_file(sysroot.child(".sqpg/bin/sqpg")));
-}
-
-/// Generate a workspace into the sandbox. Returns its path.
-fs::path seed_workspace(const Sysroot& sysroot, const char* name) {
-    const std::string target = sysroot.child("sandbox").string() + "/" + name;
-    const Run run = sqpg(sysroot, std::string{"new "} + name
-                                      + " -t template.terminal.cpp -k kit.terminal -o '" + target
+fs::path seed_workspace(const Scratch& scratch, const char* name) {
+    const fs::path target = scratch.child(name);
+    const Run run = sqpg(scratch, std::string{"new "} + name
+                                      + " -t template.terminal.cpp -k kit.terminal -o '" + target.string()
                                       + "'");
     CHECK(run.code == 0);
-    return fs::path{target};
+    return target;
 }
 
-void promote_moves_and_is_reversible() {
-    Sysroot sysroot("promote");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path made = seed_workspace(sysroot, "demo");
-    CHECK(fs::is_directory(made));
-
-    // --explain performs nothing. A dry run that moved something would be
-    // worse than no dry run, because the user would have trusted it.
-    const Run explained = sqpg(sysroot, "promote demo --explain");
-    CHECK(explained.code == 0);
-    CHECK(explained.contains("mv "));
-    CHECK(fs::is_directory(made));                             // still in sandbox
-    CHECK(!fs::exists(sysroot.child("project/demo")));
-
-    const Run promoted = sqpg(sysroot, "promote demo");
-    CHECK(promoted.code == 0);
-    CHECK(!fs::exists(made));                                  // gone from sandbox
-    CHECK(fs::is_directory(sysroot.child("project/demo")));
-    // The tier is the location (D-046); the move is the whole operation.
-    CHECK(fs::is_regular_file(sysroot.child("project/demo/Makefile")));
-
-    // The sandbox boundary described a tier this tree has left, so it would
-    // now be a lie.
-    CHECK(!fs::exists(sysroot.child("project/demo/AGENTS.md")));
-
-    // A second promote finds nothing, and says which tier it looked in.
-    const Run again = sqpg(sysroot, "promote demo");
-    CHECK(again.code != 0);
-    CHECK(again.contains("sandbox"));
-
-    // Reversible, and demotion preserves what it did not write (D-050).
-    const Run demoted = sqpg(sysroot, "demote demo");
-    CHECK(demoted.code == 0);
-    CHECK(fs::is_directory(sysroot.child("sandbox/demo")));
-    CHECK(!fs::exists(sysroot.child("project/demo")));
-    CHECK(fs::is_regular_file(sysroot.child("sandbox/demo/AGENTS.md")));
-    CHECK(fs::is_regular_file(sysroot.child("sandbox/demo/sq_app/src/main.cpp")));
-}
-
-void demote_never_deletes_history() {
-    Sysroot sysroot("demote");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    seed_workspace(sysroot, "keep");
-    CHECK(sqpg(sysroot, "promote keep").code == 0);
-
-    const fs::path promoted = sysroot.child("project/keep");
-    // Stand in for a repository without requiring git to be installed: the
-    // rule under test is that demotion does not delete this directory, and
-    // that rule does not care what created it.
-    fs::create_directories(promoted / ".git");
-    std::ofstream(promoted / ".git" / "HEAD") << "ref: refs/heads/main\n";
-
-    // A dirty tree is moved, not refused (D-054). The design proposal said
-    // refuse; the implementation is normative, and this is the assertion that
-    // makes the divergence deliberate rather than drift.
-    std::ofstream(promoted / "sq_app" / "src" / "main.cpp", std::ios::app) << "\n// uncommitted\n";
-
-    const Run demoted = sqpg(sysroot, "demote keep");
-    CHECK(demoted.code == 0);
-    CHECK(fs::is_regular_file(sysroot.child("sandbox/keep/.git/HEAD")));
-    // And it says so, rather than moving a tree into a disposable tier in
-    // silence.
-    CHECK(demoted.contains("git"));
-}
-
-void quarantine_copies_and_refuses_insiders() {
-    Sysroot sysroot("quarantine");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-
-    const fs::path foreign = sysroot.child("outside");
-    fs::create_directories(foreign / "src");
-    std::ofstream(foreign / "src" / "a.c") << "int main(void){return 0;}\n";
-
-    const Run adopted = sqpg(sysroot, "quarantine '" + foreign.string() + "'");
-    CHECK(adopted.code == 0);
-    CHECK(fs::is_regular_file(sysroot.child("sandbox/outside/src/a.c")));
-
-    // Copies, never moves (D-048): the source belongs to someone else.
-    CHECK(fs::is_regular_file(foreign / "src" / "a.c"));
-
-    // Marked unreviewed. A tree with no provenance record cannot be verified,
-    // and the boundary file is the only thing that says so.
-    CHECK(fs::is_regular_file(sysroot.child("sandbox/outside/AGENTS.md")));
-
-    // A tree already inside the environment is the wrong tool, and the error
-    // must say which tool is right. Diagnosing the name clash first would be
-    // true and useless.
-    const Run inside = sqpg(sysroot, "quarantine '"
-                                         + sysroot.child("sandbox/outside").string() + "'");
-    CHECK(inside.code != 0);
-    CHECK(inside.contains("already inside"));
-    CHECK(inside.contains("demote"));
-}
-
-void workflow_verbs_drive_make() {
-    Sysroot sysroot("verbs");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path made = seed_workspace(sysroot, "app");
-
-    for (const char* verb : {"format", "lint", "check", "test", "docs", "dist"}) {
-        const Run explained =
-            sqpg(sysroot, std::string{verb} + " --workspace '" + made.string() + "' --explain");
-        CHECK(explained.code == 0);
-        // The driver's whole contract: find the workspace, run `make <verb>`.
-        CHECK(explained.contains("make -C"));
-        CHECK(explained.contains(verb));
-    }
-
-    // A verb no kit provides fails with an explanation, not a make error.
-    const Run missing = sqpg(sysroot, "docs --workspace '" + made.string() + "'");
-    CHECK(missing.code != 0);
-    CHECK(missing.contains("contributed by a kit"));
-
-    // Outside a workspace, the search fails cleanly rather than running make
-    // somewhere unexpected.
-    const Run nowhere = sqpg(sysroot, "lint --workspace '" + sysroot.path().string() + "'");
-    CHECK(nowhere.code != 0);
-}
-
+/// The switch registry: a switch never consumes the argument after it.
 void switches_do_not_swallow_arguments() {
-    Sysroot sysroot("args");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    seed_workspace(sysroot, "sw");
-
-    // The bug this guards: the parser had no switch registry, so any long
-    // option not in a hardcoded list consumed the next argument. `promote
-    // --explain sw` ate the workspace name and then reported that promote
-    // needed one.
-    const Run before = sqpg(sysroot, "promote --explain sw");
+    Scratch scratch("args");
+    const fs::path made = seed_workspace(scratch, "sw");
+    // Before the path and after it: the same answer, the path read as one.
+    const Run before = sqpg(scratch, "verify --json '" + made.string() + "'");
     CHECK(before.code == 0);
-    CHECK(before.contains("mv "));
-    CHECK(!before.contains("needs a workspace name"));
-    CHECK(fs::is_directory(sysroot.child("sandbox/sw")));   // explain performed nothing
-
-    // And the same switch after the positional, which is the ordering that
-    // always worked and must keep working.
-    const Run after = sqpg(sysroot, "promote sw --explain");
+    CHECK(before.contains("\"findings\""));
+    const Run after = sqpg(scratch, "verify '" + made.string() + "' --json");
     CHECK(after.code == 0);
-    CHECK(after.contains("mv "));
+    CHECK(after.contains("\"findings\""));
 }
 
 void verify_reads_the_provenance_table() {
-    Sysroot sysroot("verify");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path made = seed_workspace(sysroot, "v");
+    Scratch scratch("verify");
+    const fs::path made = seed_workspace(scratch, "v");
 
-    const Run clean = sqpg(sysroot, "verify '" + made.string() + "'");
+    const Run clean = sqpg(scratch, "verify '" + made.string() + "'");
     CHECK(clean.code == 0);
     CHECK(clean.contains("no conflicts"));
 
     std::ofstream(made / "mk" / "squared_generated.mk", std::ios::app) << "\n# edit\n";
-    const Run dirty = sqpg(sysroot, "verify '" + made.string() + "'");
+    const Run dirty = sqpg(scratch, "verify '" + made.string() + "'");
     // Non-zero so the command composes into a check target or a CI step.
     CHECK(dirty.code != 0);
     CHECK(dirty.contains("squared_generated.mk"));
@@ -310,8 +127,7 @@ void verify_reads_the_provenance_table() {
 /// The authoring loop: generate a kit workspace, install it, use it.
 ///
 /// This is the first template whose deliverable is a cartridge rather than a
-/// binary, and the first use of the workflow verbs' `dist` and `check` for
-/// something real. It is also where two defects in template.kit were found,
+/// binary. It is also where two defects in template.kit were found,
 /// both invisible until the template was actually used:
 ///
 ///   - a README under the payload tree landed as <workspace>/README.md and
@@ -323,11 +139,10 @@ void verify_reads_the_provenance_table() {
 /// Neither would have been caught by inspecting the template. Both are
 /// asserted below.
 void kit_authoring_round_trip() {
-    Sysroot sysroot("authoring");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
+    Scratch scratch("authoring");
 
-    const std::string workspace = sysroot.child("sandbox").string() + "/fmt";
-    const Run made = sqpg(sysroot, "new fmt -t template.kit -o '" + workspace + "'");
+    const std::string workspace = scratch.child("fmt").string();
+    const Run made = sqpg(scratch, "new fmt -t template.kit -o '" + workspace + "'");
     CHECK(made.code == 0);
 
     const fs::path cart = fs::path{workspace} / "cartridge";
@@ -356,15 +171,13 @@ void kit_authoring_round_trip() {
 /// A workspace inside a workspace is refused.
 ///
 /// The way in is `sqpg new x` run from inside a workspace, where -o defaults
-/// to ./x and nothing looked upward. The result was a tree the tier commands
-/// could not reach -- `promote` takes a name in sandbox/, not a path -- and
-/// which sat inside the outer workspace's provenance scope.
+/// to ./x and nothing looked upward. The result sat inside the outer
+/// workspace's provenance scope, and its cartridge.
 void nested_workspaces_are_refused() {
-    Sysroot sysroot("nested");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path outer = seed_workspace(sysroot, "outer");
+    Scratch scratch("nested");
+    const fs::path outer = seed_workspace(scratch, "outer");
 
-    const Run nested = sqpg(sysroot, "new inner -t template.terminal.cpp -k kit.terminal -o '"
+    const Run nested = sqpg(scratch, "new inner -t template.terminal.cpp -k kit.terminal -o '"
                                          + (outer / "inner").string() + "'");
     CHECK(nested.code != 0);
     CHECK(nested.contains("inside an existing workspace"));
@@ -372,203 +185,56 @@ void nested_workspaces_are_refused() {
 
     // Deeper nesting is caught too: the search walks every ancestor, not just
     // the parent.
-    const Run deep = sqpg(sysroot, "new deep -t template.terminal.cpp -k kit.terminal -o '"
+    const Run deep = sqpg(scratch, "new deep -t template.terminal.cpp -k kit.terminal -o '"
                                        + (outer / "sq_app" / "deep").string() + "'");
     CHECK(deep.code != 0);
     CHECK(deep.contains("inside an existing workspace"));
 
     // A sibling is fine. The check must refuse nesting, not refuse to
     // generate near an existing workspace.
-    const std::string sibling = sysroot.child("sandbox").string() + "/sibling";
-    CHECK(sqpg(sysroot, "new sibling -t template.terminal.cpp -k kit.terminal -o '"
+    const std::string sibling = scratch.child("sibling").string();
+    CHECK(sqpg(scratch, "new sibling -t template.terminal.cpp -k kit.terminal -o '"
                             + sibling + "'").code == 0);
 }
 
-/// The workspace marker is the metadata record.
-///
-/// find_workspace tested for a `.squared-pg` directory that has never
-/// existed; the engine writes `.squared/metadata.json`. Every workspace found
-/// so far came through a fallback matching a Makefile beside an mk/ directory
-/// -- which matches any C project laid out that way, and misses a real
-/// workspace without one.
+/// The workspace marker is the metadata record: found from a folder inside
+/// a workspace, and a Makefile beside an mk/ folder is not one (D-055).
 void workspace_detection_uses_the_record() {
-    Sysroot sysroot("detect");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path made = seed_workspace(sysroot, "det");
+    Scratch scratch("detect");
+    const fs::path made = seed_workspace(scratch, "det");
     CHECK(fs::is_regular_file(made / ".squared" / "metadata.json"));
 
-    // Found from a subdirectory, which is the whole point of searching up.
-    const Run deep = sqpg(sysroot, "lint --explain --workspace '"
-                                       + (made / "sq_app" / "src").string() + "'");
-    (void)deep;   // --workspace bypasses the search; the next case exercises it
+    // Found from a subfolder, which is the whole point of searching up.
+    const Run deep = sqpg(scratch, "verify", made / "sq_app");
+    CHECK(deep.code == 0);
+    CHECK(deep.contains("no conflicts"));
 
-    // A directory with a Makefile and mk/ but no record is NOT a workspace.
-    // Under the old fallback it would have been, and `sqpg lint` there would
-    // have run make in a tree the generator never made.
-    const fs::path impostor = sysroot.child("outside-project");
+    const fs::path impostor = scratch.child("outside-project");
     fs::create_directories(impostor / "mk");
     std::ofstream(impostor / "Makefile") << "all:\n\t@true\n";
-    const Run fooled = sqpg(sysroot, "lint --workspace '" + impostor.string() + "'");
+    const Run fooled = sqpg(scratch, "verify", impostor);
     CHECK(fooled.code != 0);
-}
-
-/// selfdestruct: nothing is removed without both factors.
-///
-/// The command exists because `rm -rf ~/sqsysroot` is one tab-completion away
-/// and has already cost a project. It only helps if it is worth reaching for,
-/// so the assertions below are mostly about what it *refuses* -- a
-/// confirmation flow that can be satisfied by accident is decoration.
-void selfdestruct_needs_both_factors() {
-    Sysroot sysroot("destruct");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    const fs::path made = seed_workspace(sysroot, "doomed");
-
-    // First invocation reports and stops. Non-zero, so a `&&` chain does not
-    // continue into something that assumes the deletion happened.
-    const Run survey = sqpg(sysroot, "selfdestruct doomed");
-    CHECK(survey.code != 0);
-    CHECK(survey.contains("nothing has been deleted"));
-    CHECK(survey.contains("--confirm"));
-    CHECK(fs::is_directory(made));
-
-    // Extract the token it printed.
-    const std::size_t at = survey.output.find("--confirm ");
-    CHECK(at != std::string::npos);
-    std::string token;
-    if (at != std::string::npos) {
-        token = survey.output.substr(at + 10, 8);
-    }
-
-    // Token alone is not enough: the phrase must be typed.
-    const Run no_phrase = sqpg(sysroot, "selfdestruct doomed --confirm " + token);
-    CHECK(no_phrase.code != 0);
-    CHECK(fs::is_directory(made));
-
-    // Wrong phrase, right token.
-    const Run wrong = sqpg(sysroot, "selfdestruct doomed --confirm " + token, "yes");
-    CHECK(wrong.code != 0);
-    CHECK(fs::is_directory(made));
-
-    // Right phrase, wrong token. This is the case that matters most: a
-    // command line copied from an earlier session, after the tree changed.
-    const Run stale = sqpg(sysroot, "selfdestruct doomed --confirm deadbeef", "destroy doomed");
-    CHECK(stale.code != 0);
-    CHECK(stale.contains("does not match"));
-    CHECK(fs::is_directory(made));
-
-    // Both factors: it goes.
-    const Run done = sqpg(sysroot, "selfdestruct doomed --confirm " + token, "destroy doomed");
-    CHECK(done.code == 0);
-    CHECK(!fs::exists(made));
-
-    // No target is a usage error, never a guess. A destructive command that
-    // infers what you meant is the whole problem restated.
-    const Run bare = sqpg(sysroot, "selfdestruct");
-    CHECK(bare.code != 0);
-    CHECK(bare.contains("needs a target"));
-}
-
-/// The token tracks the inventory, and the inventory is what was shown.
-void selfdestruct_token_tracks_the_inventory() {
-    Sysroot sysroot("destruct2");
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-    seed_workspace(sysroot, "one");
-
-    const Run first = sqpg(sysroot, "selfdestruct --sandbox");
-    const std::size_t at = first.output.find("--confirm ");
-    CHECK(at != std::string::npos);
-    const std::string token = at == std::string::npos ? "" : first.output.substr(at + 10, 8);
-
-    // A second workspace changes what the inventory reports, so the token
-    // must stop matching -- otherwise a stale command line would delete a
-    // tree the operator never saw listed.
-    seed_workspace(sysroot, "two");
-    const Run stale = sqpg(sysroot, "selfdestruct --sandbox --confirm " + token,
-                           "destroy the sandbox");
-    CHECK(stale.code != 0);
-    CHECK(fs::is_directory(sysroot.child("sandbox/one")));
-    CHECK(fs::is_directory(sysroot.child("sandbox/two")));
-
-    // The tier survives its own emptying: an environment without its tiers
-    // is broken, and the next `sqpg new` would fail on a missing directory.
-    const Run now = sqpg(sysroot, "selfdestruct --sandbox");
-    const std::size_t at2 = now.output.find("--confirm ");
-    const std::string token2 = at2 == std::string::npos ? "" : now.output.substr(at2 + 10, 8);
-    const Run cleared = sqpg(sysroot, "selfdestruct --sandbox --confirm " + token2,
-                             "destroy the sandbox");
-    CHECK(cleared.code == 0);
-    CHECK(fs::is_directory(sysroot.child("sandbox")));
-    CHECK(!fs::exists(sysroot.child("sandbox/one")));
-}
-
-/// doctor reports rather than repairs, and never refuses to run.
-///
-/// It exists because of a failure where every individual command reported
-/// success: a pushed change to another repository was silently reverted by
-/// `bootstrap.sh` checking out a stale pin, `--update` wrote that same pin
-/// back, and a commit went in claiming an adoption that had not happened.
-/// The tool knew enough to say so and had nowhere to say it.
-void doctor_reports_without_repairing() {
-    Sysroot sysroot("doctor");
-
-    // Before `initialize`, which is the state where a diagnostic is most
-    // needed and where a command that assumed an environment would be least
-    // useful.
-    const Run cold = sqpg(sysroot, "doctor");
-    CHECK(cold.contains("doctor"));
-    CHECK(cold.contains("environment"));
-    CHECK(cold.contains("not initialised"));
-    CHECK(cold.contains("sqpg initialize"));      // names the fix
-    CHECK(!fs::exists(sysroot.child(".sqpg")));   // and does not apply it
-
-    CHECK(sqpg(sysroot, "initialize").code == 0);
-
-    const Run warm = sqpg(sysroot, "doctor");
-    CHECK(warm.contains("resources"));
-    CHECK(warm.contains("no duplicates"));
-    CHECK(warm.contains(sysroot.path().string()));
-
-    // From the installed environment (sqsysroot/.sqpg), doctor should not claim
-    // checkout components are absent; it should report installed and exit cleanly
-    // if tools are present.
-    {
-        const std::string inst = sysroot.path().string() + "/.sqpg/bin/sqpg";
-        const std::string cmd = "SQSYSROOT='" + sysroot.path().string() + "' '" + inst + "' doctor 2>&1";
-        FILE* p = popen(cmd.c_str(), "r");
-        std::string out;
-        std::array<char, 4096> buf{};
-        while (std::fgets(buf.data(), static_cast<int>(buf.size()), p) != nullptr) {
-            out += buf.data();
-        }
-        const int st = pclose(p);
-        CHECK(st == 0);
-        CHECK(out.find("absent") == std::string::npos);
-        CHECK(out.find("sqcart") != std::string::npos);
-    }
-
-    // It runs from inside a workspace too. A diagnostic that only worked
-    // from one directory would be missing when it was wanted.
-    const fs::path made = seed_workspace(sysroot, "d");
-    const Run inside = sqpg(sysroot, "doctor --workspace '" + made.string() + "'");
-    CHECK(inside.contains("components") || inside.contains("resources"));
+    CHECK(fooled.contains("needs a workspace"));
 }
 
 void unknown_commands_and_help() {
-    Sysroot sysroot("help");
+    Scratch scratch("help");
 
-    const Run bare = sqpg(sysroot, "");
+    const Run bare = sqpg(scratch, "");
     CHECK(bare.contains("sqpg new"));
-    CHECK(bare.contains("initialize"));
-    CHECK(bare.contains("--explain"));
+    // The environment and its commands are gone (2026-11-23).
+    CHECK(!bare.contains("initialize"));
+    CHECK(!bare.contains("selfdestruct"));
+    CHECK(sqpg(scratch, "initialize").code != 0);
 
     // --version reports the version, not the usage text. It has to be
     // handled before the help branch, which absorbs anything with no command.
-    const Run version = sqpg(sysroot, "--version");
+    const Run version = sqpg(scratch, "--version");
     CHECK(version.code == 0);
     CHECK(version.contains("sqpg 0."));
     CHECK(!version.contains("usage:"));
 
-    const Run nonsense = sqpg(sysroot, "frobnicate");
+    const Run nonsense = sqpg(scratch, "frobnicate");
     CHECK(nonsense.code != 0);
     CHECK(nonsense.contains("unknown command"));
 }
@@ -576,19 +242,11 @@ void unknown_commands_and_help() {
 }  // namespace
 
 int main() {
-    initialize_creates_and_installs();
-    promote_moves_and_is_reversible();
-    demote_never_deletes_history();
-    quarantine_copies_and_refuses_insiders();
-    workflow_verbs_drive_make();
     switches_do_not_swallow_arguments();
     verify_reads_the_provenance_table();
     kit_authoring_round_trip();
     nested_workspaces_are_refused();
     workspace_detection_uses_the_record();
-    selfdestruct_needs_both_factors();
-    selfdestruct_token_tracks_the_inventory();
-    doctor_reports_without_repairing();
     unknown_commands_and_help();
     return test::report("test_cli");
 }

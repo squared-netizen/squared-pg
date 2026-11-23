@@ -7,45 +7,39 @@ tags: [usermanual]
 
 ## Install the tool
 
-squared-pg installs into an environment directory, `~/sqsysroot` by default
-(override with `$SQSYSROOT`). From a built checkout:
+In sqterm, from its package repository:
 
 ```sh
-./build/sqpg initialize
+pkg install squared-pg
 ```
 
-That creates the environment and copies the tool and its resources into
-`~/sqsysroot/.sqpg`. It then prints two `ln -sf` commands to put `sqpg` and
-`sqcart` on your PATH. Run them; **nothing edits a shell profile**, and
-removing the tool later is `rm` on two links.
-
-## The environment
-
-```
-~/sqsysroot/
-  project/    promoted work; version controlled
-  sandbox/    experiments; nothing here is irreplaceable
-  .sqpg/      the installed tool, its resources and workflows
-```
-
-Generate into `sandbox/` while you are trying things. `sqpg promote <name>`
-moves a workspace to `project/` when it is worth keeping.
+That installs `sqpg` and `sqcart`, with the templates, kits and packages sqpg
+generates from (`$PREFIX/share/squared-pg`). To build what it generates, also
+`pkg install sqmake squared`. sqpg keeps no environment of its own: there is
+nothing to initialize, and a workspace lives wherever you make it.
 
 ## Generate a workspace
 
 ```sh
-cd ~/sqsysroot/sandbox
-sqpg new hello -t template.terminal.cpp -k kit.terminal
-cd hello && make && ./build/hello
+mkdir -p ~/projects && cd ~/projects
+sqpg new hello -t template.android.cpp -p package_name=dev.me.hello
+cd hello && sqmake run
 ```
 
 `-t` selects the template — the project's shape. `-k` selects a kit, and may be
-repeated. `sqpg list template` and `sqpg list kit` show what is available.
+repeated; `-p key=value` sets a template parameter. `sqpg list template` and
+`sqpg list kit` show what is available, and `sqpg show <id>` one of them with
+its parameters. `-o PATH` puts the workspace somewhere other than `./<name>`.
+
+A workspace is a cartridge folder: `SQ-INF/manifest.json` (kind `workspace`)
+says what it was made from and where its parts are, and `SQ-INF/files.json`
+lists each generated file with its class and checksum. square reads them;
+`sqcart pack hello hello.sq` packs the workspace into one file.
 
 ## See before you commit
 
 ```sh
-sqpg plan hello -t template.terminal.cpp -k kit.terminal
+sqpg plan hello -t template.android.cpp -p package_name=dev.me.hello
 ```
 
 `plan` prints every file that would be written, its origin and whether it is
@@ -53,9 +47,9 @@ yours or the generator's. It creates nothing.
 
 ## Your project does not need squared-pg
 
-Once generated, a workspace builds with `make` and a compiler. The generator is
-not a build dependency and does not need to be installed to build a project it
-produced.
+Once generated, a workspace builds with sqmake (or, with the framework
+vendored by `--package package.squared-core`, with make). The generator is not
+a build dependency.
 
 ## Useful commands
 
@@ -67,14 +61,7 @@ produced.
 | `sqpg new <name> -t <id>` | generate it |
 | `sqpg inspect <workspace>` | read a workspace's record |
 | `sqpg verify [workspace]` | check it against that record |
-| `sqpg doctor` | what is installed and what is stale |
 
-Run `sqpg` with no arguments for the full list.
-
-## If something looks stale
-
-`sqpg` reads its resources from `~/sqsysroot/.sqpg/resources`, not from a
-source checkout. If you have changed a template or kit in a checkout, re-run
-`./build/sqpg initialize` **from that checkout** — running the installed `sqpg
-initialize` will report success and do nothing. This is a known rough edge
-(Q-31, Q-32).
+Run `sqpg` with no arguments for the full list. Questions about a workspace
+and changes to it (`info`, `where`, `owner`, `verify`, `add`, `update`) move
+to square as it is built; `inspect` and `verify` stay here until then.
