@@ -26,22 +26,20 @@ make SQ_MIN_SDK=21 apk
 
 ## The record
 
-`.squared/metadata.json` lists every file with its origin, ownership class and
-SHA-256. Two commands read it:
+`SQ-INF/` is the workspace's record, the workspace being a cartridge:
+`SQ-INF/manifest.json` (kind `workspace`: what it was made from, where its
+parts are) and `SQ-INF/files.json` (every file the generator wrote, with its
+class, origin and SHA-256). square reads them (`pkg install square`):
 
 ```sh
-sqpg inspect .        # print the record
-sqpg verify           # check the tree against it
+square info           # what this workspace is and was made from
+square owner PATH     # a file's class and origin, and whether it changed
+square verify         # every listed file that changed or went missing
 ```
 
-`verify` reports four things: files missing, files the generator manages that
-you modified (a conflict), files of yours that changed (expected), and files
-recorded without a hash that it therefore could not check.
-
-**It does not repair anything.** What to do about a generator-managed file you
-changed is your decision; `verify` only tells you a future regeneration would
-not preserve it. It exits non-zero when there are conflicts, so it works in a
-`check` target.
+**`verify` does not repair anything.** What to do about a generated file you
+changed is your decision; it only tells you an update would overwrite it. It
+exits non-zero when anything changed, so it works in a `check` target.
 
 ## Directory shapes
 

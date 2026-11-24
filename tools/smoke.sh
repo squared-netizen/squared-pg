@@ -55,7 +55,7 @@ step "generate with kit.terminal"
 
 for required in Makefile mk/squared_generated.mk mk/kit_terminal.mk \
                 sq_app/src/main.cpp sq_app/src/app.cpp sq_app/include/app.hpp \
-                sq_kit/include/terminal/terminal.hpp .squared/metadata.json; do
+                sq_kit/include/terminal/terminal.hpp SQ-INF/manifest.json SQ-INF/files.json; do
     [ -f "hello/$required" ] || fail "missing $required"
 done
 
@@ -67,9 +67,9 @@ done
 grep -q "hello::App" hello/sq_app/src/main.cpp || fail "substitution did not run"
 ! grep -rq "{{" hello/sq_app hello/Makefile hello/mk || fail "unsubstituted placeholder left behind"
 
-# §2.7.13: no absolute host path in the metadata record, so the workspace is
+# §2.7.13: no absolute host path in the workspace's record, so it is
 # relocatable and its identity does not depend on where it sits.
-! grep -q "$scratch" hello/.squared/metadata.json || fail "absolute host path in metadata"
+! grep -q "$scratch" hello/SQ-INF/manifest.json hello/SQ-INF/files.json || fail "absolute host path in SQ-INF"
 
 step "the generated project builds"
 ( cd hello && make ) || fail "generated project does not build"
@@ -114,8 +114,8 @@ mkdir -p det/a det/b
 diff -r det/a/twin det/b/twin >/dev/null 2>&1 \
     || fail "two equivalent requests produced different output"
 
-step "the workspace metadata reads back"
-"$sqpg" inspect hello | grep -q "template.terminal.cpp" || fail "inspect"
+step "the workspace's manifest says what it was made from"
+grep -q '"template.terminal.cpp@' hello/SQ-INF/manifest.json || fail "SQ-INF/manifest.json made_from"
 
 # ---------------------------------------------------------------------------
 # Android
@@ -225,7 +225,7 @@ for required in Makefile mk/squared_generated.mk mk/squared_android_package.mk \
                 sq_android/res/drawable/ic_launcher_foreground.xml \
                 sq_android/res/mipmap-anydpi-v26/ic_launcher.xml \
                 sq_android/res/mipmap-hdpi/ic_launcher.png \
-                sq_kit/include/opengl/gl.hpp .squared/metadata.json; do
+                sq_kit/include/opengl/gl.hpp SQ-INF/manifest.json SQ-INF/files.json; do
     [ -f "droid/$required" ] || fail "missing $required"
 done
 

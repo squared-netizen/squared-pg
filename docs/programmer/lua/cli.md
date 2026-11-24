@@ -10,7 +10,6 @@ sqpg new <name> --template ID [options]     generate a workspace
 sqpg plan <name> --template ID [options]    show what would be generated
 sqpg list [template|kit|package|asset]      list indexed resources
 sqpg show <id>                              resolve one resource and describe it
-sqpg inspect <workspace>                    read a workspace metadata record
 sqpg describe                               engine version, services, capabilities
 sqpg operations                             enumerate the control surface
 sqpg help

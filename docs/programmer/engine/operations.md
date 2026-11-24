@@ -150,16 +150,3 @@ journalled update path, which is not implemented.
 
 The whole workspace is built in a sibling temporary directory and landed with
 one rename. Either it exists complete, or it does not exist.
-
----
-
-## `workspace.inspect`
-
-| Parameter | Type | Required |
-|---|---|---|
-| `workspace` | path | **yes** |
-
-Returns the parsed `.squared/metadata.json`: generator version, project
-identity, resolved resources, layer map, and the provenance table.
-
-**Errors:** `filesystem.read`, `configuration.json.malformed`.

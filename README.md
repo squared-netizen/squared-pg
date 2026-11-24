@@ -138,5 +138,7 @@ see [limitations](docs/developer/engine/limitations.md).
 - Nothing generator-owned is written inside that directory.
 - Every generated path is recorded with the hash it had when written, so a
   future update can tell your edits from its own output without guessing.
-- Delete `.squared/` and you still have a working project. You lose only the
-  ability to update it in place.
+- Its record is `SQ-INF/` (a cartridge's manifest, and `files.json`, the
+  provenance table), which square reads: `square info`, `square verify`.
+  Delete it and you still have a working project; you lose only the ability
+  to update it in place.

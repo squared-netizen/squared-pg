@@ -51,9 +51,8 @@ Agreed, and worth doing regardless of what happens to the sysroot design.
 - [ ] **`test_templates`** — iterate every indexed template, assert the shared
       conventions. ~150 lines, no engine change. Catches the drift a third
       template would otherwise introduce silently.
-- [ ] **`workspace.verify`** — the same invariants applied to a workspace, and
-      the first real consumer of the provenance table. Separate operation from
-      `workspace.inspect`, which stays a pure read; `sqpg inspect` presents both.
+- [x] **`workspace.verify`** — went to square (2026-11-24): `square verify`
+      reads `SQ-INF/files.json`; sqpg's `inspect` and `verify` are gone.
 
 ## Sysroot and tiers
 
