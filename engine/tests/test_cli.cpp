@@ -99,29 +99,24 @@ fs::path seed_workspace(const Scratch& scratch, const char* name) {
 /// The switch registry: a switch never consumes the argument after it.
 void switches_do_not_swallow_arguments() {
     Scratch scratch("args");
-    const fs::path made = seed_workspace(scratch, "sw");
-    // Before the path and after it: the same answer, the path read as one.
-    const Run before = sqpg(scratch, "verify --json '" + made.string() + "'");
+    // Before the id and after it: the same answer, the id read as one.
+    const Run before = sqpg(scratch, "show --json template.terminal.cpp");
     CHECK(before.code == 0);
-    CHECK(before.contains("\"findings\""));
-    const Run after = sqpg(scratch, "verify '" + made.string() + "' --json");
+    CHECK(before.contains("template.terminal.cpp"));
+    const Run after = sqpg(scratch, "show template.terminal.cpp --json");
     CHECK(after.code == 0);
-    CHECK(after.contains("\"findings\""));
+    CHECK(after.contains("template.terminal.cpp"));
 }
 
-void verify_reads_the_provenance_table() {
-    Scratch scratch("verify");
-    const fs::path made = seed_workspace(scratch, "v");
-
-    const Run clean = sqpg(scratch, "verify '" + made.string() + "'");
-    CHECK(clean.code == 0);
-    CHECK(clean.contains("no conflicts"));
-
-    std::ofstream(made / "mk" / "squared_generated.mk", std::ios::app) << "\n# edit\n";
-    const Run dirty = sqpg(scratch, "verify '" + made.string() + "'");
-    // Non-zero so the command composes into a check target or a CI step.
-    CHECK(dirty.code != 0);
-    CHECK(dirty.contains("squared_generated.mk"));
+/// inspect and verify went to square (2026-11-24): square info and square
+/// verify read the workspace's SQ-INF; sqpg only makes workspaces.
+void inspect_and_verify_are_squares() {
+    Scratch scratch("gone");
+    const fs::path made = seed_workspace(scratch, "g");
+    CHECK(fs::is_regular_file(made / "SQ-INF" / "files.json"));
+    CHECK(sqpg(scratch, "verify '" + made.string() + "'").code != 0);
+    CHECK(sqpg(scratch, "inspect '" + made.string() + "'").code != 0);
+    CHECK(!sqpg(scratch, "").contains("sqpg verify"));
 }
 
 /// The authoring loop: generate a kit workspace, install it, use it.
@@ -197,24 +192,19 @@ void nested_workspaces_are_refused() {
                             + sibling + "'").code == 0);
 }
 
-/// The workspace marker is the metadata record: found from a folder inside
-/// a workspace, and a Makefile beside an mk/ folder is not one (D-055).
-void workspace_detection_uses_the_record() {
+/// The workspace marker is SQ-INF/manifest.json of kind workspace, and
+/// nothing else: a cartridge of another kind is not one (D-055).
+void workspace_detection_uses_the_manifest() {
     Scratch scratch("detect");
-    const fs::path made = seed_workspace(scratch, "det");
-    CHECK(fs::is_regular_file(made / ".squared" / "metadata.json"));
 
-    // Found from a subfolder, which is the whole point of searching up.
-    const Run deep = sqpg(scratch, "verify", made / "sq_app");
-    CHECK(deep.code == 0);
-    CHECK(deep.contains("no conflicts"));
-
-    const fs::path impostor = scratch.child("outside-project");
-    fs::create_directories(impostor / "mk");
-    std::ofstream(impostor / "Makefile") << "all:\n\t@true\n";
-    const Run fooled = sqpg(scratch, "verify", impostor);
-    CHECK(fooled.code != 0);
-    CHECK(fooled.contains("needs a workspace"));
+    // A cartridge of another kind above the output (a kit being authored)
+    // is not a workspace: generating under it is allowed.
+    const fs::path kitdir = scratch.child("notws");
+    fs::create_directories(kitdir / "SQ-INF");
+    std::ofstream(kitdir / "SQ-INF" / "manifest.json")
+        << R"({"format": "squared-cartridge", "format_version": 3, "kind": "kit", "id": "kit.x", "version": "0.1.0"})";
+    CHECK(sqpg(scratch, "new inkit -t template.terminal.cpp -k kit.terminal -o '"
+                            + (kitdir / "inkit").string() + "'").code == 0);
 }
 
 void unknown_commands_and_help() {
@@ -243,10 +233,10 @@ void unknown_commands_and_help() {
 
 int main() {
     switches_do_not_swallow_arguments();
-    verify_reads_the_provenance_table();
+    inspect_and_verify_are_squares();
     kit_authoring_round_trip();
     nested_workspaces_are_refused();
-    workspace_detection_uses_the_record();
+    workspace_detection_uses_the_manifest();
     unknown_commands_and_help();
     return test::report("test_cli");
 }

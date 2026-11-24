@@ -205,21 +205,26 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
     //
     // The nested tree would sit inside the outer workspace's provenance
     // scope (and its cartridge: packing the outer one would take it along),
-    // where `workspace.verify` reports every file of it as untracked.
+    // where square takes every file of it for the developer's own.
     //
     // The usual way in is a `sqpg new x` run from inside a workspace, where
     // `-o` defaults to `./x` and nothing looks up. That is an easy mistake and
     // an annoying one to undo, because the fix is moving a tree by hand.
     //
-    // Recognised by the metadata record and by nothing else: a Makefile beside
-    // an `mk/` directory describes half the C projects in existence, and this
-    // check must not refuse to generate into somebody's unrelated source tree.
+    // Recognised by its manifest, SQ-INF/manifest.json of kind workspace (as
+    // square finds one), and by nothing else: a Makefile beside an `mk/`
+    // directory describes half the C projects in existence, and a cartridge
+    // of another kind (a kit being authored) is not a workspace.
     for (std::filesystem::path ancestor = target.parent_path();
          !ancestor.empty() && ancestor != ancestor.root_path();
          ancestor = ancestor.parent_path()) {
-        const std::filesystem::path record =
-            ancestor / std::filesystem::path{std::string{MetadataService::kMetadataFile}};
-        if (!filesystem_.exists(record)) continue;
+        const std::filesystem::path manifest =
+            ancestor / std::filesystem::path{std::string{MetadataService::kWorkspaceManifest}};
+        if (!filesystem_.exists(manifest)) continue;
+        const auto text = filesystem_.read_file(manifest);
+        if (!text) continue;
+        const auto parsed = support::json_parse(*text);
+        if (!parsed || parsed->string_or("kind", "") != std::string_view{"workspace"}) continue;
 
         EngineError error = make_error(ErrorCategory::filesystem, "filesystem.workspace.nested",
                                        "the output location is inside an existing workspace: "
@@ -299,16 +304,10 @@ Result<TransactionService::Outcome> TransactionService::apply(const GenerationPl
     record.set("provenance", provenance);
     record.set("durability", std::string{fast_durability ? "fast" : "durable"});
 
-    const std::string metadata_json = support::json_write(record, true);
-    const std::filesystem::path metadata_file = staging / std::filesystem::path{std::string{MetadataService::kMetadataFile}};
-    if (auto written = filesystem_.write_file(metadata_file, metadata_json, false); !written) {
-        return abort_with(written.error());
-    }
-    ++outcome.files_written;
-    if (!fast_durability) filesystem_.sync_path(metadata_file);
-
     // The workspace as a cartridge, for square: its manifest and the
-    // provenance table by path (square's spec §2.1-2.2).
+    // provenance table by path (square's spec §2.1-2.2). The record itself
+    // is not written: SQ-INF is the workspace's only record, and square
+    // answers every question about it (sqpg's inspect and verify are gone).
     const std::pair<std::string_view, Value> workspace_files[] = {
         {MetadataService::kWorkspaceManifest, MetadataService::workspace_manifest(plan, record)},
         {MetadataService::kWorkspaceFiles, MetadataService::workspace_files(record)},

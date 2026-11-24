@@ -228,7 +228,11 @@ void generation() {
     CHECK(std::filesystem::exists(target / "Makefile"));
     CHECK(std::filesystem::exists(target / "sq_app" / "src" / "main.cpp"));
     CHECK(std::filesystem::exists(target / "sq_kit" / "include" / "terminal" / "terminal.hpp"));
-    CHECK(std::filesystem::exists(target / ".squared" / "metadata.json"));
+    CHECK(std::filesystem::exists(target / "SQ-INF" / "manifest.json"));
+    CHECK(std::filesystem::exists(target / "SQ-INF" / "files.json"));
+    // The workspace's only record is SQ-INF; .squared/ is square's, for a
+    // change while it runs, and generation leaves nothing there.
+    CHECK(!std::filesystem::exists(target / ".squared"));
 
     // kit.lua was not selected, so nothing it contributes may appear.
     CHECK(!std::filesystem::exists(target / "sq_lua"));
@@ -249,6 +253,16 @@ void generation() {
     (void)engine->shutdown();
 }
 
+Value read_json(const std::filesystem::path& path) {
+    auto parsed = support::json_parse(read(path));
+    CHECK(parsed.has_value());
+    return parsed ? std::move(*parsed) : Value::object();
+}
+
+/// The workspace's record, SQ-INF (square's spec §2.2): the manifest says
+/// what it was made from, files.json gives each written path its class,
+/// origin and the sha256 it was written with. square reads both
+/// (square info, owner, verify); these checks are that they are right.
 void metadata_and_provenance() {
     Scratch scratch("metadata");
     auto    engine = ready_engine();
@@ -256,111 +270,32 @@ void metadata_and_provenance() {
 
     CHECK(engine->execute("project.generate", request("hello", target.string(), true)).succeeded());
 
-    Value inspect = Value::object();
-    inspect.set("workspace", target.string());
-    const OperationResult read_back = engine->execute("workspace.inspect", inspect);
-    CHECK(read_back.succeeded());
-
-    const Value& record = read_back.data();
-    CHECK(record.int_or("record_version", 0) == 1);
-    CHECK_EQ(std::string{record.find("project")->string_or("name", "")}, "hello");
-    CHECK_EQ(std::string{record.find("resources")->find("template")->string_or("id", "")},
-             "template.terminal.cpp");
+    const Value manifest = read_json(target / "SQ-INF" / "manifest.json");
+    CHECK_EQ(std::string{manifest.string_or("kind", "")}, "workspace");
+    CHECK_EQ(std::string{manifest.string_or("title", "")}, "hello");
+    const Value* made_from = manifest.find("consumers")->find("square")->find("made_from");
+    CHECK(made_from != nullptr);
+    CHECK(std::string{made_from->string_or("template", "")}.rfind("template.terminal.cpp@", 0) == 0);
 
     // §2.7.3 forbids absolute host paths in the record, so a workspace stays
     // relocatable and its identity does not depend on where it sits.
-    const std::string raw = read(target / ".squared" / "metadata.json");
-    CHECK(raw.find(scratch.root().string()) == std::string::npos);
+    CHECK(read(target / "SQ-INF" / "manifest.json").find(scratch.root().string()) == std::string::npos);
+    CHECK(read(target / "SQ-INF" / "files.json").find(scratch.root().string()) == std::string::npos);
 
-    // §2.7.10: one provenance entry per generated path, carrying the hash the
-    // file had when it was written.
-    const Array* provenance = record.find("provenance")->as_array();
-    CHECK(provenance != nullptr && !provenance->empty());
-    for (const Value& entry : *provenance) {
-        const std::string path{entry.string_or("path", "")};
-        const std::string hash{entry.string_or("sha256", "")};
-        CHECK(hash.size() == 64);
-        CHECK(!entry.string_or("origin", "").empty());
-        // The recorded hash must match the file actually on disk, or conflict
-        // detection would report edits nobody made.
-        CHECK_EQ(support::to_hex(support::sha256(read(target / path))), hash);
-    }
-
-    (void)engine->shutdown();
-}
-
-/// workspace.verify: the first reader of the provenance table.
-///
-/// The table has been written on every generation since provenance existed
-/// and read by nothing, which meant it was correct only by coincidence --
-/// unread data drifts without failing. These assertions are what make it
-/// correct on purpose.
-void verify_detects_drift() {
-    Scratch scratch("verify");
-    auto    engine = ready_engine();
-    const auto target = scratch.child("hello");
-
-    CHECK(engine->execute("project.generate", request("hello", target.string(), true)).succeeded());
-
-    Value params = Value::object();
-    params.set("workspace", target.string());
-
-    const auto verify = [&]() { return engine->execute("workspace.verify", params); };
-
-    // A freshly generated workspace verifies clean. If this ever fails, the
-    // hashes being written do not describe the bytes being written, and every
-    // other assertion here is meaningless.
-    {
-        const OperationResult clean = verify();
-        CHECK(clean.succeeded());
-        CHECK(clean.data().int_or("missing", -1) == 0);
-        CHECK(clean.data().int_or("modified", -1) == 0);
-        CHECK(clean.data().int_or("conflicts", -1) == 0);
-        CHECK(clean.data().int_or("recorded", 0) > 0);
-    }
-
-    // Editing a `seeded` file is the system working, not a conflict. It was
-    // handed over at generation and has been written in since, which is what
-    // seeded means -- counted as `edited`, reported as nothing.
-    {
-        std::ofstream(target / "sq_app" / "src" / "main.cpp", std::ios::app) << "\n// mine\n";
-        const OperationResult edited = verify();
-        CHECK(edited.succeeded());
-        CHECK(edited.data().int_or("edited", -1) == 1);
-        CHECK(edited.data().int_or("modified", -1) == 0);
-        CHECK(edited.data().int_or("conflicts", -1) == 0);
-    }
-
-    // Editing a `generated` file is a conflict: a future generation would
-    // overwrite it, and the point of verify is to say so before that happens.
-    {
-        std::ofstream(target / "mk" / "squared_generated.mk", std::ios::app) << "\n# hand edit\n";
-        const OperationResult conflict = verify();
-        CHECK(conflict.succeeded());   // a finding is a report, not a failure
-        CHECK(conflict.data().int_or("modified", -1) == 1);
-        CHECK(conflict.data().int_or("conflicts", -1) == 1);
-
-        const Array* findings = conflict.data().find("findings")->as_array();
-        CHECK(findings != nullptr && findings->size() == 1);
-        if (findings != nullptr && findings->size() == 1) {
-            CHECK_EQ(std::string{(*findings)[0].string_or("finding", "")}, "modified");
-            CHECK_EQ(std::string{(*findings)[0].string_or("path", "")},
-                     "mk/squared_generated.mk");
-        }
-    }
-
-    // A deleted recorded file is found, and distinguished from a modified one
-    // -- the remedy differs, so the report must too.
-    {
-        std::filesystem::remove(target / "mk" / "squared_generated.mk");
-        const OperationResult gone = verify();
-        CHECK(gone.succeeded());
-        CHECK(gone.data().int_or("missing", -1) == 1);
-
-        const Array* findings = gone.data().find("findings")->as_array();
-        CHECK(findings != nullptr && findings->size() == 1);
-        if (findings != nullptr && findings->size() == 1) {
-            CHECK_EQ(std::string{(*findings)[0].string_or("finding", "")}, "missing");
+    // §2.7.10: one entry per generated path, carrying the hash the file had
+    // when it was written.
+    const Value files = read_json(target / "SQ-INF" / "files.json");
+    const Object* entries = files.as_object();
+    CHECK(entries != nullptr && !entries->empty());
+    if (entries != nullptr) {
+        for (const auto& [path, entry] : *entries) {
+            const std::string hash{entry.string_or("sha256", "")};
+            CHECK(hash.size() == 64);
+            CHECK(!entry.string_or("origin", "").empty());
+            CHECK(!entry.string_or("class", "").empty());
+            // The recorded hash must match the file actually on disk, or
+            // square verify would report edits nobody made.
+            CHECK_EQ(support::to_hex(support::sha256(read(target / path))), hash);
         }
     }
 
@@ -393,7 +328,8 @@ void determinism() {
     CHECK(engine->execute("project.generate", request("hello", first.string(), true)).succeeded());
     CHECK(engine->execute("project.generate", request("hello", second.string(), true)).succeeded());
 
-    CHECK_EQ(read(first / ".squared" / "metadata.json"), read(second / ".squared" / "metadata.json"));
+    CHECK_EQ(read(first / "SQ-INF" / "manifest.json"), read(second / "SQ-INF" / "manifest.json"));
+    CHECK_EQ(read(first / "SQ-INF" / "files.json"), read(second / "SQ-INF" / "files.json"));
     CHECK_EQ(read(first / "sq_app" / "src" / "app.cpp"), read(second / "sq_app" / "src" / "app.cpp"));
     CHECK_EQ(read(first / "mk" / "squared_generated.mk"), read(second / "mk" / "squared_generated.mk"));
 
@@ -565,41 +501,29 @@ void package_materializes() {
     }
 
     // D-079: packages are recorded with id and version, like kits.
-    Value inspect = Value::object();
-    inspect.set("workspace", target.string());
-    const OperationResult read_back = engine->execute("workspace.inspect", inspect);
-    CHECK(read_back.succeeded());
-    const Array* package_rows = read_back.data().find("resources")->find("packages")->as_array();
-    CHECK(package_rows != nullptr && package_rows->size() == 1);
-    if (package_rows != nullptr && package_rows->size() == 1) {
-        CHECK_EQ(std::string{(*package_rows)[0].string_or("id", "")}, "package.squared-core");
-        CHECK_EQ(std::string{(*package_rows)[0].string_or("version", "")}, "1.0.0");
+    {
+        const Value manifest = read_json(target / "SQ-INF" / "manifest.json");
+        const Array* packages = manifest.find("consumers")->find("square")->find("made_from")->find("packages")->as_array();
+        CHECK(packages != nullptr && packages->size() == 1);
+        if (packages != nullptr && packages->size() == 1) {
+            CHECK_EQ(std::string{(*packages)[0].as_string().value_or("")},
+                     "package.squared-core@1.0.0");
+        }
     }
 
-    // §2.7.10: provenance rows carry the hash for every package path, in the
-    // `shared` class.
+    // §2.7.10: every package path is in the table, its hash the file's.
     {
-        const Array* provenance = read_back.data().find("provenance")->as_array();
+        const Value files = read_json(target / "SQ-INF" / "files.json");
         std::size_t package_rows = 0;
-        for (const Value& entry : *provenance) {
-            if (entry.string_or("origin", "") != "package.squared-core") continue;
-            ++package_rows;
-            CHECK(entry.string_or("sha256", "").size() == 64U);
-            CHECK(support::to_hex(support::sha256(
-                      read(target / std::string{entry.string_or("path", "")}))) ==
-                  entry.string_or("sha256", ""));
+        if (const Object* entries = files.as_object()) {
+            for (const auto& [path, entry] : *entries) {
+                if (entry.string_or("origin", "") != "package.squared-core") continue;
+                ++package_rows;
+                CHECK(entry.string_or("sha256", "").size() == 64U);
+                CHECK(support::to_hex(support::sha256(read(target / path))) == entry.string_or("sha256", ""));
+            }
         }
-        // DISABLED 2026-11-18 with the checks above: squared-core's file
-        // count, fixed at 329 when this was written, changed when squared
-        // moved to modules. Every row's hash is still checked above.
-        // CHECK(package_rows == 329);
-
-        Value verify = Value::object();
-        verify.set("workspace", target.string());
-        const OperationResult clean = engine->execute("workspace.verify", verify);
-        CHECK(clean.succeeded());
-        CHECK(clean.data().int_or("modified", -1) == 0);
-        CHECK(clean.data().int_or("conflicts", -1) == 0);
+        CHECK(package_rows > 0);
     }
 
     (void)engine->shutdown();
@@ -715,7 +639,6 @@ int main() {
     plan_matches_generation();
     generation();
     metadata_and_provenance();
-    verify_detects_drift();
     refuses_existing_workspace();
     determinism();
     required_kit_is_enforced();

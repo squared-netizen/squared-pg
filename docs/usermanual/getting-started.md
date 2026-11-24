@@ -59,9 +59,7 @@ a build dependency.
 | `sqpg show <id>` | describe one resource |
 | `sqpg plan <name> -t <id>` | what would be generated |
 | `sqpg new <name> -t <id>` | generate it |
-| `sqpg inspect <workspace>` | read a workspace's record |
-| `sqpg verify [workspace]` | check it against that record |
 
 Run `sqpg` with no arguments for the full list. Questions about a workspace
-and changes to it (`info`, `where`, `owner`, `verify`, `add`, `update`) move
-to square as it is built; `inspect` and `verify` stay here until then.
+are square's (`pkg install square`): `square info`, `where`, `owner`,
+`verify`; changing one (`add`, `update`) will be too.

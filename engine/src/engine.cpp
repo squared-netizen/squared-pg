@@ -50,7 +50,7 @@ std::string_view to_string(LifecycleState state) noexcept {
 // file have drifted, because a stale fallback would report a version the
 // manifests then resolve against.
 #ifndef SQUARED_PG_VERSION
-#  define SQUARED_PG_VERSION "0.1.0-alpha.2"
+#  define SQUARED_PG_VERSION "0.1.0-alpha.3"
 #endif
 
 Version engine_version() noexcept {
@@ -132,7 +132,7 @@ void Engine::Impl::register_capabilities() {
     add("capability.project.plan", "1.0.0", "produce a generation plan without mutation");
     add("capability.project.generate", "1.0.0", "transactional new-workspace generation");
     add("capability.transaction.rename", "1.0.0", "same-filesystem staging landed by one rename");
-    add("capability.metadata.provenance", "1.0.0", "workspace metadata with a provenance table");
+    add("capability.metadata.provenance", "2.0.0", "the workspace as a cartridge: SQ-INF/manifest.json and SQ-INF/files.json, for square");
 
     std::sort(capabilities.begin(), capabilities.end(),
               [](const Capability& a, const Capability& b) { return a.token < b.token; });
@@ -542,170 +542,13 @@ void Engine::Impl::register_operations() {
             std::vector<std::string> package_ids;
             for (const ResourceRef& ref : plan->packages) package_ids.push_back(ref.id.str());
             data.set("packages", Value::strings(package_ids));
-            data.set("metadata_file", std::string{MetadataService::kMetadataFile});
+            data.set("manifest_file", std::string{MetadataService::kWorkspaceManifest});
             data.set("durability", std::string{self.config.fast_durability ? "fast" : "durable"});
 
             Value metadata = Value::object();
             metadata.set("step_count", static_cast<std::int64_t>(plan->steps.size()));
             return with_diagnostics(OperationResult::ok(std::move(data)).set_metadata(std::move(metadata)),
                                     diagnostics);
-        });
-
-    add(OperationDescriptor{"workspace.verify",
-                            "check an existing workspace against its provenance record",
-                            {param("workspace", ParameterType::path, true, "workspace location")},
-                            {"filesystem", "metadata"},
-                            {"capability.metadata.provenance"},
-                            false,
-                            {"filesystem.read", "configuration.json.malformed"}},
-        [](Impl& self, const Value& params) {
-            // The first reader of the provenance table.
-            //
-            // Every generation has written it -- path, ownership, origin,
-            // sha256, one row per file -- and until now nothing has ever read
-            // it back. Unread data drifts from correct without failing, so the
-            // table was true only by coincidence. This makes it true on
-            // purpose.
-            //
-            // Read-only, and deliberately not a repair tool. It reports; what
-            // to do about a modified generated file is the author's decision,
-            // and a verify that quietly restored files would be the
-            // regeneration path 2.7.11 says does not exist in v1.
-            const std::filesystem::path root{std::string{params.string_or("workspace", {})}};
-            const std::filesystem::path file = root / std::string{MetadataService::kMetadataFile};
-
-            auto text = self.filesystem.read_file(file);
-            if (!text) return OperationResult::failed(text.error());
-            auto record = support::json_parse(*text);
-            if (!record) return OperationResult::failed(record.error());
-
-            std::vector<Diagnostic> diagnostics;
-            Value findings = Value::array();
-            int   checked = 0, missing = 0, modified = 0, edited = 0, unhashed = 0;
-
-            const Value* rows = record->find("provenance");
-            const Array* table = rows != nullptr ? rows->as_array() : nullptr;
-            if (table == nullptr) {
-                EngineError error =
-                    make_error(ErrorCategory::validation, "metadata.provenance.absent",
-                               "the record carries no provenance table; this workspace was "
-                               "generated before provenance was recorded, or the record is "
-                               "damaged");
-                error.resource = root.string();
-                return OperationResult::failed(std::move(error));
-            }
-
-            for (const Value& row : *table) {
-                const std::string path{row.string_or("path", {})};
-                if (path.empty()) continue;
-                ++checked;
-
-                const std::string declared{row.string_or("ownership", "seeded")};
-                const std::string recorded_hash{row.string_or("sha256", {})};
-                const OwnershipClass cls = ownership_class_from_string(declared);
-
-                auto add_finding = [&](const char* kind, const std::string& detail) {
-                    Value entry;
-                    entry.set("path", path);
-                    entry.set("finding", std::string{kind});
-                    entry.set("ownership", declared);
-                    entry.set("origin", std::string{row.string_or("origin", {})});
-                    entry.set("detail", detail);
-                    if (Array* into = findings.as_array(); into != nullptr) {
-                        into->push_back(std::move(entry));
-                    }
-                };
-
-                auto content = self.filesystem.read_file(root / path);
-                if (!content) {
-                    ++missing;
-                    // Severity follows the class, because the consequence
-                    // does. A missing `generated` file is recoverable -- it is
-                    // derived. A missing `seeded` file is the user's own work,
-                    // and this tool is not entitled to an opinion beyond
-                    // saying it is gone.
-                    add_finding("missing", cls == OwnershipClass::generated
-                                               ? "generator-managed file is absent"
-                                               : "file recorded at generation is absent");
-                    diagnostics.push_back(Diagnostic{cls == OwnershipClass::generated
-                                                         ? Severity::warning
-                                                         : Severity::info,
-                                                     "missing: " + path, {}, path});
-                    continue;
-                }
-
-                if (recorded_hash.empty()) {
-                    // A row with no hash. Copied assets are recorded without
-                    // one, so this is expected rather than suspicious -- but
-                    // it means the row cannot be checked, and a verify that
-                    // silently skipped rows would overstate what it proved.
-                    ++unhashed;
-                    continue;
-                }
-
-                const std::string actual = support::to_hex(support::sha256(*content));
-                if (actual == recorded_hash) continue;
-
-                if (cls == OwnershipClass::generated) {
-                    ++modified;
-                    add_finding("modified",
-                                "generator-managed file differs from its recorded hash; a "
-                                "future generation would overwrite these edits");
-                    diagnostics.push_back(
-                        Diagnostic{Severity::warning, "modified: " + path, {}, path});
-                } else {
-                    // A changed `seeded` file is the system working. It was
-                    // handed over at generation and has been edited since,
-                    // which is what `seeded` means.
-                    //
-                    // Counted separately from `modified`. Folding the two
-                    // together produced a summary reading "modified 2" beside
-                    // "1 conflict", which invites the reader to go looking for
-                    // a second problem that does not exist.
-                    ++edited;
-                }
-            }
-
-            // Not counted: files present in the tree but absent from the
-            // record. That number is worth having -- it is the user's own
-            // work, which is the point of a workspace -- but FilesystemService
-            // has no directory listing, and inventing one for a count belongs
-            // in its own change rather than smuggled into this one.
-
-            Value summary;
-            summary.set("workspace", root.string());
-            summary.set("recorded", static_cast<std::int64_t>(checked));
-            summary.set("missing", static_cast<std::int64_t>(missing));
-            summary.set("modified", static_cast<std::int64_t>(modified));
-            summary.set("edited", static_cast<std::int64_t>(edited));
-            summary.set("unhashed", static_cast<std::int64_t>(unhashed));
-            const Array* found = findings.as_array();
-            summary.set("conflicts",
-                        static_cast<std::int64_t>(found != nullptr ? found->size() : 0U));
-            summary.set("findings", std::move(findings));
-
-            OperationResult result = OperationResult::ok(std::move(summary));
-            for (Diagnostic& diagnostic : diagnostics) {
-                result.add_diagnostic(std::move(diagnostic));
-            }
-            return result;
-        });
-
-    add(OperationDescriptor{"workspace.inspect",
-                            "read the metadata record of an existing workspace",
-                            {param("workspace", ParameterType::path, true, "workspace location")},
-                            {"filesystem", "metadata"},
-                            {"capability.metadata.provenance"},
-                            false,
-                            {"filesystem.read", "configuration.json.malformed"}},
-        [](Impl& self, const Value& params) {
-            const std::filesystem::path root{std::string{params.string_or("workspace", {})}};
-            const std::filesystem::path file = root / std::string{MetadataService::kMetadataFile};
-            auto text = self.filesystem.read_file(file);
-            if (!text) return OperationResult::failed(text.error());
-            auto parsed = support::json_parse(*text);
-            if (!parsed) return OperationResult::failed(parsed.error());
-            return OperationResult::ok(std::move(*parsed));
         });
 
     std::sort(descriptors.begin(), descriptors.end(),

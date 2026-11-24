@@ -16,8 +16,8 @@ local args = {}
 -- else takes the last value, because "the last one wins" is what every shell
 -- user already expects from a repeated flag.
 -- Options that take no value. A switch not listed here swallows the next
--- argument, which for `sqpg verify --json name` would silently consume the
--- workspace name.
+-- argument, which for `sqpg show --json id` would silently consume the
+-- id.
 local switches = {
   help = true,
   json = true,

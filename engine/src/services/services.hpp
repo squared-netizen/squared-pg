@@ -376,11 +376,9 @@ public:
     static constexpr std::string_view kServiceName = "metadata";
     [[nodiscard]] std::string_view service_name() const noexcept override { return kServiceName; }
 
-    static constexpr std::string_view kMetadataDir  = ".squared";
-    static constexpr std::string_view kMetadataFile = ".squared/metadata.json";
-    static constexpr int              kRecordVersion = 1;
+    static constexpr int kRecordVersion = 1;
 
-    /// Build the record. Deliberately excludes absolute host paths, temporary
+    /// Build the record (in memory: what the two SQ-INF files are made from). Deliberately excludes absolute host paths, temporary
     /// locations, user account information and engine handles (§2.7.3), and
     /// carries no timestamp so that two identical generations produce
     /// byte-identical metadata (§2.7.13).
