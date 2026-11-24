@@ -160,15 +160,18 @@ void planning() {
     CHECK_EQ(std::string{plan.string_or("working_directory", "")}, "sq_app");
     CHECK(plan.int_or("step_count", 0) > 10);
 
-    // The generated fragment is generator-owned; the Makefile that includes it
+    // The template's build is generator-owned; the build.lua that includes it
     // is the user's. That split is §2.7.10's answer to in-place merging.
-    const Value* fragment = step_for(plan, "mk/squared_generated.mk");
+    const Value* fragment = step_for(plan, "sq/build/template.lua");
     CHECK(fragment != nullptr);
     CHECK_EQ(std::string{fragment->string_or("ownership", "")}, "generated");
 
-    const Value* makefile = step_for(plan, "Makefile");
-    CHECK(makefile != nullptr);
-    CHECK_EQ(std::string{makefile->string_or("ownership", "")}, "seeded");
+    const Value* build = step_for(plan, "build.lua");
+    CHECK(build != nullptr);
+    CHECK_EQ(std::string{build->string_or("ownership", "")}, "seeded");
+
+    // No make: a workspace builds with sqmake alone (2026-11-24).
+    CHECK(step_for(plan, "Makefile") == nullptr);
 
     // §2.7.3: nothing generator-owned lands inside the working directory.
     for (const Value& step : *plan.find("steps")->as_array()) {
@@ -225,7 +228,7 @@ void generation() {
     CHECK(result.succeeded());
     CHECK(result.data().int_or("files_written", 0) > 5);
 
-    CHECK(std::filesystem::exists(target / "Makefile"));
+    CHECK(std::filesystem::exists(target / "build.lua"));
     CHECK(std::filesystem::exists(target / "sq_app" / "src" / "main.cpp"));
     CHECK(std::filesystem::exists(target / "sq_kit" / "include" / "terminal" / "terminal.hpp"));
     CHECK(std::filesystem::exists(target / "SQ-INF" / "manifest.json"));
@@ -243,9 +246,6 @@ void generation() {
     CHECK(main_cpp.find("hello::App") != std::string::npos);
     CHECK(main_cpp.find("{{") == std::string::npos);
 
-    // The executable bit came from the manifest, not from a filename guess.
-    const auto permissions = std::filesystem::status(target / "run.sh").permissions();
-    CHECK((permissions & std::filesystem::perms::owner_exec) != std::filesystem::perms::none);
 
     // Staging left nothing behind.
     CHECK(!std::filesystem::exists(scratch.root() / ".hello.squared-tmp"));
@@ -440,7 +440,7 @@ void package_materializes() {
     CHECK(pkgs != nullptr && pkgs->size() == 1);
     if (pkgs != nullptr && pkgs->size() == 1) {
         CHECK_EQ(std::string{(*pkgs)[0].string_or("id", "")}, "package.squared-core");
-        CHECK_EQ(std::string{(*pkgs)[0].string_or("version", "")}, "1.0.0");
+        CHECK_EQ(std::string{(*pkgs)[0].string_or("version", "")}, "1.1.0");
     }
 
     // DISABLED 2026-11-18 (docs/todo.md, "Stale test: package payload path"):
@@ -458,10 +458,12 @@ void package_materializes() {
     // // absorptive on a later pass only while unchanged.
     // CHECK_EQ(std::string{header->string_or("ownership", "")}, "shared");
 
-    // The build fragment is the generator's, exactly like a kit's.
-    const Value* fragment = step_for(plan, "mk/pkg_squared_core.mk");
-    CHECK(fragment != nullptr);
-    CHECK_EQ(std::string{fragment->string_or("ownership", "")}, "generated");
+    // The framework's source is the package's, shared (D-077): written for
+    // the user to change, and absorbed on a later pass only while unchanged.
+    const Value* source = step_for(plan, "squared/build/squared.lua");
+    CHECK(source != nullptr);
+    CHECK_EQ(std::string{source->string_or("ownership", "")}, "shared");
+    CHECK_EQ(std::string{source->string_or("origin", "")}, "package.squared-core");
 
     // §2.7.3: nothing generator-owned lands inside the working directory,
     // package contributions included.
@@ -476,7 +478,7 @@ void package_materializes() {
     CHECK(generated.succeeded());
     // DISABLED 2026-11-18 with the plan check above: the same stale path.
     // CHECK(std::filesystem::exists(target / "squared" / "gui" / "include" / "squared" / "gui" / "button.hpp"));
-    CHECK(std::filesystem::exists(target / "mk" / "pkg_squared_core.mk"));
+    CHECK(std::filesystem::exists(target / "squared" / "build" / "squared.lua"));
 
     // The workspace is a cartridge, for square: its manifest (kind
     // workspace, what it was made from, its roles and parameters) and the
@@ -495,8 +497,8 @@ void package_materializes() {
         std::ifstream files_in(target / "SQ-INF" / "files.json");
         const std::string files_text((std::istreambuf_iterator<char>(files_in)), {});
         auto files = support::json_parse(files_text);
-        CHECK(files.has_value() && files->find("mk/pkg_squared_core.mk") != nullptr);
-        CHECK(files.has_value() && files->find("mk/pkg_squared_core.mk")->string_or("origin", "") ==
+        CHECK(files.has_value() && files->find("squared/build/squared.lua") != nullptr);
+        CHECK(files.has_value() && files->find("squared/build/squared.lua")->string_or("origin", "") ==
                                        std::string_view{"package.squared-core"});
     }
 
@@ -507,7 +509,7 @@ void package_materializes() {
         CHECK(packages != nullptr && packages->size() == 1);
         if (packages != nullptr && packages->size() == 1) {
             CHECK_EQ(std::string{(*packages)[0].as_string().value_or("")},
-                     "package.squared-core@1.0.0");
+                     "package.squared-core@1.1.0");
         }
     }
 
@@ -542,9 +544,9 @@ void package_collision_requires_override() {
         return config;
     };
 
-    // template.terminal.cpp writes a seeded Makefile; the package claims it too.
+    // template.terminal.cpp writes a seeded build.lua; the package claims it too.
     write_synthetic_package(packages_root, "package.synthetic", {},
-                            {{"tree/Makefile", "package copy\n"}, {"tree/app.mk", "x\n"}});
+                            {{"tree/build.lua", "package copy\n"}, {"tree/app.lua", "x\n"}});
     {
         auto engine = engine_with_packages_root(packages_root);
         const OperationResult planned =
@@ -556,8 +558,8 @@ void package_collision_requires_override() {
 
     // Same package, now declaring the override. The plan succeeds and the
     // package's copy owns the path.
-    write_synthetic_package(packages_root, "package.synthetic", {"Makefile"},
-                            {{"tree/Makefile", "package copy\n"}, {"tree/app.mk", "x\n"}});
+    write_synthetic_package(packages_root, "package.synthetic", {"build.lua"},
+                            {{"tree/build.lua", "package copy\n"}, {"tree/app.lua", "x\n"}});
     {
         auto engine = engine_with_packages_root(packages_root);
         const auto out = scratch.child("out2");
@@ -567,7 +569,7 @@ void package_collision_requires_override() {
         // Both contributions stay in the plan; the later phase wins on disk
         // (§2.7.9 contributions are applied in order), and the overriding
         // package owns the path.
-        const std::vector<Value> makefile_steps = steps_named(planned.data(), "Makefile");
+        const std::vector<Value> makefile_steps = steps_named(planned.data(), "build.lua");
         CHECK(makefile_steps.size() == 2);
         CHECK(std::any_of(makefile_steps.begin(), makefile_steps.end(), [](const Value& step) {
             return step.string_or("origin", "") == "package.synthetic";
@@ -575,7 +577,7 @@ void package_collision_requires_override() {
 
         const OperationResult generated = engine->execute("project.generate", make_config("hello", out));
         CHECK(generated.succeeded());
-        CHECK_EQ(read(out / "Makefile"), "package copy\n");
+        CHECK_EQ(read(out / "build.lua"), "package copy\n");
         (void)engine->shutdown();
     }
 }

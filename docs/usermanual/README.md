@@ -25,7 +25,8 @@ something, it is in the wrong tree — that belongs in
 ## What you need installed
 
 Covered in [[usermanual/getting-started]]. The short version for Android work
-is Termux with clang, make, the Android SDK build tools and an NDK.
+is sqterm with `pkg install sqmake squared squared-pg`: clang, the sysroot,
+apkpack and sqmake come with them.
 
 ## Not yet written
 

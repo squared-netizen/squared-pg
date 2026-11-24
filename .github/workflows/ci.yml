@@ -53,6 +53,14 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
 
+      # A generated workspace builds with sqmake (no make since 2026-11-24):
+      # the smoke test builds and runs one, so it needs sqmake.
+      - name: sqmake, for the smoke test
+        run: |
+          git clone --quiet --depth 1 --branch v0.10.0 https://github.com/squared-netizen/sqmake "$RUNNER_TEMP/sqmake"
+          make -C "$RUNNER_TEMP/sqmake" -j4 CXX="$CXX" CC="$CC" build/sqmake
+          echo "SQMAKE=$RUNNER_TEMP/sqmake/build/sqmake" >> "$GITHUB_ENV"
+
       - name: end-to-end smoke
         run: make smoke
         env:
