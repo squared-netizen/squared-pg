@@ -5,6 +5,11 @@ tags: [usermanual, android, sfml]
 
 # Android apps with SFML
 
+> **Superseded (2026-11-24).** This page describes a template that is not
+> shipped (template.android.sfml) and the make build that workspaces no longer
+> have. kit.sfml now builds through `sq/build/kit_sfml.lua` with sqmake. It is
+> kept for the SFML notes until the template returns.
+
 An Android application in C++20, with SFML as the platform layer. No Java, no
 Gradle, no Android Studio — `make apk` produces a signed, installable APK using
 clang, aapt2 and apksigner.

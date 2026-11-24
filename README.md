@@ -5,8 +5,9 @@ framework. A native C++23 engine provides generation capability; a Lua 5.4
 control layer sequences it into workflows. The output is a self-contained
 developer workspace you own outright.
 
-Termux on Android is a first-class target. A phone with a compiler and `make` is
-enough — to run the generator, and to build what it produces.
+sqterm on Android is a first-class target. A phone with a compiler and sqmake
+is enough to build what it produces (squared-pg itself builds with make, for
+now).
 
 ## Quick start
 
@@ -43,7 +44,7 @@ and CI use) and `make` are the only requirements; see
 ```sh
 ./build/sqpg list
 ./build/sqpg new hello --template template.terminal.cpp --kit kit.terminal
-cd hello && make && ./build/hello
+cd hello && sqmake run
 ```
 
 Add a Lua script workspace alongside the C++ one:
@@ -62,7 +63,8 @@ cd myapp && sqmake run
 
 It builds with sqmake against the installed squared (in sqterm, `pkg install
 sqmake squared`). To carry a copy of squared in the workspace instead, to
-change it or to build with make, add `--package package.squared-core`.
+change it, add `--package package.squared-core`. A workspace has no make
+files: `build.lua` and `sq/build/` are its whole build.
 
 See what would happen without doing it:
 
@@ -116,7 +118,7 @@ registry, a manifest-identity resource index built on `sqcart`, plan production,
 and transactional new-workspace generation with provenance recording.
 
 **Resources.** Two templates: `template.terminal.cpp` (a C++20 terminal
-application that builds with make and a compiler, on Termux, Linux or macOS)
+application that builds with sqmake and a compiler, in sqterm or on Linux)
 and `template.android.cpp` (a plain NDK workspace — NativeActivity, no Java,
 no Gradle, producing a signed APK on a phone).
 

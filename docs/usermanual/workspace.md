@@ -16,12 +16,13 @@ Every file a generated workspace contains is one of:
 | `user` | yours, untouched. |
 | `metadata` | the provenance record. |
 
-The rule of thumb: **`mk/` is the generator's, everything else is yours.** Your
-build settings go in `Makefile`, which is yours and which every generated
-variable is written to allow overriding:
+The rule of thumb: **`sq/build/` is the generator's, everything else is
+yours.** Your build settings go in `build.lua`, which is yours, as fields of
+`app` before it includes `sq/build/template.lua` (which lists every one):
 
-```sh
-make SQ_MIN_SDK=21 apk
+```lua
+app = {name = "myapp", package = "com.example.myapp", min_sdk = 28}
+include("sq/build/template.lua")
 ```
 
 ## The record

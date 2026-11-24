@@ -45,7 +45,7 @@ nothing. `new` writes the workspace to `./demo`.
 | `demo` | the project name: library name (`libdemo.so`), C++ namespace and log tag; a C identifier |
 | `-t template.android.cpp` | the shape: NativeActivity, C++23, no Java, no Gradle |
 | `-p package_name=com.example.demo` | the Android application id; must be unique on the device |
-| `--package package.squared-core` | optional: vendors the framework into `demo/squared/`, for a workspace that changes squared itself, or that builds with make |
+| `--package package.squared-core` | optional: vendors the framework into `demo/squared/`, for a workspace that changes squared itself |
 
 Optional: `-p app_label="Squared Demo"` sets the launcher label, which
 otherwise defaults to the project name.
@@ -89,12 +89,13 @@ beside it, so a clone builds with nothing else:
 cd ~/projects
 git clone https://github.com/squared-netizen/squared-examples
 cd squared-examples/demo
-make apk && make install
+sqmake install
 ```
 
 A development build sends its log, a crash backtrace and frame-allocation
 reports to a port on this device: start `nc -klu 5555` in a second session,
-then `make DEV_LOG=1 install` (`DEV_LOG=1` on the line that installs).
+then `sqmake --debug install` (the debug build: its log, the Console,
+debuggable).
 
 ## When something goes wrong
 

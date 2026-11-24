@@ -47,9 +47,9 @@ yours or the generator's. It creates nothing.
 
 ## Your project does not need squared-pg
 
-Once generated, a workspace builds with sqmake (or, with the framework
-vendored by `--package package.squared-core`, with make). The generator is not
-a build dependency.
+Once generated, a workspace builds with sqmake, from its `build.lua` (with the
+framework installed, or vendored by `--package package.squared-core`). It has
+no make files. The generator is not a build dependency.
 
 ## Useful commands
 

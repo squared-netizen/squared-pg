@@ -253,14 +253,16 @@ void platform_layer_is_seeded_not_generated() {
         }
     }
 
-    // The build fragments are the generator's, and the Makefile that includes
-    // them is the user's. That split is what replaces in-place merging.
-    const Value* fragment = step_for(plan, "mk/squared_generated.mk");
+    // The build is the generator's (sq/build: the template's and each kit's),
+    // and the build.lua that includes it is the user's. That split is what
+    // replaces in-place merging. No make (2026-11-24).
+    const Value* fragment = step_for(plan, "sq/build/template.lua");
     CHECK(fragment != nullptr && fragment->string_or("ownership", "") == "generated");
-    const Value* packaging = step_for(plan, "mk/squared_android_package.mk");
-    CHECK(packaging != nullptr && packaging->string_or("ownership", "") == "generated");
-    const Value* makefile = step_for(plan, "Makefile");
-    CHECK(makefile != nullptr && makefile->string_or("ownership", "") == "seeded");
+    const Value* kit_build = step_for(plan, "sq/build/kit_opengl.lua");
+    CHECK(kit_build != nullptr && kit_build->string_or("ownership", "") == "generated");
+    const Value* build = step_for(plan, "build.lua");
+    CHECK(build != nullptr && build->string_or("ownership", "") == "seeded");
+    CHECK(step_for(plan, "Makefile") == nullptr);
 
     // The kit's header is the kit's.
     const Value* header = step_for(plan, "sq_kit/include/opengl/gl.hpp");
@@ -279,9 +281,9 @@ void builds_without_a_rendering_kit() {
     CHECK(engine->execute("project.generate", request(target.string(), false)).succeeded());
 
     CHECK(std::filesystem::exists(target / "sq_android" / "entry.cpp"));
-    CHECK(std::filesystem::exists(target / "Makefile"));
+    CHECK(std::filesystem::exists(target / "build.lua"));
     CHECK(!std::filesystem::exists(target / "sq_kit"));
-    CHECK(!std::filesystem::exists(target / "mk" / "kit_opengl.mk"));
+    CHECK(!std::filesystem::exists(target / "sq" / "build" / "kit_opengl.lua"));
 
     // No renderer probe: the framework's graphics Context always exists, and a
     // project without a GLES kit gets the null backend, which draws nothing
@@ -306,9 +308,9 @@ void manifest_carries_no_uses_sdk() {
     CHECK(manifest.find("android.app.lib_name\" android:value=\"myapp\"") != std::string::npos);
 
     // SDK levels are build settings, not generation parameters: they reach
-    // aapt2 through make variables, so retargeting never means editing a file.
-    // Declaring them here as well would create a second source of truth, and
-    // aapt2 would take this one.
+    // apkpack from build.lua (app.min_sdk, app.target_sdk), so retargeting
+    // never means editing a file. Declaring them here as well would create a
+    // second source of truth.
     CHECK(manifest.find("<uses-sdk") == std::string::npos);
     CHECK(manifest.find("minSdkVersion") == std::string::npos);
     CHECK(manifest.find("android:debuggable") == std::string::npos);

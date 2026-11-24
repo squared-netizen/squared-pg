@@ -14,6 +14,9 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 build=${1:-$root/build}
 sqpg=$build/sqpg
+# A workspace builds with sqmake (no make since 2026-11-24): $SQMAKE, else the
+# one on PATH.
+sqmake=${SQMAKE:-$(command -v sqmake || true)}
 
 # $TMPDIR, never a hardcoded /tmp: Termux has no /tmp, and a smoke test that
 # only runs on a desktop tests the wrong host.
@@ -31,6 +34,7 @@ step() {
 }
 
 [ -x "$sqpg" ] || fail "no sqpg at $sqpg (run make first)"
+[ -n "$sqmake" ] && [ -x "$sqmake" ] || fail "no sqmake (set SQMAKE, or put it on PATH)"
 
 step "engine reports itself"
 "$sqpg" describe || fail "describe"
@@ -53,7 +57,7 @@ fi
 step "generate with kit.terminal"
 "$sqpg" new hello --template template.terminal.cpp --kit kit.terminal || fail "generate"
 
-for required in Makefile mk/squared_generated.mk mk/kit_terminal.mk \
+for required in build.lua sq/build/template.lua sq/build/kit_terminal.lua \
                 sq_app/src/main.cpp sq_app/src/app.cpp sq_app/include/app.hpp \
                 sq_kit/include/terminal/terminal.hpp SQ-INF/manifest.json SQ-INF/files.json; do
     [ -f "hello/$required" ] || fail "missing $required"
@@ -61,18 +65,21 @@ done
 
 # kit.lua was not selected, so nothing it contributes may appear.
 [ ! -e hello/sq_lua ] || fail "sq_lua present without kit.lua"
-[ ! -e hello/mk/kit_lua.mk ] || fail "kit_lua.mk present without kit.lua"
+[ ! -e hello/sq/build/kit_lua.lua ] || fail "kit_lua.lua present without kit.lua"
+# No make: nothing for it in a workspace.
+[ ! -e hello/Makefile ] && [ ! -e hello/mk ] || fail "make's files in a workspace"
 
 # Substitution actually ran.
 grep -q "hello::App" hello/sq_app/src/main.cpp || fail "substitution did not run"
-! grep -rq "{{" hello/sq_app hello/Makefile hello/mk || fail "unsubstituted placeholder left behind"
+# A placeholder is {{name}}; Lua's own {{...}} (a table of tables) is not one.
+! grep -rqE "\{\{[a-z_]+\}\}" hello/sq_app hello/build.lua hello/sq || fail "unsubstituted placeholder left behind"
 
 # §2.7.13: no absolute host path in the workspace's record, so it is
 # relocatable and its identity does not depend on where it sits.
 ! grep -q "$scratch" hello/SQ-INF/manifest.json hello/SQ-INF/files.json || fail "absolute host path in SQ-INF"
 
 step "the generated project builds"
-( cd hello && make ) || fail "generated project does not build"
+( cd hello && "$sqmake" ) || fail "generated project does not build"
 [ -x hello/build/hello ] || fail "no binary produced"
 
 step "the generated project runs"
@@ -85,7 +92,7 @@ printf 'words a b c\nquit\n' | ./hello/build/hello | grep -q "3: c" || fail "reg
 ./hello/build/hello </dev/null >/dev/null || fail "app did not survive empty input"
 
 step "the generated project does not depend on the generator"
-! grep -rq "squared-pg/resources\|$root" hello/Makefile hello/mk hello/sq_app || \
+! grep -rq "squared-pg/resources\|$root" hello/build.lua hello/sq hello/sq_app || \
     fail "generated project references the generator tree"
 
 step "regenerating over an existing workspace is refused"
@@ -96,9 +103,8 @@ fi
 step "generate with kit.lua as well"
 "$sqpg" new scripted --template template.terminal.cpp --kit kit.terminal --kit kit.lua || fail "generate scripted"
 [ -f scripted/sq_lua/main.lua ] || fail "kit.lua did not seed the script workspace"
-[ -f scripted/mk/kit_lua.mk ] || fail "kit.lua did not contribute its build fragment"
-( cd scripted && make ) || fail "scripted project does not build"
-( cd scripted && make lua-status ) || fail "lua-status target missing"
+[ -f scripted/sq/build/kit_lua.lua ] || fail "kit.lua did not contribute its build file"
+( cd scripted && "$sqmake" ) || fail "scripted project does not build"
 
 step "generation is deterministic"
 # Same project name, two locations. Two *different* names would not be
@@ -138,7 +144,7 @@ step "kit.termux generates and its JSON parser is correct"
 "$sqpg" new phone --template template.terminal.cpp --kit kit.terminal --kit kit.termux \
     >/dev/null || fail "generate with kit.termux"
 [ -f phone/sq_kit/include/termux/termux.hpp ] || fail "kit.termux header missing"
-[ -f phone/mk/kit_termux.mk ] || fail "kit.termux fragment missing"
+[ -f phone/sq/build/kit_termux.lua ] || fail "kit.termux build file missing"
 
 rm -f phone/sq_app/src/app.cpp phone/sq_app/include/app.hpp
 cat > phone/sq_app/src/main.cpp <<'TERMUXTEST'
@@ -205,7 +211,7 @@ int main() {
 }
 TERMUXTEST
 
-( cd phone && make ) >/dev/null 2>&1 || fail "the kit.termux test did not compile"
+( cd phone && "$sqmake" ) >/dev/null 2>&1 || fail "the kit.termux test did not compile"
 ./phone/build/phone | grep -q "kit.termux json ok" || fail "the kit.termux JSON parser is wrong"
 
 step "no platform is assumed when none is given"
@@ -218,8 +224,8 @@ step "generate an android workspace"
 "$sqpg" new droid --template template.android.cpp --kit kit.opengl \
     --platform android --param package_name=com.example.droid || fail "generate droid"
 
-for required in Makefile mk/squared_generated.mk mk/squared_android_package.mk \
-                mk/kit_opengl.mk sq_app/src/main.cpp \
+for required in build.lua sq/build/template.lua sq/build/kit_opengl.lua \
+                sq_app/src/main.cpp \
                 sq_android/entry.cpp sq_android/AndroidManifest.xml \
                 sq_android/res/values/strings.xml \
                 sq_android/res/drawable/ic_launcher_foreground.xml \
@@ -229,7 +235,7 @@ for required in Makefile mk/squared_generated.mk mk/squared_android_package.mk \
     [ -f "droid/$required" ] || fail "missing $required"
 done
 
-! grep -rq "{{" droid/sq_app droid/sq_android/entry.cpp droid/Makefile droid/mk \
+! grep -rqE "\{\{[a-z_]+\}\}" droid/sq_app droid/sq_android/entry.cpp droid/build.lua droid/sq \
     || fail "unsubstituted placeholder in the android workspace"
 grep -q 'package="com.example.droid"' droid/sq_android/AndroidManifest.xml \
     || fail "package name did not substitute"
@@ -264,7 +270,7 @@ step "android builds without a rendering kit"
 "$sqpg" new bare --template template.android.cpp --platform android \
     --param package_name=com.example.bare >/dev/null || fail "generate without a kit"
 [ ! -e bare/sq_kit ] || fail "sq_kit present without a rendering kit"
-[ ! -e bare/mk/kit_opengl.mk ] || fail "kit fragment present without the kit"
+[ ! -e bare/sq/build/kit_opengl.lua ] || fail "kit build file present without the kit"
 grep -q "^import sq.graphics;" bare/sq_android/entry.cpp \
     || fail "the platform layer does not use the renderer-agnostic context"
 grep -q "__has_include(<opengl/gl.hpp>)" bare/sq_android/entry.cpp \
