@@ -96,7 +96,8 @@ void indexing() {
 
     auto id = ResourceId::parse("template.terminal.cpp").value();
     CHECK(index.versions_of(id).size() == 1);
-    CHECK(index.select(id, VersionRange::parse("^0.1.0").value()) != nullptr);
+    // Any 0.x from 0.1 on: the test is the selection, not the template's version.
+    CHECK(index.select(id, VersionRange::parse(">=0.1.0").value()) != nullptr);
     CHECK(index.select(id, VersionRange::parse(">=9.0.0").value()) == nullptr);
 
     CHECK(index.of_kind(ResourceKind::kit).size() >= 2);
