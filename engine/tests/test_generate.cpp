@@ -440,7 +440,7 @@ void package_materializes() {
     CHECK(pkgs != nullptr && pkgs->size() == 1);
     if (pkgs != nullptr && pkgs->size() == 1) {
         CHECK_EQ(std::string{(*pkgs)[0].string_or("id", "")}, "package.squared-core");
-        CHECK_EQ(std::string{(*pkgs)[0].string_or("version", "")}, "1.1.0");
+        CHECK_EQ(std::string{(*pkgs)[0].string_or("version", "")}, "1.2.0");
     }
 
     // DISABLED 2026-11-18 (docs/todo.md, "Stale test: package payload path"):
@@ -509,7 +509,7 @@ void package_materializes() {
         CHECK(packages != nullptr && packages->size() == 1);
         if (packages != nullptr && packages->size() == 1) {
             CHECK_EQ(std::string{(*packages)[0].as_string().value_or("")},
-                     "package.squared-core@1.1.0");
+                     "package.squared-core@1.2.0");
         }
     }
 
