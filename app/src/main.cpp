@@ -194,9 +194,20 @@ struct HostConfig {
         //       something to someone who has never heard of the Squared
         //       framework. That is the test separating the two, and the
         //       reason this tree stays with the tool.
+        //   $XDG_DATA_HOME/squared-pg/resources/{...}   the user's own
+        //       (~/.local/share without it): what `sqmake install` puts there
+        //       from a workspace made with template.kit, template.package or
+        //       template.template. square searches the same folder.
+        std::filesystem::path own;
+        if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0') {
+            own = std::filesystem::path{xdg} / "squared-pg" / "resources";
+        } else if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
+            own = std::filesystem::path{home} / ".local" / "share" / "squared-pg" / "resources";
+        }
         for (const char* kind : {"templates", "kits", "packages", "assets"}) {
             config.resource_roots.push_back((root / "resources" / kind).string());
             config.resource_roots.push_back((root / "resources" / "generator" / kind).string());
+            if (!own.empty()) config.resource_roots.push_back((own / kind).string());
         }
     }
     if (config.workflow_roots.empty()) {

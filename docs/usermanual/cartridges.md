@@ -72,20 +72,34 @@ reports it has nothing to package.
 | 2 | usage error |
 | 3 | cartridge non-conforming |
 
-## Authoring a kit
+## Authoring a kit, a package or a template
 
-`sqpg` has a template for it, which gets the directory layout and a manifest
-skeleton right:
+`sqpg` has a template for each, which gets the layout and the manifest right:
+
+| Template            | Makes                                                    |
+|---------------------|----------------------------------------------------------|
+| `template.kit`      | `kit.NAME`: bridges something outside squared; a module  |
+| `template.package`  | `package.NAME`: reusable squared code; a module          |
+| `template.template` | `template.NAME`: a template of your own                  |
 
 ```sh
-sqpg new my_kit -t template.kit \
-  -p project_name=mykit -p description="What it does"
+sqpg new mykit -t template.kit -p description="What it does"
+cd mykit
+sqmake            # pack cartridge/ into dist/kit.mykit.sq (sqdrive checks it)
+sqmake install    # install it, exploded, into your own resources
+sqpg new probe -t template.terminal.cpp -k kit.mykit
 ```
 
-The workspace name must be a C identifier; the kit's identity comes from
-`project_name`, so that command produces `kit.mykit`. Edit
-`cartridge/SQ-INF/manifest.json` and the payload under `cartridge/tree/`, then
-pack.
+The workspace is a cartridge itself (`SQ-INF/manifest.json`, kind
+`workspace`); what it makes is the exploded cartridge in `cartridge/`. Edit
+`cartridge/SQ-INF/manifest.json` and the payload under `cartridge/tree/`.
+The name must be a C identifier; the identity comes from `project_name`, so
+`mykit` makes `kit.mykit`.
+
+Your own resources are in `$XDG_DATA_HOME/squared-pg/resources` (else
+`~/.local/share/squared-pg/resources`), in `templates/`, `kits/`,
+`packages/` and `assets/`; sqpg and square search it, so a template you
+install there is listed by `sqpg list template` (and by New in sqIDE).
 
 ## Not documented here
 

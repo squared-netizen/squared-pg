@@ -127,9 +127,9 @@ void inspect_and_verify_are_squares() {
 ///
 ///   - a README under the payload tree landed as <workspace>/README.md and
 ///     collided with the project template's own;
-///   - the make fragment was called kit_placeholder.mk and told the author to
-///     rename it, so two kits authored from the template collided the moment
-///     a project used both.
+///   - the build fragment was called kit_placeholder.mk and told the author
+///     to rename it, so two kits authored from the template collided the
+///     moment a project used both (it is sq/build/kit_NAME.lua now).
 ///
 /// Neither would have been caught by inspecting the template. Both are
 /// asserted below.
@@ -145,7 +145,8 @@ void kit_authoring_round_trip() {
 
     // The payload is namespaced after the kit, so two kits from this template
     // never contribute the same path.
-    CHECK(fs::is_regular_file(cart / "tree" / "mk" / "kit_fmt.mk"));
+    CHECK(fs::is_regular_file(cart / "tree" / "sq" / "build" / "kit_fmt.lua"));
+    CHECK(fs::is_regular_file(cart / "tree" / "sq_kit" / "fmt" / "fmt.cppm"));
 
     // And the cartridge's own README sits beside tree/, not inside it. A file
     // under tree/ is installed into every workspace that uses the kit.

@@ -1,0 +1,44 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 3,
+  "kind": "package",
+  "id": "package.{{project_name}}",
+  "version": "0.1.0",
+  "tree": "tree/",
+  "title": "{{project_name}}",
+  "description": "{{description}}",
+  "license": "MIT",
+  "consumers": {
+    "squared_pg": {
+      "runtime": {
+        "model": "none"
+      },
+      "provides": [],
+      "platforms": [
+        "all"
+      ],
+      "compatible_templates": [],
+      "requires": {
+        "framework": ">=1.0.0 <2.0.0",
+        "packages": [],
+        "kits": [],
+        "engine": ">=0.1.0 <0.2.0",
+        "capabilities": [
+          "capability.template.substitute@^1.0"
+        ]
+      },
+      "integration_areas": [
+        "build.lua.fragments"
+      ],
+      "conflicts_with": [],
+      "ownership": {
+        "default": "shared",
+        "generated": [
+          "sq/build/package_{{project_name}}.lua"
+        ],
+        "user": [],
+        "shared": []
+      }
+    }
+  }
+}
