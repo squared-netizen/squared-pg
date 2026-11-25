@@ -34,7 +34,8 @@ its parameters. `-o PATH` puts the workspace somewhere other than `./<name>`.
 A workspace is a cartridge folder: `SQ-INF/manifest.json` (kind `workspace`)
 says what it was made from and where its parts are, and `SQ-INF/files.json`
 lists each generated file with its class and checksum. square reads them;
-`sqcart pack hello hello.sq` packs the workspace into one file.
+`square --workspace hello pack` packs the workspace into one `.sq` file
+(and `square explode` makes it a folder again).
 
 ## See before you commit
 
