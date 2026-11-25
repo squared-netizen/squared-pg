@@ -16,7 +16,7 @@
 # Options:
 #   --version=X.Y.Z   override the version
 #   --out=DIR         artifact directory (default: dist/)
-#   --skip-make       skip the Makefile build in `check`
+#   --skip-make       skip the build (sqmake) in `check`
 #
 # Runs from anywhere: the repository is found from this script's own location,
 # never from the working directory.
@@ -113,7 +113,7 @@ host_platform() {
 }
 
 project_version() {
-    # The version lives in one file. The Makefile reads
+    # The version lives in one file. build.lua reads
     # it and compiles it in. Scraping it back out of the build files stopped
     # working the moment they started reading it instead of declaring it.
     tr -d ' \t\n\r' < "$root/VERSION"
@@ -161,15 +161,15 @@ do_check() {
     fi
 
     if [ "$skip_make" -eq 0 ]; then
-        step "Makefile build"
-        run_or_die make -C "$root" -j "$(jobs_count)"
-        run_or_die make -C "$root" check
-        run_or_die make -C "$root" smoke
-        ok "Makefile path clean"
+        step "build (sqmake)"
+        run_or_die sqmake -C "$root" -j "$(jobs_count)"
+        run_or_die sqmake -C "$root" test
+        run_or_die sqmake -C "$root" smoke
+        ok "build clean"
     fi
 
     step "sqcart, independently"
-    run_or_die make -C "$root/sqcart/v3" -j "$(jobs_count)" CXX="${CXX:-clang++}" test
+    run_or_die sqmake -C "$root/sqcart/v3" -j "$(jobs_count)" test
     ok "sqcart clean"
 }
 
@@ -301,7 +301,7 @@ do_source() {
     local scratch
     scratch=$(mktemp -d)
     tar xzf "$target/$name-src.tar.gz" -C "$scratch"
-    if ( cd "$scratch/$name" && make -j"$(jobs_count)" >/dev/null 2>&1 && make check >/dev/null 2>&1 ); then
+    if ( cd "$scratch/$name" && sqmake -j "$(jobs_count)" >/dev/null 2>&1 && sqmake test >/dev/null 2>&1 ); then
         rm -rf "$scratch"
         ok "builds and passes offline"
     else
@@ -339,8 +339,8 @@ do_verify() {
         "$prefix/bin/sqpg" list >/dev/null \
             || { rm -rf "$scratch"; die "the installed binary cannot find its resources"; }
         ok "install.sh works, and the installed binary runs"
-    elif [ -f "$unpacked/Makefile" ]; then
-        ( cd "$unpacked" && make -j"$(jobs_count)" >/dev/null 2>&1 && make check >/dev/null 2>&1 ) \
+    elif [ -f "$unpacked/build.lua" ]; then
+        ( cd "$unpacked" && sqmake -j "$(jobs_count)" >/dev/null 2>&1 && sqmake test >/dev/null 2>&1 ) \
             || { rm -rf "$scratch"; die "the source tarball does not build"; }
         ok "the source tarball builds and passes"
     else

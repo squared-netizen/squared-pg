@@ -67,8 +67,9 @@ jobs:
 
       - name: build and test
         run: |
-          make -j4 CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" OPT=-O2
-          make check CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" OPT=-O2
+          export CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" OPT=-O2
+          sqmake
+          sqmake test
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -111,8 +112,8 @@ jobs:
           cd "$(mktemp -d)"
           tar xzf "$GITHUB_WORKSPACE/dist/squared-pg-$VERSION-src.tar.gz"
           cd "squared-pg-$VERSION"
-          make -j
-          make check
+          "$RUNNER_TEMP/llvm/sqmake"
+          "$RUNNER_TEMP/llvm/sqmake" test
 
       - uses: actions/upload-artifact@v6
         with:
@@ -154,10 +155,10 @@ jobs:
           echo "CC=$RUNNER_TEMP/llvm/clang" >> "$GITHUB_ENV"
 
       - name: build
-        run: make -j4 OPT=-O2
+        run: OPT=-O2 sqmake
 
       - name: test
-        run: make check OPT=-O2
+        run: OPT=-O2 sqmake test
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -231,7 +232,7 @@ jobs:
 
           \`\`\`sh
           tar xzf squared-pg-$VERSION-src.tar.gz && cd squared-pg-$VERSION
-          make -j4 && make check
+          sqmake && sqmake test
           \`\`\`
 
           No network is used at any point. Every dependency is vendored.

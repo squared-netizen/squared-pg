@@ -1,76 +1,65 @@
 # Building squared-pg
 
-No network access is needed at any point. A clean checkout plus `third-party/`
-is the entire dependency list — there is no `FetchContent`, no submodule to
-initialise, and no package to install before configuring.
+No network access is needed at any point after the tree is assembled. A
+clean checkout plus `third-party/` is the entire dependency list: there is
+no `FetchContent`, no submodule to initialise, and no package to install
+before building.
 
 ## Quick version
 
 ```sh
 ./tools/bootstrap.sh            # once: sqcart/ and resources/.squared at their pins
-make -j4 && make check && make smoke
+sqmake && sqmake test && sqmake smoke
 ```
 
-This produces `build/sqpg`, and sqcart's CLI as `sqcart/v3/build/sqcart3`
-(installed beside sqpg as `sqcart`). The `Makefile` is the only build.
+This produces `build/sqpg`, and sqcart's CLI as `build/sqcart3` (installed
+beside sqpg as `sqcart`). `build.lua` is the only build, and sqmake builds it.
 
 ## What you need
 
 | | Required | Notes |
 |---|---|---|
-| clang and libc++ 19+ | yes | C++23 with `import std;`: the engine reads cartridges through sq.cart (sqcart 3.0), whose modules sqcart/v3's Makefile builds from libc++'s own module sources. 23 is what sqterm and CI use. GCC and Apple's clang cannot build it. |
-| `make` | yes | GNU make |
+| clang and libc++ 19+ | yes | C++23 with `import std;`: the engine reads cartridges through sq.cart (sqcart 3.0), whose modules sqcart/v3/build.lua builds; the std module comes from libc++'s own module sources. 23 is what sqterm and CI use. GCC cannot build it. |
+| sqmake | yes | the SDK's build (`pkg install sqmake` in sqterm; elsewhere its `tools/bootstrap.sh` makes one from source with a compiler and a shell) |
 | `sh` | yes | for `tools/smoke.sh` |
 
-Nothing else. Lua, yyjson, SHA-256 and sq.cart (with zstd's decoder) are all
-vendored and built from source in the same pass. Pass the compiler as
-`make CXX=/path/to/clang++` when `clang++` on PATH is not the one.
+Nothing else. Lua, yyjson, SHA-256 and sq.cart (with zstd) are all vendored
+and built from source in the same pass. Name the compiler with
+`CXX=/path/to/clang++` (and `CC=`) when `clang++` on PATH is not the one;
+`OPT=-O2` for a release's optimisation (`-O1` otherwise).
 
 ## Per platform
 
-### Termux (Android)
+### sqterm (Android)
 
 ```sh
-pkg install clang make
+pkg install llvm sqmake
 ```
 
-This is the primary target and everything is tested here first. Termux's
-clang uses libc++ already.
+The primary target: everything is tested here first. sqterm's clang uses
+libc++ already.
 
 ### Debian, Ubuntu
 
 clang and libc++ from apt.llvm.org (Ubuntu 24.04's own clang is 18):
 
 ```sh
-sudo apt install clang-23 lld-23 libc++-23-dev libc++abi-23-dev make
-make CXX=/usr/lib/llvm-23/bin/clang++
+sudo apt install clang-23 lld-23 libc++-23-dev libc++abi-23-dev
+CXX=/usr/lib/llvm-23/bin/clang++ CC=/usr/lib/llvm-23/bin/clang sqmake
 ```
 
-`tools/ci-toolchain.sh` is what CI runs; it also writes `clang++` and `clang`
-wrappers that link libc++, so the projects `make smoke` generates use it too.
+`tools/ci-toolchain.sh` is what CI runs: it installs them, writes `clang++`
+and `clang` wrappers that link libc++ (so the projects `sqmake smoke`
+generates use it too), and bootstraps sqmake from its source beside them.
 
-### macOS
-
-Homebrew's LLVM (Apple's clang has no std module):
-
-```sh
-./tools/ci-toolchain.sh ~/.local/llvm      # brew install llvm, and wrappers that link its libc++
-make CXX=~/.local/llvm/clang++
-```
-
-CI builds and tests here.
-
-### Windows
-
-Not supported. `tools/smoke.sh` needs a POSIX shell, the durability path uses
-`fsync`, and the Android template shells out to `readelf`. WSL works.
+Other systems are not supported: squared is for Linux and Android.
 
 ## After building
 
 ```sh
 ./build/sqpg list
 ./build/sqpg new hello --template template.terminal.cpp --kit kit.terminal
-cd hello && make && ./build/hello
+cd hello && sqmake run
 ```
 
 `sqpg` finds its resources and workflows relative to its own executable, so it
@@ -79,23 +68,11 @@ the current working directory to decide what to generate.
 
 ## Generated projects need less than this
 
-A project produced by `template.terminal.cpp` needs a C++ compiler and
-`make`. It does not depend on squared-pg, does not reference the generator
-tree, and does not need it installed to build, run or ship.
-
-`template.android.cpp` is the exception, and its requirements are its own:
-
-| For | Needs |
-|---|---|
-| `make` | clang targeting Android, an NDK, native-app-glue |
-| `make apk` | + `aapt2`, `apksigner`, `keytool`, an `android.jar` |
-| `make install` | + `termux-open` or `adb` |
-
-```sh
-cd myapp && make android-status    # what the build found, and what it did not
-```
-
-On Termux: `pkg install ndk-sysroot aapt2 apksigner openjdk-17`.
+A workspace made from any template builds with sqmake and a compiler, from its
+own `build.lua` (and the template's `sq/build/template.lua`). It does not
+depend on squared-pg, does not reference the generator tree, and does not need
+it installed to build, run or ship. `template.android.cpp`'s needs are its
+template's: its build says what it found (`sqmake toolchain`).
 
 ## Checking a host before you commit to it
 
@@ -114,13 +91,18 @@ compile against it.
 
 ```text
 build/sqpg                 the CLI
-build/libsquaredpg.a       engine + sqcart + vendored C  (Makefile only)
+build/sqcart3              sqcart's CLI, installed beside sqpg as sqcart
+build/libsquaredpg.a       the engine
 build/test_*               the engine test suite
 ```
 
-`make clean` or `rm -rf build`. Nothing is installed anywhere by either build.
+`sqmake clean` or `rm -rf build`. Nothing is installed anywhere by the build.
 
 ## Troubleshooting
+
+**`sqcart/ is not present, or is older than its build.lua`** — the tree is not
+assembled, or was assembled before sqcart had a `build.lua`: run
+`./tools/bootstrap.sh`.
 
 **`no workflow 'workflow.generate.default' on the workflow search path`** — the
 binary could not find its installation. It walks upward from its own location
@@ -129,7 +111,7 @@ moved the binary out of the tree, set `SQUARED_PG_WORKFLOWS` and
 `SQUARED_PG_RESOURCES`, or copy the tree to `<prefix>/share/squared-pg`.
 
 **Tests fail with permission or path errors** — they stage scratch workspaces
-under `$TMPDIR`. Termux sets it; on other hosts it falls back to `.`. Set it
+under `$TMPDIR`. sqterm sets it; on other hosts it falls back to `.`. Set it
 explicitly if `.` is not writable.
 
 **`vendored dependency missing`** — the checkout is incomplete. `third-party/`

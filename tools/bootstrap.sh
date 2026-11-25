@@ -322,7 +322,7 @@ latest)
     printf '\nRe-linking.\n'
     "$0" >/dev/null
     printf '\nPins updated. Commit the version files, and check the build:\n\n'
-    printf '  make -j4 && make check\n'
+    printf '  sqmake && sqmake test\n'
     ;;
 
 update)
@@ -401,6 +401,6 @@ assemble)
     # own resources inside the framework repository and a copy would give two
     # trees that drift -- with the drifted one being what the engine reads.
 
-    printf '\nAssembled. Build with:\n\n  make -j4 && make check\n'
+    printf '\nAssembled. Build with:\n\n  sqmake && sqmake test\n'
     ;;
 esac
