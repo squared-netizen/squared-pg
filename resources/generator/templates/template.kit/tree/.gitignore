@@ -1,2 +1,2 @@
-dist/
-*.sq
+/build/
+/dist/

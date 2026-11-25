@@ -3,10 +3,10 @@
   "format_version": 3,
   "kind": "template",
   "id": "template.kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "tree": "tree/",
-  "title": "Squared kit authoring workspace",
-  "description": "A workspace whose deliverable is a kit cartridge: edit a manifest and a payload tree, then check and pack them.",
+  "title": "Kit",
+  "description": "Makes a kit: a cartridge that bridges something outside squared into a workspace. It adds a C++ module and its part of the build; sqmake packs it, sqmake install makes it usable.",
   "requires_features": [],
   "license": "MIT",
   "authors": [
@@ -29,29 +29,25 @@
           "cartridge"
         ],
         "build": [
-          "Makefile",
-          "mk"
+          "build.lua",
+          "sq/build"
         ]
       },
-      "integration_areas": [
-        "build.make.fragments"
-      ],
-      "integration_arity": {
-        "build.make.fragments": "multi"
-      },
+      "integration_areas": [],
+      "integration_arity": {},
       "parameters": [
         {
           "name": "project_name",
           "type": "identifier",
           "required": true,
-          "description": "The kit's short name; `format` becomes `kit.format`."
+          "description": "The kit's short name: fmt makes kit.fmt, module fmt."
         },
         {
           "name": "external_id",
           "type": "string",
           "required": false,
           "default": "",
-          "description": "The external dependency this kit wraps, if any. Empty for a kit that contributes only files."
+          "description": "What the kit wraps, if anything. Empty for a kit that adds only files."
         },
         {
           "name": "runtime_model",
@@ -65,7 +61,7 @@
           "type": "string",
           "required": false,
           "default": "A Squared kit.",
-          "description": "One-line description, used in the manifest and the README."
+          "description": "One line: what it is, for its manifest and README."
         }
       ],
       "requires": {
@@ -76,17 +72,26 @@
         },
         "engine": ">=0.1.0 <0.2.0",
         "capabilities": [
+          "capability.template.substitute@^1.0",
           "capability.project.plan@^1.0"
         ]
       },
       "ownership": {
         "generated": [
-          "mk/squared_generated.mk",
+          "sq/build/cartridge.lua",
           ".gitignore"
         ],
         "user": [],
         "shared": [],
         "default": "user"
+      }
+    },
+    "square": {
+      "roles": {
+        "cartridge": "cartridge",
+        "kit": "cartridge/tree",
+        "build": "build",
+        "dist": "dist"
       }
     }
   }

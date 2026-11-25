@@ -5,87 +5,88 @@ tags: [usermanual, sqcart]
 
 # Cartridges and `sqcart`
 
-A cartridge is a `.sq` file: a container holding a manifest and a payload tree.
-Templates, kits, packages and assets all ship as cartridges. `sqcart` is the
-tool for reading and building them.
+A cartridge is a `.sq` file, or the same thing as a folder (exploded): a
+manifest, `SQ-INF/manifest.json`, and a payload tree. Templates, kits,
+packages, assets and workspaces are all cartridges, in the format of the
+[Squared Cartridge Specification 3.0][spec]. `sqcart` is the tool for
+reading and building them; it is sqcart 3's (`sqcart3`, installed with sqpg
+as `sqcart`). sqcart 2 and its format are deprecated, and no squared tool
+reads them.
 
-You do not need `sqcart` to use squared-pg. You need it if you are **authoring**
-a cartridge, or want to see inside one.
+You do not need `sqcart` to use squared-pg. You need it if you want to see
+inside a `.sq`, or to change one in place. A workspace is packed and
+exploded by square (`square pack`, `square explode`), and the cartridge an
+authoring workspace makes by `sqmake` (below); both through sqdrive.
+
+[spec]: https://github.com/squared-netizen/sqcart/blob/main/docs/developer/specs/sq-cartridge-3.0.md
 
 ## Looking inside
 
 ```sh
-sqcart info <cartridge>       # human summary of the manifest
-sqcart show <cartridge>       # the manifest JSON
-sqcart list <cartridge>       # entries: path, size, compressed, method
-sqcart cat <cartridge> <entry>  # one entry's bytes to stdout
-sqcart verify <cartridge>     # full validation
-sqcart digest <cartridge>     # content digest
+sqcart info <file.sq>           # id, version, kind; commit, digest, signatures
+sqcart ls <file.sq>             # entries: flags, size, codec, path
+sqcart cat <file.sq> <entry>    # one entry's bytes to stdout (verified)
+sqcart check <file.sq>          # every entry read and verified (§12)
 ```
 
-`stdout` carries machine-readable results only; diagnostics go to `stderr`, so
-piping is safe.
+`check` exits 1 for a cartridge that does not conform, and says why.
 
 ## Building one
 
 ```sh
-sqcart pack <directory> -o <out.sq>
-sqcart unpack <cartridge> -d <dir>
+sqcart pack <folder> <file.sq>  # a new cartridge from an exploded one
+sqcart unpack <file.sq> <folder> [--merge] [--executable]
 ```
 
-`-o` takes a **file path, not a directory.** Passing a directory currently
-fails with `cartridge.io_failed: failed to open output file for writing`, which
-names the syscall rather than the mistake.
-
-To start a new cartridge from a directory of files:
-
-```sh
-sqcart create <dir> --kind=kit -o <out.sq>
-```
-
-`create` seeds `SQ-INF/manifest.json` and then packs. It needs `--kind`; any
-token matching `[a-z][a-z0-9_]*` is accepted, because what a kind *means* is
-the consuming tool's question, not sqcart's. `--in-place` writes the manifest
-without packing. `--force` reseeds an existing manifest.
-
-The directory must contain at least one file — `create` on an empty directory
-reports it has nothing to package.
-
-## Options worth knowing
+`pack` makes a new file: it refuses one that is there already. Its options:
 
 | Option | Effect |
 |---|---|
-| `-c, --compress=0-9` | deflate level, default 6. `0` stores. |
-| `--store` | same as `--compress=0` |
-| `--no-hashes` | omit `SQ-INF/hashes.json` |
-| `--verify-integrity` | check declared digests while opening |
-| `--lenient` | open at lenient conformance rather than strict |
-| `--overwrite` | allow unpack to overwrite existing files |
-| `--symlinks=skip\|follow\|reject` | default `skip`. `follow` resolves links whose target stays inside the cartridge; links escaping it are never packed whatever the mode. |
+| `--keep .NAME` | pack a dot folder it would leave out (repeatable) |
+| `--leave-out PATH` | leave a file or folder out (repeatable) |
+| `--drop-orphans` | drop records in `SQ-INF/entries.json` for files that are gone, rather than refusing |
+| `--sign KEYFILE --signer NAME` | sign it (`sqcart keygen KEYFILE` makes a key) |
+
+A `.sq` can also be changed in place, each change a new commit:
+`sqcart new`, `put`, `rm`, `mv`, `truncate`, and `compact` to drop what no
+commit needs any more. `sqcart` with no arguments lists them all.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | operation failed |
+| 1 | operation failed, or the cartridge does not conform |
 | 2 | usage error |
-| 3 | cartridge non-conforming |
 
-## Authoring a kit
+## Authoring a kit, a package or a template
 
-`sqpg` has a template for it, which gets the directory layout and a manifest
-skeleton right:
+`sqpg` has a template for each, which gets the layout and the manifest right:
+
+| Template            | Makes                                                    |
+|---------------------|----------------------------------------------------------|
+| `template.kit`      | `kit.NAME`: bridges something outside squared; a module  |
+| `template.package`  | `package.NAME`: reusable squared code; a module          |
+| `template.template` | `template.NAME`: a template of your own                  |
 
 ```sh
-sqpg new my_kit -t template.kit \
-  -p project_name=mykit -p description="What it does"
+sqpg new mykit -t template.kit -p description="What it does"
+cd mykit
+sqmake            # pack cartridge/ into dist/kit.mykit.sq (sqdrive checks it)
+sqmake install    # install it, exploded, into your own resources
+sqpg new probe -t template.terminal.cpp -k kit.mykit
 ```
 
-The workspace name must be a C identifier; the kit's identity comes from
-`project_name`, so that command produces `kit.mykit`. Edit
-`cartridge/SQ-INF/manifest.json` and the payload under `cartridge/tree/`, then
-pack.
+The workspace is a cartridge itself (`SQ-INF/manifest.json`, kind
+`workspace`); what it makes is the exploded cartridge in `cartridge/`. Edit
+`cartridge/SQ-INF/manifest.json` and the payload under `cartridge/tree/`.
+The name must be a C identifier; the identity comes from `project_name`, so
+`mykit` makes `kit.mykit`.
+
+Your own resources are in `$XDG_DATA_HOME/squared-pg/resources` (else
+`~/.local/share/squared-pg/resources`), in `templates/`, `kits/`,
+`packages/` and `assets/`; sqpg and square search it, so a template you
+install there is listed by `sqpg list template` (and by New in sqIDE).
 
 ## Not documented here
 

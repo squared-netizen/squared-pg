@@ -1,0 +1,67 @@
+{
+  "format": "squared-cartridge",
+  "format_version": 3,
+  "kind": "template",
+  "id": "template.{{project_name}}",
+  "version": "0.1.0",
+  "tree": "tree/",
+  "title": "{{title}}",
+  "description": "{{description}}",
+  "requires_features": [],
+  "license": "MIT",
+  "consumers": {
+    "squared_pg": {
+      "project_types": [
+        "application"
+      ],
+      "platforms": [
+        "linux",
+        "android"
+      ],
+      "working_directory": "sq_app",
+      "processor": "substitute",
+      "layers": {
+        "application": [
+          "sq_app"
+        ],
+        "build": [
+          "build.lua"
+        ]
+      },
+      "integration_areas": [],
+      "integration_arity": {},
+      "parameters": [
+        {
+          "name": "project_name",
+          "type": "identifier",
+          "required": true,
+          "description": "The program's name: build/NAME."
+        }
+      ],
+      "requires": {
+        "packages": [],
+        "kits": {
+          "required": [],
+          "optional": []
+        },
+        "engine": ">=0.1.0 <0.2.0",
+        "capabilities": [
+          "capability.template.substitute@^1.0",
+          "capability.project.plan@^1.0"
+        ]
+      },
+      "ownership": {
+        "generated": [],
+        "user": [],
+        "shared": [],
+        "default": "user"
+      }
+    },
+    "square": {
+      "roles": {
+        "app": "sq_app",
+        "build": "build"
+      }
+    }
+  }
+}
