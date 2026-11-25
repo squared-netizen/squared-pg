@@ -1,7 +1,8 @@
 # squared-pg — continuous integration.
 #
-# One build: the Makefile, with clang and libc++ (C++23; sq.cart's modules
-# and `import std;`), as on Termux. tools/ci-toolchain.sh installs them.
+# One build: build.lua, by sqmake, with clang and libc++ (C++23; sq.cart's
+# modules and `import std;`), as on Termux. tools/ci-toolchain.sh installs
+# them, and bootstraps sqmake from its source with them (no make).
 #
 # No network is used by the build itself: everything squared-pg compiles is
 # vendored. The jobs do reach the network once, before building, to assemble
@@ -46,23 +47,17 @@ jobs:
           echo "CC=$RUNNER_TEMP/llvm/clang" >> "$GITHUB_ENV"
 
       - name: build
-        run: make -j4
+        run: sqmake
 
       - name: engine tests
-        run: make check
+        run: sqmake test
         env:
           TMPDIR: ${{ runner.temp }}
 
-      # A generated workspace builds with sqmake (no make since 2026-11-24):
-      # the smoke test builds and runs one, so it needs sqmake.
-      - name: sqmake, for the smoke test
-        run: |
-          git clone --quiet --depth 1 --branch v0.10.0 https://github.com/squared-netizen/sqmake "$RUNNER_TEMP/sqmake"
-          make -C "$RUNNER_TEMP/sqmake" -j4 CXX="$CXX" CC="$CC" build/sqmake
-          echo "SQMAKE=$RUNNER_TEMP/sqmake/build/sqmake" >> "$GITHUB_ENV"
-
+      # A generated workspace builds with sqmake too: the smoke test builds
+      # and runs one, with the sqmake ci-toolchain.sh made.
       - name: end-to-end smoke
-        run: make smoke
+        run: sqmake smoke
         env:
           TMPDIR: ${{ runner.temp }}
 
@@ -74,11 +69,11 @@ jobs:
       - name: incremental rebuild after touching a source
         run: |
           touch engine/src/services/project_service.cpp
-          make -j4
+          sqmake
       - name: incremental rebuild after touching a header
         run: |
           touch engine/src/services/services.hpp
-          make -j4
+          sqmake
 
   sqcart:
     name: sqcart
@@ -93,7 +88,7 @@ jobs:
         run: ./tools/ci-toolchain.sh "$RUNNER_TEMP/llvm"
 
       - name: build and test
-        run: make -C sqcart/v3 -j4 CXX="$RUNNER_TEMP/llvm/clang++" test
+        run: CXX="$RUNNER_TEMP/llvm/clang++" CC="$RUNNER_TEMP/llvm/clang" "$RUNNER_TEMP/llvm/sqmake" -C sqcart/v3 test
         env:
           TMPDIR: ${{ runner.temp }}
 

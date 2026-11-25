@@ -11,7 +11,7 @@ layer providing workflow orchestration.
   with libc++; only `engine/src/services/cartridge.cpp` imports them, and the
   rest of the engine is headers as before. Use concepts, ranges, `std::span`,
   `std::expected`, designated initializers, `constexpr`/`consteval` where they
-  improve clarity or safety. One build: the Makefile.
+  improve clarity or safety. One build: build.lua, by sqmake.
 - **Lua 5.4** for the scripting layer.
 - **Offline is a hard constraint.** A clean checkout plus `third_party/` must be
   sufficient to inspect, build, test, and develop. Never add a dependency that

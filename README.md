@@ -6,8 +6,7 @@ control layer sequences it into workflows. The output is a self-contained
 developer workspace you own outright.
 
 sqterm on Android is a first-class target. A phone with a compiler and sqmake
-is enough to build what it produces (squared-pg itself builds with make, for
-now).
+is enough to build what it produces, and squared-pg itself.
 
 ## Quick start
 
@@ -30,13 +29,13 @@ For working on squared-pg itself: `tools/bootstrap.sh` clones sqcart and
 squared at the commits it pins (`SQCART_VERSION`, `SQUARED_VERSION`), then
 
 ```sh
-make -j4      # engine, CLI and tests
-make check    # run the tests
-make smoke    # generate a project, build it, run it
+sqmake          # engine, CLI and tests (build.lua)
+sqmake test     # run the tests
+sqmake smoke    # generate a project, build it, run it
 ```
 
 No network, after bootstrap. clang and libc++ (19 or later; 23 is what sqterm
-and CI use) and `make` are the only requirements; see
+and CI use) and sqmake are the only requirements; see
 [BUILDING.md](BUILDING.md) for per-platform notes and troubleshooting.
 
 ## Use

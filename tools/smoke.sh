@@ -33,7 +33,7 @@ step() {
     printf '\n== %s\n' "$*"
 }
 
-[ -x "$sqpg" ] || fail "no sqpg at $sqpg (run make first)"
+[ -x "$sqpg" ] || fail "no sqpg at $sqpg (run sqmake first)"
 [ -n "$sqmake" ] && [ -x "$sqmake" ] || fail "no sqmake (set SQMAKE, or put it on PATH)"
 
 step "engine reports itself"
