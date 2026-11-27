@@ -50,7 +50,7 @@ std::string_view to_string(LifecycleState state) noexcept {
 // file have drifted, because a stale fallback would report a version the
 // manifests then resolve against.
 #ifndef SQUARED_PG_VERSION
-#  define SQUARED_PG_VERSION "0.1.0-alpha.5"
+#  define SQUARED_PG_VERSION "0.1.0-alpha.6"
 #endif
 
 Version engine_version() noexcept {
