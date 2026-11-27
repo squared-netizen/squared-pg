@@ -294,4 +294,27 @@ if "$sqpg" plan badid --template template.android.cpp --kit kit.opengl \
     fail "an invalid java package was accepted"
 fi
 
+step "squared-tui: both templates, with their package, generate, build and test"
+# The package is named: sqpg adds none unasked (D-080). Without it the
+# template warns, and the workspace's build says what to run.
+"$sqpg" plan tuibare --template template.sq_tui.cpp 2>&1 >/dev/null \
+    | grep -q "written against package package.squared-tui" \
+    || fail "template.sq_tui.cpp did not warn about its package"
+squared_core=$root/resources/.squared/packages/package.squared-core/tree/squared
+for pair in template.sq_tui.cpp:walker template.sq_tui.cpp.edu:learner; do
+    t=${pair%%:*} n=${pair#*:}
+    "$sqpg" new "$n" --template "$t" --package package.squared-tui >/dev/null || fail "generate $t"
+    for required in build.lua sq/build/template.lua sq/build/package_squared_tui.lua \
+            sq_pkg/squared_tui/module.cppm sq_app/src/main.cpp; do
+        [ -f "$n/$required" ] || fail "$t: $required was not generated"
+    done
+    # squared-core from the pinned checkout, as a squared/ of the workspace's
+    # own (the template's escape hatch; on a phone it is the installed SDK's).
+    ln -s "$squared_core" "$n/squared"
+    ( cd "$n" && "$sqmake" >build.log 2>&1 ) || { tail -20 "$n/build.log" >&2; fail "build $t"; }
+    [ -x "$n/build/$n" ] || fail "$t: no build/$n"
+    ( cd "$n" && "$sqmake" test >test.log 2>&1 ) || { tail -20 "$n/test.log" >&2; fail "test $t"; }
+done
+grep -q "board: all assertions passed" walker/test.log || fail "template.sq_tui.cpp's board test did not run"
+
 printf '\nsmoke: all checks passed\n'
