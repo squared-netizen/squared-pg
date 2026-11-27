@@ -65,6 +65,15 @@ sqmake squared`). To carry a copy of squared in the workspace instead, to
 change it, add `--package package.squared-core`. A workspace has no make
 files: `build.lua` and `sq/build/` are its whole build.
 
+Or a program that takes the terminal's whole screen, on squared-tui, or the
+same as a learner's first screen (name the package: sqpg adds none unasked):
+
+```sh
+./build/sqpg new walker --template template.sq_tui.cpp --package package.squared-tui
+./build/sqpg new learner --template template.sq_tui.cpp.edu --package package.squared-tui
+cd walker && sqmake run      # the arrows or h j k l move the @, q quits
+```
+
 See what would happen without doing it:
 
 ```sh
